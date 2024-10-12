@@ -52,13 +52,15 @@ jobs:
           commit_log=$(git log ${{ env.last_release_tag }}..HEAD --pretty=format:"- %s")
           echo "Commits since last release:"
           echo "$commit_log"
-          echo "commit_log=$commit_log" >> $GITHUB_ENV
+          echo "commit_log<<EOF" >> $GITHUB_ENV
+          echo "$commit_log" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
 
       - name: Check if built file matches existing release
         id: check_release
         run: |
-          # Extract the built JAR file's name
-          file_name=$(ls target/*.jar | xargs -n 1 basename | sed 's/.jar//')
+          # Extract the built JAR file's name (without extension)
+          file_name=$(ls target/*.jar | xargs -n 1 basename | sed 's/.jar$//')
 
           echo "Built file: $file_name"
           # Get the list of releases from GitHub
@@ -66,7 +68,7 @@ jobs:
           https://api.github.com/repos/${{ github.repository }}/releases)
 
           # Check if the release exists
-          if echo "$releases" | grep -q "$file_name"; then
+          if echo "$releases" | grep -q "\"tag_name\": \"$file_name\""; then
             echo "Release $file_name already exists. No new release needed."
             echo "release_exists=true" >> $GITHUB_ENV
           else
@@ -79,12 +81,8 @@ jobs:
           # Get the built file
           jar_file=$(ls target/*.jar)
 
-          # Create a new GitHub release
-          release_response=$(curl -s -X POST \
-            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            https://api.github.com/repos/${{ github.repository }}/releases \
-            -d @- <<EOF
+          # Prepare the JSON payload for the release
+          json_payload=$(cat <<EOF
             {
             "tag_name": "$file_name",
             "target_commitish": "${{ github.sha }}",
@@ -95,6 +93,14 @@ jobs:
             }
             EOF
                     )
+
+          # Create a new GitHub release
+          release_response=$(curl -s -X POST \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/${{ github.repository }}/releases \
+            -d "$json_payload"
+          )
 
           # Check if the release was successfully created
           release_id=$(echo "$release_response" | jq -r '.id')
@@ -107,10 +113,11 @@ jobs:
           fi
 
           # Upload the JAR file to the release
+          upload_url=$(echo "$release_response" | jq -r '.upload_url' | sed 's/{?name,label}//')
           curl -s --data-binary @"$jar_file" \
             -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             -H "Content-Type: application/octet-stream" \
-            "https://uploads.github.com/repos/${{ github.repository }}/releases/$release_id/assets?name=$(basename $jar_file)"
+            "$upload_url?name=$(basename "$jar_file")"
 
       - name: Mark build as passing
         run: echo "Build completed and passed."
