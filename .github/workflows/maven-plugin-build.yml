@@ -1,0 +1,86 @@
+name: Build and Release Minecraft Plugin
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Cache Maven packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-maven
+
+      - name: Build with Maven
+        run: mvn clean package
+
+      - name: Check if built file matches existing release
+        id: check_release
+        run: |
+          # Extract the built JAR file's name
+          file_name=$(ls target/*.jar | xargs -n 1 basename | sed 's/.jar//')
+
+          echo "Built file: $file_name"
+          # Get the list of releases from GitHub
+          releases=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+          https://api.github.com/repos/${{ github.repository }}/releases)
+
+          # Check if the release exists
+          if echo "$releases" | grep -q "$file_name"; then
+            echo "Release $file_name already exists. No new release needed."
+            echo "release_exists=true" >> $GITHUB_ENV
+          else
+            echo "release_exists=false" >> $GITHUB_ENV
+          fi
+
+      - name: Create new release if necessary
+        if: env.release_exists == 'false'
+        run: |
+          # Get the built file
+          jar_file=$(ls target/*.jar)
+
+          # Get the latest commits for the release notes
+          commit_log=$(git log -10 --pretty=format:"- %s")
+
+          # Create a new GitHub release
+          curl -s -X POST \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/${{ github.repository }}/releases \
+            -d @- <<EOF
+          {
+            "tag_name": "$file_name",
+            "target_commitish": "${{ github.sha }}",
+            "name": "$file_name",
+            "body": "$commit_log",
+            "draft": false,
+            "prerelease": false
+          }
+
+          # Upload the JAR file to the release
+          release_id=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            https://api.github.com/repos/${{ github.repository }}/releases/tags/$file_name \
+            | jq -r '.id')
+
+          curl -s --data-binary @"$jar_file" \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Content-Type: application/octet-stream" \
+            "https://uploads.github.com/repos/${{ github.repository }}/releases/$release_id/assets?name=$(basename $jar_file)"
+
+      - name: Mark build as passing
+        run: echo "Build completed and passed."
