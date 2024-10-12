@@ -29,6 +29,31 @@ jobs:
       - name: Build with Maven
         run: mvn clean package
 
+      - name: Get last release tag
+        id: get_last_release
+        run: |
+          # Fetch the latest release tag
+          last_release_tag=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+          https://api.github.com/repos/${{ github.repository }}/releases/latest | jq -r .tag_name)
+
+          # If no release exists, use the first commit
+          if [ "$last_release_tag" == "null" ]; then
+            echo "No previous release found. Using the first commit."
+            last_release_tag=$(git rev-list --max-parents=0 HEAD)
+          fi
+
+          echo "Last release tag: $last_release_tag"
+          echo "last_release_tag=$last_release_tag" >> $GITHUB_ENV
+
+      - name: Get all commits since last release
+        id: get_commits
+        run: |
+          # Get all commits since the last release
+          commit_log=$(git log ${{ env.last_release_tag }}..HEAD --pretty=format:"- %s")
+          echo "Commits since last release:"
+          echo "$commit_log"
+          echo "commit_log=$commit_log" >> $GITHUB_ENV
+
       - name: Check if built file matches existing release
         id: check_release
         run: |
@@ -54,29 +79,34 @@ jobs:
           # Get the built file
           jar_file=$(ls target/*.jar)
 
-          # Get the latest commits for the release notes
-          commit_log=$(git log -10 --pretty=format:"- %s")
-
           # Create a new GitHub release
-          curl -s -X POST \
+          release_response=$(curl -s -X POST \
             -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             -H "Accept: application/vnd.github.v3+json" \
             https://api.github.com/repos/${{ github.repository }}/releases \
             -d @- <<EOF
-          {
+            {
             "tag_name": "$file_name",
             "target_commitish": "${{ github.sha }}",
             "name": "$file_name",
-            "body": "$commit_log",
+            "body": "${{ env.commit_log }}",
             "draft": false,
             "prerelease": false
-          }
+            }
+            EOF
+                    )
+
+          # Check if the release was successfully created
+          release_id=$(echo "$release_response" | jq -r '.id')
+
+          if [ "$release_id" == "null" ]; then
+            echo "Failed to create release: $release_response"
+            exit 1
+          else
+            echo "Release created successfully with ID: $release_id"
+          fi
 
           # Upload the JAR file to the release
-          release_id=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            https://api.github.com/repos/${{ github.repository }}/releases/tags/$file_name \
-            | jq -r '.id')
-
           curl -s --data-binary @"$jar_file" \
             -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             -H "Content-Type: application/octet-stream" \
