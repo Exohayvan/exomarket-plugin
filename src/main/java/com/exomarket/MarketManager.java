@@ -104,7 +104,7 @@ public class MarketManager {
         int totalItems = marketItems.stream().mapToInt(MarketItem::getQuantity).sum();
 
         double totalMarketValue = totalMoney * 6; // Assuming this is the total market value
-        double maxPrice = totalMarketValue * 0.05; // 5% of total market value
+        double maxPrice = totalMoney * 0.05; // 5% of total market value
 
         System.out.println("Total Market Value: " + totalMarketValue);
         System.out.println("Max Price (5% of Total Market Value): " + maxPrice);
