@@ -15,6 +15,9 @@ import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.command.TabCompleter;
+import java.io.File;
+import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.configuration.file.YamlConfiguration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Arrays;
@@ -27,6 +30,10 @@ public class ExoMarketPlugin extends JavaPlugin implements TabCompleter {
     private GUIManager guiManager;
     private DatabaseManager databaseManager;
     private EconomyManager economyManager;
+    private double marketValueMultiplier;
+    private double maxPricePercent;
+    private double minPrice;
+
     public DatabaseManager getDatabaseManager() {
         return this.databaseManager;
     }
@@ -35,11 +42,24 @@ public class ExoMarketPlugin extends JavaPlugin implements TabCompleter {
         return this.marketManager;
     }
 
+    private File configFile;
+    private FileConfiguration config;
+
     @Override
     public void onEnable() {
+        configFile = new File(getDataFolder(), "config.yml");
+        if (!configFile.exists()) {
+            configFile.getParentFile().mkdirs();
+            saveDefaultConfig();
+        }
+        config = YamlConfiguration.loadConfiguration(configFile);
+        marketValueMultiplier = config.getDouble("MarketManager.MarketValueMultipier");
+        maxPricePercent = config.getDouble("MarketManager.MaxPricePercent") / 100;
+        minPrice = config.getDouble("MarketManager.MinPrice");
+        
         databaseManager = new DatabaseManager(this);
         economyManager = new EconomyManager(this);
-        marketManager = new MarketManager(this, databaseManager, economyManager);
+        marketManager = new MarketManager(this, databaseManager, economyManager, marketValueMultiplier, maxPricePercent);
         guiManager = new GUIManager(this);
 
         getServer().getPluginManager().registerEvents(guiManager, this);
@@ -51,6 +71,17 @@ public class ExoMarketPlugin extends JavaPlugin implements TabCompleter {
         getCommand("sellhand").setTabCompleter(this);
         getCommand("marketreload").setExecutor(this);
         getCommand("marketreload").setTabCompleter(this);
+    }
+
+    public void reloadConfig() {
+        configFile = new File(getDataFolder(), "config.yml");
+        if (!configFile.exists()) {
+            configFile.getParentFile().mkdirs();
+            saveDefaultConfig();
+        }
+        config = YamlConfiguration.loadConfiguration(configFile);
+        marketValueMultiplier = config.getDouble("MarketManager.MarketValueMultipier");
+        maxPricePercent = config.getDouble("MarketManager.MaxPricePercent") / 100;
     }
 
     @Override
@@ -149,10 +180,8 @@ public class ExoMarketPlugin extends JavaPlugin implements TabCompleter {
                 return true;
             }
 
-            getServer().getPluginManager().disablePlugin(this);
-            getServer().getPluginManager().enablePlugin(this);
-
-            player.sendMessage(ChatColor.GREEN + "Market plugin reloaded successfully.");
+            reloadConfig();
+            player.sendMessage(ChatColor.GREEN + "Market plugin config reloaded successfully.");
             return true;
         }
 

@@ -19,11 +19,17 @@ public class MarketManager {
     private ExoMarketPlugin plugin;
     private DatabaseManager databaseManager;
     private EconomyManager economyManager;
+    private double marketValueMultiplier;
+    private double maxPricePercent;
+    private double minPrice;
 
-    public MarketManager(ExoMarketPlugin plugin, DatabaseManager databaseManager, EconomyManager economyManager) {
+    public MarketManager(ExoMarketPlugin plugin, DatabaseManager databaseManager, EconomyManager economyManager, double marketValueMultiplier, double maxPricePercent, double minPrice) {
         this.plugin = plugin;
         this.databaseManager = databaseManager;
         this.economyManager = economyManager;
+        this.marketValueMultiplier = marketValueMultiplier;
+        this.maxPricePercent = maxPricePercent;
+        this.minPrice = minPrice;
     }
 
     public void sellItem(Player player, int amount) {
@@ -111,8 +117,8 @@ public class MarketManager {
         double totalMoney = economyManager.getTotalMoney();
         int totalItems = marketItems.stream().mapToInt(MarketItem::getQuantity).sum();
 
-        double totalMarketValue = totalMoney * 6;
-        double maxPrice = totalMoney * 0.05;
+        double totalMarketValue = totalMoney * marketValueMultiplier;
+        double maxPrice = totalMoney * maxPricePercent;
 
         System.out.println("Total Market Value: " + totalMarketValue);
         System.out.println("Max Price (5% of Total Market Value): " + maxPrice);
@@ -127,7 +133,7 @@ public class MarketManager {
             double calculatedPrice = (totalMarketValue / totalInverseProportions) * inverseProportion / item.getQuantity();
             
             // Ensure the price doesn't exceed 5% of total market value
-            double finalPrice = Math.min(maxPrice, Math.max(0.01, calculatedPrice));
+            double finalPrice = Math.min(maxPrice, Math.max(minPrice, calculatedPrice));
             
             item.setPrice(finalPrice);
             databaseManager.updateMarketItem(item);

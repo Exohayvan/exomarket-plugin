@@ -1,9 +1,10 @@
 name: ExoMarketPlugin
 description: A plugin for managing the market GUI
 depend: [Essentials]
-version: 1.1.1
+version: 1.2.0
 api-version: 1.21
 main: com.exomarket.ExoMarketPlugin
+
 commands:
   market:
     description: Open the market GUI
@@ -14,3 +15,9 @@ commands:
   marketreload:
     description: Reload the plugin
     usage: /marketreload
+
+default-config:
+  MarketManager:
+    MarketValueMultipier: 6
+    MaxPricePercent: 5
+    MinPrice: 0.01
