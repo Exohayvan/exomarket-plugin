@@ -1,3 +1,7 @@
+/**
+ * This is the package declaration for the com.exomarket namespace, which contains the classes and interfaces related to the ExoMarket plugin.
+ * The selected code includes the necessary imports for the MarketManager class, including Bukkit classes for Materials, Players, and ItemStacks, as well as the ChatColor utility class.
+ */
 package com.exomarket;
 
 import org.bukkit.Material;
@@ -8,6 +12,7 @@ import org.bukkit.ChatColor;
 import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
+
 
 public class MarketManager {
 
@@ -50,6 +55,9 @@ public class MarketManager {
 
         // Remove the items from the player's inventory
         itemInHand.setAmount(itemInHand.getAmount() - amount);
+
+        // Send a message to all players
+        plugin.getServer().broadcastMessage(ChatColor.YELLOW + player.getName() + " has added something to the market!");
     }
 
     public void buyItem(Player player, MarketItem marketItem, int quantity) {
@@ -103,8 +111,8 @@ public class MarketManager {
         double totalMoney = economyManager.getTotalMoney();
         int totalItems = marketItems.stream().mapToInt(MarketItem::getQuantity).sum();
 
-        double totalMarketValue = totalMoney * 6; // Assuming this is the total market value
-        double maxPrice = totalMoney * 0.05; // 5% of total market value
+        double totalMarketValue = totalMoney * 6;
+        double maxPrice = totalMoney * 0.05;
 
         System.out.println("Total Market Value: " + totalMarketValue);
         System.out.println("Max Price (5% of Total Market Value): " + maxPrice);
