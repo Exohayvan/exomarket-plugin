@@ -49,6 +49,8 @@ public class ExoMarketPlugin extends JavaPlugin implements TabCompleter {
         getCommand("market").setTabCompleter(this);
         getCommand("sellhand").setExecutor(this);
         getCommand("sellhand").setTabCompleter(this);
+        getCommand("marketreload").setExecutor(this);
+        getCommand("marketreload").setTabCompleter(this);
     }
 
     @Override
@@ -134,7 +136,26 @@ public class ExoMarketPlugin extends JavaPlugin implements TabCompleter {
             int amount = itemInHand.getAmount();
             marketManager.sellItem(player, amount);
             return true;
+        } else if (command.getName().equalsIgnoreCase("marketreload")) {
+            if (!(sender instanceof Player)) {
+                sender.sendMessage("This command can only be executed by a player.");
+                return true;
+            }
+
+            Player player = (Player) sender;
+
+            if (!player.hasPermission("exomarket.admin")) {
+                player.sendMessage(ChatColor.RED + "You don't have permission to reload the market plugin.");
+                return true;
+            }
+
+            getServer().getPluginManager().disablePlugin(this);
+            getServer().getPluginManager().enablePlugin(this);
+
+            player.sendMessage(ChatColor.GREEN + "Market plugin reloaded successfully.");
+            return true;
         }
+
         return false;
     }
 

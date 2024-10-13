@@ -11,3 +11,6 @@ commands:
   sellhand:
     description: Sell the item in your hand
     usage: /sellhand
+  marketreload:
+    description: Reload the plugin
+    usage: /marketreload
