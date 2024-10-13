@@ -7,3 +7,7 @@ main: com.exomarket.ExoMarketPlugin
 commands:
   market:
     description: Open the market GUI
+    usage: /market
+  sellhand:
+    description: Sell the item in your hand
+    usage: /sellhand
