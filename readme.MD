@@ -53,5 +53,5 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 
 ## Credits
 
-- **[Your Name]**: Creator and maintainer of ExoMarketPlugin.
+- **ExoHayvan**: Creator and maintainer of ExoMarketPlugin.
 - **Community Contributors**: For submitting fixes and improvements.
