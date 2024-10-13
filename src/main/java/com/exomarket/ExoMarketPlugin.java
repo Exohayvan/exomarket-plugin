@@ -59,7 +59,7 @@ public class ExoMarketPlugin extends JavaPlugin implements TabCompleter {
         
         databaseManager = new DatabaseManager(this);
         economyManager = new EconomyManager(this);
-        marketManager = new MarketManager(this, databaseManager, economyManager, marketValueMultiplier, maxPricePercent);
+        marketManager = new MarketManager(this, databaseManager, economyManager, marketValueMultiplier, maxPricePercent, minPrice);
         guiManager = new GUIManager(this);
 
         getServer().getPluginManager().registerEvents(guiManager, this);
@@ -82,6 +82,7 @@ public class ExoMarketPlugin extends JavaPlugin implements TabCompleter {
         config = YamlConfiguration.loadConfiguration(configFile);
         marketValueMultiplier = config.getDouble("MarketManager.MarketValueMultipier");
         maxPricePercent = config.getDouble("MarketManager.MaxPricePercent") / 100;
+        minPrice = config.getDouble("MarketManager.MinPrice");
     }
 
     @Override
