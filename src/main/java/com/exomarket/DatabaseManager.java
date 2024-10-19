@@ -7,6 +7,7 @@ import java.io.File;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 public class DatabaseManager {
 
@@ -61,6 +62,19 @@ public class DatabaseManager {
         return null;
     }
 
+    public void sellItemsDirectly(UUID playerUUID, Material itemType, int quantity) {
+        MarketItem existingItem = getMarketItem(itemType);
+        if (existingItem == null) {
+            // Item doesn't exist in the market, create a new entry
+            MarketItem newItem = new MarketItem(itemType, quantity, 0, playerUUID.toString());
+            addMarketItem(newItem);
+        } else {
+            // Item exists, update the quantity
+            existingItem.addQuantity(quantity);
+            updateMarketItem(existingItem);
+        }
+    }
+    
     public void addMarketItem(MarketItem marketItem) {
         try (PreparedStatement statement = connection.prepareStatement(
                 "INSERT INTO market_items (type, quantity, price, seller_uuid) VALUES (?, ?, ?, ?)")) {

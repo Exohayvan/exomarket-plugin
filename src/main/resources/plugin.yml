@@ -1,7 +1,7 @@
 name: ExoMarketPlugin
 description: A plugin for managing the market GUI
 depend: [Essentials]
-version: 1.2.1
+version: 1.3.0
 api-version: 1.21
 main: com.exomarket.ExoMarketPlugin
 
@@ -15,6 +15,9 @@ commands:
   marketreload:
     description: Reload the plugin
     usage: /marketreload
+  autosell:
+    description: Configure automatic selling of items
+    usage: /autosell
 
 default-config:
   MarketManager:
