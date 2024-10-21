@@ -151,17 +151,17 @@ public class AutoSellManager implements Listener, CommandExecutor {
         try {
             PreparedStatement stmt = connection.prepareStatement("DELETE FROM autosell_items WHERE uuid = ? AND item = ?");
             stmt.setString(1, playerUUID.toString());
-            stmt.setString(2, gson.toJson(item.serialize())); // Use the serialized item for removal
+            stmt.setString(2, gson.toJson(item.serialize()));
             stmt.executeUpdate();
             stmt.close();
         } catch (SQLException e) {
             e.printStackTrace();
         }
-    
+
         // Schedule an update to the AutoSell GUI
         updateAutoSellInventory(playerUUID);
     }
-    
+
     private void addAutoSellItem(UUID playerUUID, ItemStack item) {
         try {
             PreparedStatement stmt = connection.prepareStatement("INSERT INTO autosell_items (uuid, item) VALUES (?, ?)");
@@ -172,7 +172,7 @@ public class AutoSellManager implements Listener, CommandExecutor {
         } catch (SQLException e) {
             e.printStackTrace();
         }
-    
+
         // Schedule an update to the AutoSell GUI
         updateAutoSellInventory(playerUUID);
     }
@@ -185,7 +185,10 @@ public class AutoSellManager implements Listener, CommandExecutor {
                 // Load items from the database in a separate task to avoid blocking the main thread
                 Bukkit.getScheduler().runTask(plugin, () -> {
                     loadItemsFromDatabase(playerUUID, autoSellInventory);
-                    player.getOpenInventory().getTopInventory().setContents(autoSellInventory.getContents());
+                    // Close the player's current inventory
+                    player.closeInventory();
+                    // Open the updated inventory
+                    player.openInventory(autoSellInventory);
                 });
             }
         }
@@ -204,25 +207,20 @@ public class AutoSellManager implements Listener, CommandExecutor {
         new BukkitRunnable() {
             @Override
             public void run() {
-                // Loop through all online players
                 for (Player player : Bukkit.getOnlinePlayers()) {
                     UUID playerUUID = player.getUniqueId();
-                    
-                    // Get the player's auto-sell items from the database
                     Set<Material> autoSellItems = getAutoSellItemsFromDatabase(playerUUID);
                     
-                    // Check the player's inventory for matching items
+                    if (autoSellItems.isEmpty()) {
+                        continue; // Skip if player has no auto-sell items
+                    }
+
                     for (Material itemType : autoSellItems) {
                         int amountInInventory = getAmountInInventory(player, itemType);
                         
                         if (amountInInventory > 0) {
-                            // Sell all matching items
                             plugin.getDatabaseManager().sellItemsDirectly(playerUUID, itemType, amountInInventory);
-                            
-                            // Remove sold items from player's inventory
                             removeItemsFromInventory(player, itemType, amountInInventory);
-                            
-                            // Notify player
                             player.sendMessage(ChatColor.GREEN + "AutoSold " + amountInInventory + " " + itemType.toString());
                         }
                     }
@@ -237,13 +235,13 @@ public class AutoSellManager implements Listener, CommandExecutor {
             PreparedStatement stmt = connection.prepareStatement("SELECT item FROM autosell_items WHERE uuid = ?");
             stmt.setString(1, playerUUID.toString());
             ResultSet rs = stmt.executeQuery();
-    
+
             while (rs.next()) {
                 String itemString = rs.getString("item");
                 ItemStack item = ItemStack.deserialize(convertStringToMap(itemString));
-                autoSellItems.add(item.getType()); // Add the item type to the set
+                autoSellItems.add(item.getType());
             }
-    
+
             rs.close();
             stmt.close();
         } catch (SQLException e) {
