@@ -8,7 +8,10 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.ChatColor;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 
 public class MarketManager {
@@ -139,31 +142,61 @@ public class MarketManager {
 
     public void recalculatePrices() {
         List<MarketItem> marketItems = databaseManager.getMarketItems();
-        double totalMoney = economyManager.getTotalMoney();
-        int totalItems = marketItems.stream().mapToInt(MarketItem::getQuantity).sum();
+        if (marketItems.isEmpty()) {
+            return;
+        }
 
+        double totalMoney = economyManager.getTotalMoney();
         double totalMarketValue = totalMoney * marketValueMultiplier;
         double maxPrice = totalMoney * maxPricePercent;
 
-        System.out.println("Total Market Value: " + totalMarketValue);
-        System.out.println("Max Price (5% of Total Market Value): " + maxPrice);
+        Map<String, Aggregate> aggregates = new HashMap<>();
+        int totalItems = 0;
 
-        double totalInverseProportions = 0;
-        for (MarketItem item : marketItems) {
-            totalInverseProportions += (double) totalItems / item.getQuantity();
+        for (MarketItem listing : marketItems) {
+            totalItems += listing.getQuantity();
+            aggregates.computeIfAbsent(listing.getItemData(), key -> new Aggregate()).addListing(listing);
         }
 
-        for (MarketItem item : marketItems) {
-            double inverseProportion = (double) totalItems / item.getQuantity();
-            double calculatedPrice = (totalMarketValue / totalInverseProportions) * inverseProportion / item.getQuantity();
-            
-            // Ensure the price doesn't exceed 5% of total market value
-            double finalPrice = Math.min(maxPrice, Math.max(minPrice, calculatedPrice));
-            
-            item.setPrice(finalPrice);
-            databaseManager.updateMarketItem(item);
+        if (totalItems <= 0) {
+            totalItems = aggregates.size();
+        }
 
-            System.out.println("Item: " + item.getType().toString() + ", Calculated Price: " + calculatedPrice + ", Final Price: " + finalPrice);
+        double averageQuantity = Math.max(1d, (double) totalItems / aggregates.size());
+        double baseCommodityValue = totalMarketValue / aggregates.size();
+        double elasticity = 0.75; // higher means greater reaction to scarcity/surplus
+
+        for (Aggregate aggregate : aggregates.values()) {
+            double quantity = Math.max(1d, aggregate.totalQuantity);
+            double scarcityRatio = averageQuantity / quantity;
+            double baseUnitPrice = baseCommodityValue / quantity;
+            double dynamicPrice = baseUnitPrice * Math.pow(scarcityRatio, elasticity);
+            double finalPrice = Math.min(maxPrice, Math.max(minPrice, dynamicPrice));
+
+            for (MarketItem listing : aggregate.listings) {
+                listing.setPrice(finalPrice);
+                databaseManager.updateMarketItem(listing);
+            }
+
+            plugin.getLogger().info("Updated price for " + aggregate.getCommodityName() + " to $" + String.format("%.2f", finalPrice) +
+                    " (total quantity: " + aggregate.totalQuantity + ")");
+        }
+    }
+
+    private static class Aggregate {
+        private int totalQuantity = 0;
+        private final List<MarketItem> listings = new ArrayList<>();
+
+        void addListing(MarketItem item) {
+            totalQuantity += item.getQuantity();
+            listings.add(item);
+        }
+
+        String getCommodityName() {
+            if (listings.isEmpty()) {
+                return "Unknown";
+            }
+            return listings.get(0).getType().toString();
         }
     }
 }
