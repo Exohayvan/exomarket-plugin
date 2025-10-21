@@ -4,7 +4,7 @@
 
     <groupId>com.exomarket</groupId>
     <artifactId>ExoMarketPlugin</artifactId>
-    <version>1.4.1</version>
+    <version>1.4.3</version>
     <packaging>jar</packaging>
 
     <name>ExoMarketPlugin</name>
