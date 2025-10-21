@@ -55,7 +55,7 @@ public class ExoMarketPlugin extends JavaPlugin implements TabCompleter {
         economyManager = new EconomyManager(this);
         marketManager = new MarketManager(this, databaseManager, economyManager, marketValueMultiplier, maxPricePercent, minPrice);
         guiManager = new GUIManager(this);
-        autoSellManager = new AutoSellManager(this, marketManager);
+        autoSellManager = new AutoSellManager(this);
 
         getServer().getPluginManager().registerEvents(guiManager, this);
         getServer().getPluginManager().registerEvents(autoSellManager, this);

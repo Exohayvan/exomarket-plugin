@@ -10,6 +10,7 @@ import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.inventory.meta.EnchantmentStorageMeta;
 import org.bukkit.ChatColor;
 import org.bukkit.inventory.InventoryView;
 
@@ -19,8 +20,81 @@ public class GUIManager implements Listener {
 
     private ExoMarketPlugin plugin;
     private Map<Player, Integer> currentPage = new HashMap<>();
-    private Map<Player, String> inventoryTitle = new HashMap<>();
+    private Map<Player, AggregatedListing> selectedMarketItem = new HashMap<>();
+    private Map<Player, Map<Integer, AggregatedListing>> pageItems = new HashMap<>();
 
+    private static class AggregatedListing {
+        private final String itemData;
+        private final ItemStack template;
+        private final Set<String> sellers = new HashSet<>();
+        private int totalQuantity;
+        private double pricePerItem;
+
+        AggregatedListing(String itemData, ItemStack template, double pricePerItem) {
+            this.itemData = itemData;
+            this.template = ItemSanitizer.sanitize(template);
+            this.pricePerItem = pricePerItem;
+        }
+
+        void incorporate(MarketItem marketItem) {
+            totalQuantity += marketItem.getQuantity();
+            sellers.add(marketItem.getSellerUUID());
+            pricePerItem = marketItem.getPrice();
+        }
+
+        String getItemData() {
+            return itemData;
+        }
+
+        ItemStack getTemplate() {
+            return template.clone();
+        }
+
+        int getTotalQuantity() {
+            return totalQuantity;
+        }
+
+        double getPricePerItem() {
+            return pricePerItem;
+        }
+
+        int getSellerCount() {
+            return sellers.size();
+        }
+
+        String getTypeName() {
+            return template.getType().toString();
+        }
+
+        String getSortKey() {
+            return getTypeName();
+        }
+
+        ItemStack createDisplayItem() {
+            ItemStack displayItem = getTemplate();
+            ItemMeta meta = displayItem.getItemMeta();
+            if (meta != null) {
+                meta.setDisplayName(ChatColor.GOLD + getTypeName());
+                List<String> lore = new ArrayList<>();
+                lore.add(ChatColor.GRAY + "Price: $" + String.format("%.2f", pricePerItem));
+                lore.add(ChatColor.GRAY + "Quantity: " + totalQuantity);
+                lore.add(ChatColor.GRAY + "Sellers: " + getSellerCount());
+                if (!displayItem.getEnchantments().isEmpty()) {
+                    displayItem.getEnchantments().forEach((enchantment, level) ->
+                            lore.add(ChatColor.GRAY + "Enchant: " + enchantment.getKey().getKey() + " " + level));
+                }
+                if (meta instanceof EnchantmentStorageMeta) {
+                    EnchantmentStorageMeta storageMeta = (EnchantmentStorageMeta) meta;
+                    storageMeta.getStoredEnchants().forEach((enchantment, level) ->
+                            lore.add(ChatColor.GRAY + "Stored: " + enchantment.getKey().getKey() + " " + level));
+                    meta = storageMeta;
+                }
+                meta.setLore(lore);
+                displayItem.setItemMeta(meta);
+            }
+            return displayItem;
+        }
+    }
     public GUIManager(ExoMarketPlugin plugin) {
         this.plugin = plugin;
     }
@@ -30,8 +104,8 @@ public class GUIManager implements Listener {
         openMarketPage(player);
     }
 
-    public void openQuantityMenu(Player player, MarketItem marketItem) {
-        int availableQuantity = marketItem.getQuantity();
+    public void openQuantityMenu(Player player, AggregatedListing listing) {
+        int availableQuantity = listing.getTotalQuantity();
         int inventorySize = 9; // Start with the smallest size
         List<Integer> quantities = new ArrayList<>(Arrays.asList(1, 2, 4, 8, 16, 32, 64));
 
@@ -53,7 +127,7 @@ public class GUIManager implements Listener {
             inventory.setItem(getSlot(i, inventorySize), quantityItem);
         }
 
-        inventoryTitle.put(player, marketItem.getType().name());
+        selectedMarketItem.put(player, listing);
         player.openInventory(inventory);
     }
 
@@ -76,42 +150,56 @@ public class GUIManager implements Listener {
     }
 
     public void openMarketPage(Player player) {
-        Inventory inventory = Bukkit.createInventory(null, 54, "Market Page " + currentPage.get(player));
+        selectedMarketItem.remove(player);
         DatabaseManager databaseManager = plugin.getDatabaseManager();
         List<MarketItem> marketItems = databaseManager.getMarketItems();
-        Collections.sort(marketItems, (a, b) -> a.getType().toString().compareTo(b.getType().toString()));
+        Map<String, AggregatedListing> aggregatedMap = new LinkedHashMap<>();
+        for (MarketItem marketItem : marketItems) {
+            AggregatedListing listing = aggregatedMap.computeIfAbsent(
+                    marketItem.getItemData(),
+                    key -> new AggregatedListing(key, marketItem.getItemStack(), marketItem.getPrice())
+            );
+            listing.incorporate(marketItem);
+        }
 
-        int index = (currentPage.get(player) - 1) * 45;
-        for (int i = 0; i < 45; i++) {
-            if (index < marketItems.size()) {
-                MarketItem marketItem = marketItems.get(index);
-                ItemStack itemStack = new ItemStack(marketItem.getType());
-                ItemMeta meta = itemStack.getItemMeta();
-                meta.setDisplayName(ChatColor.GOLD + marketItem.getType().toString());
-                
-                String formattedPrice = String.format("%.2f", marketItem.getPrice());
-                
-                meta.setLore(Arrays.asList(
-                    ChatColor.GRAY + "Price: $" + formattedPrice,
-                    ChatColor.GRAY + "Quantity: " + marketItem.getQuantity()
-                ));
-                itemStack.setItemMeta(meta);
-                inventory.setItem(i, itemStack);
-                index++;
-            } else {
+        List<AggregatedListing> aggregatedListings = new ArrayList<>(aggregatedMap.values());
+        aggregatedListings.sort(Comparator.comparing(AggregatedListing::getSortKey, String.CASE_INSENSITIVE_ORDER));
+        int totalListings = aggregatedListings.size();
+        int maxPage = Math.max(1, (int) Math.ceil(totalListings / 45.0));
+        int pageNumber = currentPage.getOrDefault(player, 1);
+        if (pageNumber > maxPage) {
+            pageNumber = maxPage;
+            currentPage.put(player, pageNumber);
+        } else if (pageNumber < 1) {
+            pageNumber = 1;
+            currentPage.put(player, pageNumber);
+        }
+
+        Inventory inventory = Bukkit.createInventory(null, 54, "Market Page " + pageNumber);
+        int startIndex = (pageNumber - 1) * 45;
+        Map<Integer, AggregatedListing> slotsToItems = new HashMap<>();
+        for (int slot = 0; slot < 45; slot++) {
+            int listIndex = startIndex + slot;
+            if (listIndex >= aggregatedListings.size()) {
                 break;
             }
+
+            AggregatedListing listing = aggregatedListings.get(listIndex);
+            ItemStack displayItem = listing.createDisplayItem();
+            inventory.setItem(slot, displayItem);
+            slotsToItems.put(slot, listing);
         }
+        pageItems.put(player, slotsToItems);
 
         // Always add navigation arrows
         inventory.setItem(48, createNavigationItem(Material.ARROW, ChatColor.GREEN + "Previous Page"));
         inventory.setItem(50, createNavigationItem(Material.ARROW, ChatColor.GREEN + "Next Page"));
 
         // Disable arrows if necessary
-        if (currentPage.get(player) <= 1) {
+        if (pageNumber <= 1) {
             inventory.setItem(48, createNavigationItem(Material.BARRIER, ChatColor.RED + "No Previous Page"));
         }
-        if (index >= marketItems.size()) {
+        if (pageNumber >= maxPage) {
             inventory.setItem(50, createNavigationItem(Material.BARRIER, ChatColor.RED + "No Next Page"));
         }
 
@@ -137,20 +225,20 @@ public class GUIManager implements Listener {
             Player player = (Player) event.getWhoClicked();
             ItemStack clickedItem = event.getCurrentItem();
 
-            if (clickedItem != null && clickedItem.getType() != Material.AIR) {
-                if (event.getRawSlot() == 48 && clickedItem.getType() == Material.ARROW) {
+            if (clickedItem != null && !clickedItem.getType().isAir()) {
+                int rawSlot = event.getRawSlot();
+                if (rawSlot == 48 && clickedItem.getType() == Material.ARROW) {
                     currentPage.put(player, currentPage.get(player) - 1);
                     openMarketPage(player);
-                } else if (event.getRawSlot() == 50 && clickedItem.getType() == Material.ARROW) {
+                } else if (rawSlot == 50 && clickedItem.getType() == Material.ARROW) {
                     currentPage.put(player, currentPage.get(player) + 1);
                     openMarketPage(player);
                 } else {
-                    String itemName = ChatColor.stripColor(clickedItem.getItemMeta().getDisplayName());
-                    Material itemType = Material.getMaterial(itemName);
-                    if (itemType != null) {
-                        MarketItem marketItem = plugin.getDatabaseManager().getMarketItem(itemType);
-                        if (marketItem != null) {
-                            openQuantityMenu(player, marketItem);
+                    Map<Integer, AggregatedListing> slots = pageItems.get(player);
+                    if (slots != null && rawSlot >= 0 && rawSlot < 45) {
+                        AggregatedListing listing = slots.get(rawSlot);
+                        if (listing != null) {
+                            openQuantityMenu(player, listing);
                         }
                     }
                 }
@@ -160,18 +248,14 @@ public class GUIManager implements Listener {
             Player player = (Player) event.getWhoClicked();
             ItemStack clickedItem = event.getCurrentItem();
 
-            if (clickedItem != null && clickedItem.getType() != Material.AIR) {
+            if (clickedItem != null && !clickedItem.getType().isAir()) {
                 String quantityString = ChatColor.stripColor(clickedItem.getItemMeta().getDisplayName()).split(" ")[1];
                 int quantity = Integer.parseInt(quantityString.substring(0, quantityString.length() - 1)); // Remove the 'x' at the end
-                String itemTypeName = inventoryTitle.get(player);
-                if (itemTypeName != null) {
-                    Material itemType = Material.getMaterial(itemTypeName);
-                    if (itemType != null) {
-                        MarketItem marketItem = plugin.getDatabaseManager().getMarketItem(itemType);
-                        if (marketItem != null) {
-                            plugin.getMarketManager().buyItem(player, marketItem, quantity);
-                        }
-                    }
+                AggregatedListing selected = selectedMarketItem.get(player);
+                if (selected != null) {
+                    plugin.getMarketManager().buyStackedItem(player, selected.getItemData(), selected.getTemplate(), quantity);
+                    Bukkit.getScheduler().runTask(plugin, () -> openMarketPage(player));
+                    selectedMarketItem.remove(player);
                 }
             }
         }

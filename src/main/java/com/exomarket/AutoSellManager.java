@@ -1,10 +1,7 @@
 package com.exomarket;
 
-import com.google.gson.Gson;
-import com.google.gson.reflect.TypeToken;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
-import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -18,25 +15,23 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.scheduler.BukkitRunnable;
 
 import java.sql.*;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
 public class AutoSellManager implements Listener, CommandExecutor {
 
     private final ExoMarketPlugin plugin;
-    private final MarketManager marketManager;
     private final Map<UUID, Inventory> autoSellInventories;
     private Connection connection;
-    private final Gson gson;
 
-    public AutoSellManager(ExoMarketPlugin plugin, MarketManager marketManager) {
+    public AutoSellManager(ExoMarketPlugin plugin) {
         this.plugin = plugin;
-        this.marketManager = marketManager;
         this.autoSellInventories = new HashMap<>();
-        this.gson = new Gson();
         setupDatabase();
         startAutoSellTask();
     }
@@ -47,6 +42,28 @@ public class AutoSellManager implements Listener, CommandExecutor {
             Statement stmt = connection.createStatement();
             stmt.execute("CREATE TABLE IF NOT EXISTS autosell_items (uuid TEXT, item TEXT)");
             stmt.close();
+            normalizeStoredItems();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void normalizeStoredItems() {
+        try (PreparedStatement select = connection.prepareStatement("SELECT rowid, item FROM autosell_items");
+             ResultSet rs = select.executeQuery()) {
+            while (rs.next()) {
+                long rowId = rs.getLong("rowid");
+                String storedData = rs.getString("item");
+                ItemStack sanitized = ItemSanitizer.deserializeFromString(storedData);
+                String normalized = ItemSanitizer.serializeToString(sanitized);
+                if (!normalized.equals(storedData)) {
+                    try (PreparedStatement update = connection.prepareStatement("UPDATE autosell_items SET item = ? WHERE rowid = ?")) {
+                        update.setString(1, normalized);
+                        update.setLong(2, rowId);
+                        update.executeUpdate();
+                    }
+                }
+            }
         } catch (SQLException e) {
             e.printStackTrace();
         }
@@ -75,19 +92,16 @@ public class AutoSellManager implements Listener, CommandExecutor {
             PreparedStatement stmt = connection.prepareStatement("SELECT item FROM autosell_items WHERE uuid = ?");
             stmt.setString(1, playerUUID.toString());
             ResultSet rs = stmt.executeQuery();
-            Set<Material> uniqueItemTypes = new HashSet<>(); // Store unique item types
+            Set<String> uniqueItems = new HashSet<>();
 
+            inventory.clear();
             while (rs.next()) {
                 String itemString = rs.getString("item");
-                ItemStack item = ItemStack.deserialize(convertStringToMap(itemString));
-                uniqueItemTypes.add(item.getType()); // Store only the type of each item
-            }
-            
-            // Clear inventory and add a single item for each unique type
-            inventory.clear();
-            for (Material material : uniqueItemTypes) {
-                ItemStack singleItem = new ItemStack(material, 1); // Create a single item
-                inventory.addItem(singleItem);
+                if (uniqueItems.add(itemString)) {
+                    ItemStack item = ItemSanitizer.deserializeFromString(itemString);
+                    item.setAmount(1);
+                    inventory.addItem(item);
+                }
             }
 
             rs.close();
@@ -97,8 +111,8 @@ public class AutoSellManager implements Listener, CommandExecutor {
         }
     }
 
-    private Map<String, Object> convertStringToMap(String itemString) {
-        return gson.fromJson(itemString, new TypeToken<Map<String, Object>>() {}.getType());
+    private String serializeItemTemplate(ItemStack item) {
+        return ItemSanitizer.serializeToString(item);
     }
 
     @EventHandler
@@ -111,7 +125,7 @@ public class AutoSellManager implements Listener, CommandExecutor {
             Inventory inventory = autoSellInventories.get(playerUUID);
             ItemStack clickedItem = event.getCurrentItem();
     
-            if (clickedItem != null && clickedItem.getType() != Material.AIR) {
+            if (clickedItem != null && !clickedItem.getType().isAir()) {
                 // Check if the item is already in the auto-sell list
                 if (isItemInAutoSellList(playerUUID, clickedItem)) {
                     // Remove the clicked item from the auto-sell list
@@ -134,7 +148,7 @@ public class AutoSellManager implements Listener, CommandExecutor {
         try {
             PreparedStatement stmt = connection.prepareStatement("SELECT COUNT(*) FROM autosell_items WHERE uuid = ? AND item = ?");
             stmt.setString(1, playerUUID.toString());
-            stmt.setString(2, gson.toJson(item.serialize())); // Use the serialized item for checking
+            stmt.setString(2, serializeItemTemplate(item)); // Use normalized serialization for checking
             ResultSet rs = stmt.executeQuery();
             rs.next();
             boolean exists = rs.getInt(1) > 0; // Check if count is greater than 0
@@ -151,7 +165,7 @@ public class AutoSellManager implements Listener, CommandExecutor {
         try {
             PreparedStatement stmt = connection.prepareStatement("DELETE FROM autosell_items WHERE uuid = ? AND item = ?");
             stmt.setString(1, playerUUID.toString());
-            stmt.setString(2, gson.toJson(item.serialize()));
+            stmt.setString(2, serializeItemTemplate(item));
             stmt.executeUpdate();
             stmt.close();
         } catch (SQLException e) {
@@ -166,7 +180,7 @@ public class AutoSellManager implements Listener, CommandExecutor {
         try {
             PreparedStatement stmt = connection.prepareStatement("INSERT INTO autosell_items (uuid, item) VALUES (?, ?)");
             stmt.setString(1, playerUUID.toString());
-            stmt.setString(2, gson.toJson(item.serialize()));
+            stmt.setString(2, serializeItemTemplate(item));
             stmt.executeUpdate();
             stmt.close();
         } catch (SQLException e) {
@@ -209,19 +223,22 @@ public class AutoSellManager implements Listener, CommandExecutor {
             public void run() {
                 for (Player player : Bukkit.getOnlinePlayers()) {
                     UUID playerUUID = player.getUniqueId();
-                    Set<Material> autoSellItems = getAutoSellItemsFromDatabase(playerUUID);
+                    List<ItemStack> autoSellItems = getAutoSellItemsFromDatabase(playerUUID);
                     
                     if (autoSellItems.isEmpty()) {
                         continue; // Skip if player has no auto-sell items
                     }
 
-                    for (Material itemType : autoSellItems) {
-                        int amountInInventory = getAmountInInventory(player, itemType);
+                    for (ItemStack template : autoSellItems) {
+                        int amountInInventory = getAmountInInventory(player, template);
                         
                         if (amountInInventory > 0) {
-                            plugin.getDatabaseManager().sellItemsDirectly(playerUUID, itemType, amountInInventory);
-                            removeItemsFromInventory(player, itemType, amountInInventory);
-                            player.sendMessage(ChatColor.GREEN + "AutoSold " + amountInInventory + " " + itemType.toString());
+                            plugin.getDatabaseManager().sellItemsDirectly(playerUUID, template, amountInInventory);
+                            removeItemsFromInventory(player, template, amountInInventory);
+                            String display = template.hasItemMeta() && template.getItemMeta().hasDisplayName()
+                                    ? template.getItemMeta().getDisplayName()
+                                    : template.getType().toString();
+                            player.sendMessage(ChatColor.GREEN + "AutoSold " + amountInInventory + " " + display);
                         }
                     }
                 }
@@ -229,8 +246,9 @@ public class AutoSellManager implements Listener, CommandExecutor {
         }.runTaskTimer(plugin, 20, 40); // Run every 2 seconds
     }
     
-    private Set<Material> getAutoSellItemsFromDatabase(UUID playerUUID) {
-        Set<Material> autoSellItems = new HashSet<>();
+    private List<ItemStack> getAutoSellItemsFromDatabase(UUID playerUUID) {
+        List<ItemStack> autoSellItems = new ArrayList<>();
+        Set<String> uniqueItems = new HashSet<>();
         try {
             PreparedStatement stmt = connection.prepareStatement("SELECT item FROM autosell_items WHERE uuid = ?");
             stmt.setString(1, playerUUID.toString());
@@ -238,8 +256,11 @@ public class AutoSellManager implements Listener, CommandExecutor {
 
             while (rs.next()) {
                 String itemString = rs.getString("item");
-                ItemStack item = ItemStack.deserialize(convertStringToMap(itemString));
-                autoSellItems.add(item.getType());
+                if (uniqueItems.add(itemString)) {
+                    ItemStack item = ItemSanitizer.deserializeFromString(itemString);
+                    item.setAmount(1);
+                    autoSellItems.add(item);
+                }
             }
 
             rs.close();
@@ -250,20 +271,21 @@ public class AutoSellManager implements Listener, CommandExecutor {
         return autoSellItems;
     }
 
-    private void removeItemsFromInventory(Player player, Material material, int amount) {
+    private void removeItemsFromInventory(Player player, ItemStack template, int amount) {
         Inventory inventory = player.getInventory();
         int remainingAmount = amount;
-        for (ItemStack item : inventory.getContents()) {
-            if (item != null && item.getType() == material) {
+        ItemStack[] contents = inventory.getContents();
+        for (int slot = 0; slot < contents.length && remainingAmount > 0; slot++) {
+            ItemStack item = contents[slot];
+            if (item != null && ItemSanitizer.matches(item, template)) {
                 if (item.getAmount() <= remainingAmount) {
                     remainingAmount -= item.getAmount();
-                    inventory.remove(item);
+                    inventory.clear(slot);
                 } else {
                     item.setAmount(item.getAmount() - remainingAmount);
-                    break;
+                    remainingAmount = 0;
                 }
             }
-            if (remainingAmount == 0) break;
         }
         player.updateInventory();
     
@@ -276,10 +298,10 @@ public class AutoSellManager implements Listener, CommandExecutor {
         }
     }
 
-    private int getAmountInInventory(Player player, Material material) {
+    private int getAmountInInventory(Player player, ItemStack template) {
         int amount = 0;
         for (ItemStack item : player.getInventory().getContents()) {
-            if (item != null && item.getType() == material) {
+            if (item != null && ItemSanitizer.matches(item, template)) {
                 amount += item.getAmount();
             }
         }

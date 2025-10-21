@@ -1,22 +1,44 @@
 package com.exomarket;
 
 import org.bukkit.Material;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
 
 public class MarketItem {
-    private Material type;
+    private final ItemStack itemStack;
+    private final String itemData;
     private int quantity;
     private double price;
-    private String sellerUUID;
+    private final String sellerUUID;
 
-    public MarketItem(Material type, int quantity, double price, String sellerUUID) {
-        this.type = type;
+    public MarketItem(ItemStack itemStack, int quantity, double price, String sellerUUID) {
+        ItemStack sanitized = ItemSanitizer.sanitize(itemStack);
+        this.itemStack = sanitized;
+        this.itemData = ItemSanitizer.serializeToString(sanitized);
+        this.quantity = quantity;
+        this.price = price;
+        this.sellerUUID = sellerUUID;
+    }
+
+    public MarketItem(ItemStack itemStack, String itemData, int quantity, double price, String sellerUUID) {
+        ItemStack sanitized = ItemSanitizer.sanitize(itemStack);
+        this.itemStack = sanitized;
+        this.itemData = itemData != null && !itemData.isEmpty() ? itemData : ItemSanitizer.serializeToString(sanitized);
         this.quantity = quantity;
         this.price = price;
         this.sellerUUID = sellerUUID;
     }
 
     public Material getType() {
-        return type;
+        return itemStack.getType();
+    }
+
+    public ItemStack getItemStack() {
+        return itemStack.clone();
+    }
+
+    public String getItemData() {
+        return itemData;
     }
 
     public int getQuantity() {
@@ -32,7 +54,11 @@ public class MarketItem {
     }
 
     public String getDisplayName() {
-        return this.type.toString(); 
+        ItemMeta meta = itemStack.getItemMeta();
+        if (meta != null && meta.hasDisplayName()) {
+            return meta.getDisplayName();
+        }
+        return itemStack.getType().toString();
     }
 
     public void addQuantity(int amount) {
