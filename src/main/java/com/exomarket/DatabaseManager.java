@@ -122,7 +122,7 @@ public class DatabaseManager {
         );
     }
 
-    public MarketItem getMarketItem(Material type) {
+    public synchronized MarketItem getMarketItem(Material type) {
         try (PreparedStatement statement = connection.prepareStatement("SELECT * FROM market_items WHERE type = ?")) {
             statement.setString(1, type.toString());
             try (ResultSet resultSet = statement.executeQuery()) {
@@ -136,7 +136,7 @@ public class DatabaseManager {
         return null;
     }
 
-    public MarketItem getMarketItem(Material type, String sellerUUID) {
+    public synchronized MarketItem getMarketItem(Material type, String sellerUUID) {
         try (PreparedStatement statement = connection.prepareStatement("SELECT * FROM market_items WHERE type = ? AND seller_uuid = ?")) {
             statement.setString(1, type.toString());
             statement.setString(2, sellerUUID);
@@ -151,7 +151,7 @@ public class DatabaseManager {
         return null;
     }
 
-    public MarketItem getMarketItem(ItemStack itemStack, String sellerUUID) {
+    public synchronized MarketItem getMarketItem(ItemStack itemStack, String sellerUUID) {
         String serialized = serializeItem(itemStack);
         try (PreparedStatement statement = connection.prepareStatement("SELECT * FROM market_items WHERE seller_uuid = ? AND item_data = ?")) {
             statement.setString(1, sellerUUID);
@@ -167,7 +167,7 @@ public class DatabaseManager {
         return null;
     }
 
-    public List<MarketItem> getMarketItemsByItemData(String itemData) {
+    public synchronized List<MarketItem> getMarketItemsByItemData(String itemData) {
         List<MarketItem> marketItems = new ArrayList<>();
         try (PreparedStatement statement = connection.prepareStatement("SELECT * FROM market_items WHERE item_data = ? ORDER BY rowid")) {
             statement.setString(1, itemData);
@@ -182,7 +182,11 @@ public class DatabaseManager {
         return marketItems;
     }
 
-    public void sellItemsDirectly(UUID playerUUID, ItemStack itemStack, int quantity) {
+    public synchronized void sellItemsDirectly(UUID playerUUID, ItemStack itemStack, int quantity) {
+        if (ItemSanitizer.isDamaged(itemStack)) {
+            return;
+        }
+
         MarketItem existingItem = getMarketItem(itemStack, playerUUID.toString());
         if (existingItem == null) {
             MarketItem newItem = new MarketItem(itemStack, quantity, 0, playerUUID.toString());
@@ -193,7 +197,7 @@ public class DatabaseManager {
         }
     }
 
-    public void addMarketItem(MarketItem marketItem) {
+    public synchronized void addMarketItem(MarketItem marketItem) {
         try (PreparedStatement statement = connection.prepareStatement(
                 "INSERT INTO market_items (type, quantity, price, seller_uuid, item_data) VALUES (?, ?, ?, ?, ?)")) {
             statement.setString(1, marketItem.getType().toString());
@@ -207,7 +211,7 @@ public class DatabaseManager {
         }
     }
 
-    public void updateMarketItem(MarketItem marketItem) {
+    public synchronized void updateMarketItem(MarketItem marketItem) {
         try (PreparedStatement statement = connection.prepareStatement(
                 "UPDATE market_items SET quantity = ?, price = ?, item_data = ? WHERE type = ? AND seller_uuid = ? AND item_data = ?")) {
             statement.setInt(1, marketItem.getQuantity());
@@ -222,7 +226,7 @@ public class DatabaseManager {
         }
     }
 
-    public void removeMarketItem(MarketItem marketItem) {
+    public synchronized void removeMarketItem(MarketItem marketItem) {
         try (PreparedStatement statement = connection.prepareStatement(
                 "DELETE FROM market_items WHERE type = ? AND seller_uuid = ? AND item_data = ?")) {
             statement.setString(1, marketItem.getType().toString());
@@ -234,7 +238,7 @@ public class DatabaseManager {
         }
     }
 
-    public List<MarketItem> getMarketItems() {
+    public synchronized List<MarketItem> getMarketItems() {
         List<MarketItem> marketItems = new ArrayList<>();
         try (PreparedStatement statement = connection.prepareStatement("SELECT * FROM market_items");
              ResultSet resultSet = statement.executeQuery()) {
@@ -247,10 +251,25 @@ public class DatabaseManager {
         return marketItems;
     }
 
-    public List<MarketItem> getMarketItemsBySeller(Material type) {
+    public synchronized List<MarketItem> getMarketItemsBySeller(Material type) {
         List<MarketItem> marketItems = new ArrayList<>();
         try (PreparedStatement statement = connection.prepareStatement("SELECT * FROM market_items WHERE type = ?")) {
             statement.setString(1, type.toString());
+            try (ResultSet resultSet = statement.executeQuery()) {
+                while (resultSet.next()) {
+                    marketItems.add(mapRowToMarketItem(resultSet));
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return marketItems;
+    }
+
+    public synchronized List<MarketItem> getMarketItemsByOwner(String ownerUUID) {
+        List<MarketItem> marketItems = new ArrayList<>();
+        try (PreparedStatement statement = connection.prepareStatement("SELECT * FROM market_items WHERE seller_uuid = ?")) {
+            statement.setString(1, ownerUUID);
             try (ResultSet resultSet = statement.executeQuery()) {
                 while (resultSet.next()) {
                     marketItems.add(mapRowToMarketItem(resultSet));

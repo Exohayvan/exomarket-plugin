@@ -3,15 +3,11 @@ package com.exomarket;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import org.bukkit.Material;
-import org.bukkit.enchantments.Enchantment;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.Damageable;
-import org.bukkit.inventory.meta.EnchantmentStorageMeta;
 import org.bukkit.inventory.meta.ItemMeta;
 
 import java.lang.reflect.Type;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -30,35 +26,47 @@ public final class ItemSanitizer {
             return new ItemStack(Material.AIR);
         }
 
-        ItemStack sanitized = new ItemStack(original.getType());
+        ItemStack sanitized = original.clone();
         sanitized.setAmount(1);
 
-        ItemMeta originalMeta = original.getItemMeta();
-        ItemMeta sanitizedMeta = sanitized.getItemMeta();
-
-        if (originalMeta instanceof EnchantmentStorageMeta && sanitizedMeta instanceof EnchantmentStorageMeta) {
-            EnchantmentStorageMeta originalStorage = (EnchantmentStorageMeta) originalMeta;
-            EnchantmentStorageMeta sanitizedStorage = (EnchantmentStorageMeta) sanitizedMeta;
-            for (Map.Entry<Enchantment, Integer> entry : originalStorage.getStoredEnchants().entrySet()) {
-                sanitizedStorage.addStoredEnchant(entry.getKey(), entry.getValue(), true);
+        ItemMeta meta = sanitized.getItemMeta();
+        if (meta != null) {
+            if (meta.hasDisplayName()) {
+                meta.setDisplayName(null);
             }
-            sanitized.setItemMeta(sanitizedStorage);
-        }
+            if (meta.hasLore()) {
+                meta.setLore(null);
+            }
+            try {
+                meta.setLocalizedName(null);
+            } catch (NoSuchMethodError ignored) {
+                // Older API - ignore
+            }
 
-        if (!original.getEnchantments().isEmpty()) {
-            sanitized.addUnsafeEnchantments(original.getEnchantments());
-        }
+            if (meta instanceof Damageable) {
+                ItemMeta originalMeta = original.getItemMeta();
+                if (originalMeta instanceof Damageable) {
+                    ((Damageable) meta).setDamage(((Damageable) originalMeta).getDamage());
+                }
+            }
 
-        if (originalMeta instanceof Damageable && sanitizedMeta instanceof Damageable) {
-            Damageable originalDamageable = (Damageable) originalMeta;
-            Damageable sanitizedDamageable = (Damageable) sanitizedMeta;
-            sanitizedDamageable.setDamage(originalDamageable.getDamage());
-            sanitized.setItemMeta((ItemMeta) sanitizedDamageable);
-        } else if (sanitizedMeta != null && !(sanitizedMeta instanceof EnchantmentStorageMeta)) {
-            sanitized.setItemMeta(sanitizedMeta);
+            sanitized.setItemMeta(meta);
         }
 
         return sanitized;
+    }
+
+    public static boolean isDamaged(ItemStack itemStack) {
+        if (itemStack == null || itemStack.getType() == Material.AIR) {
+            return false;
+        }
+
+        ItemMeta meta = itemStack.getItemMeta();
+        if (meta instanceof Damageable) {
+            return ((Damageable) meta).getDamage() > 0;
+        }
+
+        return false;
     }
 
     public static boolean matches(ItemStack stack, ItemStack template) {
@@ -82,33 +90,7 @@ public final class ItemSanitizer {
 
     public static String createAggregationKey(ItemStack itemStack) {
         ItemStack sanitized = sanitize(itemStack);
-        StringBuilder builder = new StringBuilder(sanitized.getType().name());
-
-        ItemMeta meta = sanitized.getItemMeta();
-        int damage = 0;
-        if (meta instanceof Damageable) {
-            damage = ((Damageable) meta).getDamage();
-        }
-        builder.append("|d:").append(damage);
-
-        List<String> enchantParts = new ArrayList<>();
-        for (Map.Entry<Enchantment, Integer> entry : sanitized.getEnchantments().entrySet()) {
-            enchantParts.add("E:" + entry.getKey().getKey().toString() + "=" + entry.getValue());
-        }
-
-        if (meta instanceof EnchantmentStorageMeta) {
-            EnchantmentStorageMeta storageMeta = (EnchantmentStorageMeta) meta;
-            for (Map.Entry<Enchantment, Integer> entry : storageMeta.getStoredEnchants().entrySet()) {
-                enchantParts.add("S:" + entry.getKey().getKey().toString() + "=" + entry.getValue());
-            }
-        }
-
-        enchantParts.sort(String::compareTo);
-        for (String part : enchantParts) {
-            builder.append("|").append(part);
-        }
-
-        return builder.toString();
+        return serializeToString(sanitized);
     }
 
 }

@@ -24,6 +24,8 @@ public class ExoMarketPlugin extends JavaPlugin implements TabCompleter {
     private DatabaseManager databaseManager;
     private EconomyManager economyManager;
     private AutoSellManager autoSellManager;
+    private MarketSellGUI marketSellGUI;
+    private MarketItemsGUI marketItemsGUI;
     private double marketValueMultiplier;
     private double maxPricePercent;
     private double minPrice;
@@ -56,9 +58,13 @@ public class ExoMarketPlugin extends JavaPlugin implements TabCompleter {
         marketManager = new MarketManager(this, databaseManager, economyManager, marketValueMultiplier, maxPricePercent, minPrice);
         guiManager = new GUIManager(this);
         autoSellManager = new AutoSellManager(this);
+        marketSellGUI = new MarketSellGUI(this, marketManager);
+        marketItemsGUI = new MarketItemsGUI(this, marketManager, databaseManager);
 
         getServer().getPluginManager().registerEvents(guiManager, this);
         getServer().getPluginManager().registerEvents(autoSellManager, this);
+        getServer().getPluginManager().registerEvents(marketSellGUI, this);
+        getServer().getPluginManager().registerEvents(marketItemsGUI, this);
         
         // Register commands and set tab completers
         getCommand("market").setExecutor(this);
@@ -96,6 +102,13 @@ public class ExoMarketPlugin extends JavaPlugin implements TabCompleter {
                 guiManager.openMarketGUI(player);
                 return true;
             }
+            if (args[0].equalsIgnoreCase("sell")) {
+                marketSellGUI.openSellGUI(player);
+                return true;
+            } else if (args[0].equalsIgnoreCase("items")) {
+                marketItemsGUI.openListings(player);
+                return true;
+            }
             guiManager.openMarketGUI(player);
             return true;
         } else if (command.getName().equalsIgnoreCase("sellhand")) {
@@ -128,7 +141,12 @@ public class ExoMarketPlugin extends JavaPlugin implements TabCompleter {
         
         if (command.getName().equalsIgnoreCase("market")) {
             if (args.length == 1) {
-                completions.addAll(Arrays.asList("buy", "sell", "info"));
+                String prefix = args[0].toLowerCase();
+                for (String option : Arrays.asList("buy", "sell", "items", "info")) {
+                    if (option.startsWith(prefix)) {
+                        completions.add(option);
+                    }
+                }
             }
         } else if (command.getName().equalsIgnoreCase("sellhand")) {
             // No arguments for sell hand command

@@ -4,14 +4,16 @@
  */
 package com.exomarket;
 
+import org.bukkit.ChatColor;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.ChatColor;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.logging.Level;
 
 
 public class MarketManager {
@@ -22,6 +24,10 @@ public class MarketManager {
     private double marketValueMultiplier;
     private double maxPricePercent;
     private double minPrice;
+    private static final long RECALCULATION_COOLDOWN_MS = 5_000L;
+    private final AtomicBoolean recalculationRunning = new AtomicBoolean(false);
+    private final AtomicBoolean recalculationQueued = new AtomicBoolean(false);
+    private volatile long lastSuccessfulRecalculation = 0L;
 
     public MarketManager(ExoMarketPlugin plugin, DatabaseManager databaseManager, EconomyManager economyManager, double marketValueMultiplier, double maxPricePercent, double minPrice) {
         this.plugin = plugin;
@@ -44,26 +50,63 @@ public class MarketManager {
             return;
         }
 
-        ItemStack template = ItemSanitizer.sanitize(itemInHand);
-        MarketItem existingItem = databaseManager.getMarketItem(template, player.getUniqueId().toString());
+        if (ItemSanitizer.isDamaged(itemInHand)) {
+            player.sendMessage(ChatColor.RED + "Damaged items cannot be listed on the market.");
+            return;
+        }
 
-        if (existingItem == null) {
-            // Item doesn't exist in the market, create a new entry
-            MarketItem newItem = new MarketItem(template, amount, 0, player.getUniqueId().toString());
-            databaseManager.addMarketItem(newItem);
-            player.sendMessage(ChatColor.GREEN + "Item added to the market.");
-        } else {
-            // Item exists, update the quantity
-            existingItem.addQuantity(amount);
-            databaseManager.updateMarketItem(existingItem);
-            player.sendMessage(ChatColor.GREEN + "Added " + amount + " items to existing market listing.");
+        ItemStack toSell = itemInHand.clone();
+        toSell.setAmount(amount);
+
+        if (!sellItem(player, toSell, true)) {
+            return;
         }
 
         // Remove the items from the player's inventory
         itemInHand.setAmount(itemInHand.getAmount() - amount);
+        if (itemInHand.getAmount() <= 0) {
+            player.getInventory().setItemInMainHand(null);
+        }
+        player.updateInventory();
+    }
 
-        // Send a message to all players
-        plugin.getServer().broadcastMessage(ChatColor.YELLOW + player.getName() + " has added something to the market!");
+    public boolean sellItem(Player player, ItemStack stack) {
+        return sellItem(player, stack, true);
+    }
+
+    public boolean sellItem(Player player, ItemStack stack, boolean broadcast) {
+        if (stack == null || stack.getType().isAir()) {
+            return false;
+        }
+
+        int amount = stack.getAmount();
+        if (amount <= 0) {
+            return false;
+        }
+
+        if (ItemSanitizer.isDamaged(stack)) {
+            player.sendMessage(ChatColor.RED + "Damaged items cannot be listed on the market.");
+            return false;
+        }
+
+        ItemStack template = ItemSanitizer.sanitize(stack);
+        MarketItem existingItem = databaseManager.getMarketItem(template, player.getUniqueId().toString());
+
+        if (existingItem == null) {
+            MarketItem newItem = new MarketItem(template, amount, 0, player.getUniqueId().toString());
+            databaseManager.addMarketItem(newItem);
+            player.sendMessage(ChatColor.GREEN + "Added " + amount + " " + template.getType().toString() + " to the market.");
+        } else {
+            existingItem.addQuantity(amount);
+            databaseManager.updateMarketItem(existingItem);
+            player.sendMessage(ChatColor.GREEN + "Added " + amount + " " + template.getType().toString() + " to existing market listing.");
+        }
+
+        if (broadcast) {
+            plugin.getServer().broadcastMessage(ChatColor.YELLOW + player.getName() + " has added something to the market!");
+        }
+
+        return true;
     }
 
     public void buyItem(Player player, MarketItem marketItem, int quantity) {
@@ -141,6 +184,39 @@ public class MarketManager {
     }
 
     public void recalculatePrices() {
+        scheduleRecalculation(false);
+    }
+
+    public void forceRecalculatePrices() {
+        scheduleRecalculation(true);
+    }
+
+    private void scheduleRecalculation(boolean force) {
+        long now = System.currentTimeMillis();
+        if (!force && !recalculationRunning.get() && now - lastSuccessfulRecalculation < RECALCULATION_COOLDOWN_MS) {
+            return;
+        }
+
+        if (recalculationRunning.compareAndSet(false, true)) {
+            plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
+                try {
+                    performPriceRecalculation();
+                    lastSuccessfulRecalculation = System.currentTimeMillis();
+                } catch (Exception ex) {
+                    plugin.getLogger().log(Level.SEVERE, "Failed to recalculate market prices", ex);
+                } finally {
+                    recalculationRunning.set(false);
+                    if (recalculationQueued.getAndSet(false)) {
+                        scheduleRecalculation(true);
+                    }
+                }
+            });
+        } else {
+            recalculationQueued.set(true);
+        }
+    }
+
+    private void performPriceRecalculation() {
         List<MarketItem> marketItems = databaseManager.getMarketItems();
         if (marketItems.isEmpty()) {
             return;
@@ -149,12 +225,15 @@ public class MarketManager {
         double totalMoney = economyManager.getTotalMoney();
         double totalMarketValue = totalMoney * marketValueMultiplier;
         double maxPrice = totalMoney * maxPricePercent;
+        double commodityCap = totalMoney * 0.20; // cap any single commodity at 20% of total economy value
 
         Map<String, Aggregate> aggregates = new HashMap<>();
         int totalItems = 0;
+        int totalListings = 0;
 
         for (MarketItem listing : marketItems) {
-            totalItems += listing.getQuantity();
+            totalItems += Math.max(0, listing.getQuantity());
+            totalListings++;
             aggregates.computeIfAbsent(listing.getItemData(), key -> new Aggregate()).addListing(listing);
         }
 
@@ -163,40 +242,116 @@ public class MarketManager {
         }
 
         double averageQuantity = Math.max(1d, (double) totalItems / aggregates.size());
-        double baseCommodityValue = totalMarketValue / aggregates.size();
-        double elasticity = 0.75; // higher means greater reaction to scarcity/surplus
+        double averageListings = Math.max(1d, (double) totalListings / aggregates.size());
+
+        double quantityExponent = 0.65;
+        double listingExponent = 0.35;
+        double minWeight = 1e-3;
+        double maxWeight = 5.0;
 
         for (Aggregate aggregate : aggregates.values()) {
+            double quantityFactor = Math.pow(averageQuantity / Math.max(1d, aggregate.totalQuantity), quantityExponent);
+            double listingFactor = Math.pow(averageListings / Math.max(1d, aggregate.listingCount), listingExponent);
+            double weight = quantityFactor * listingFactor;
+            if (!Double.isFinite(weight) || weight < minWeight) {
+                weight = minWeight;
+            } else if (weight > maxWeight) {
+                weight = maxWeight;
+            }
+            aggregate.weight = weight;
+        }
+
+        double remainingValue = totalMarketValue;
+        List<Aggregate> adjustable = new ArrayList<>(aggregates.values());
+
+        while (!adjustable.isEmpty() && remainingValue > 0.0001) {
+            double weightSum = 0d;
+            for (Aggregate aggregate : adjustable) {
+                weightSum += aggregate.weight;
+            }
+
+            if (weightSum <= 0) {
+                double equalWeight = 1d / adjustable.size();
+                for (Aggregate aggregate : adjustable) {
+                    aggregate.weight = equalWeight;
+                }
+                weightSum = 1d;
+            }
+
+            double allocatedThisRound = 0d;
+            List<Aggregate> cappedThisRound = new ArrayList<>();
+
+            for (Aggregate aggregate : adjustable) {
+                double share = aggregate.weight / weightSum;
+                double proposed = remainingValue * share;
+                double remainingCap = commodityCap - aggregate.assignedValue;
+                double allocation = Math.max(0d, Math.min(proposed, remainingCap));
+
+                if (allocation > 0) {
+                    aggregate.assignedValue += allocation;
+                    allocatedThisRound += allocation;
+                    if (aggregate.assignedValue >= commodityCap - 1e-6) {
+                        cappedThisRound.add(aggregate);
+                    }
+                } else if (remainingCap <= 0) {
+                    cappedThisRound.add(aggregate);
+                }
+            }
+
+            if (allocatedThisRound <= 0.0001) {
+                break;
+            }
+
+            remainingValue -= allocatedThisRound;
+            adjustable.removeAll(cappedThisRound);
+        }
+
+        double totalAppliedValue = 0d;
+        for (Aggregate aggregate : aggregates.values()) {
             double quantity = Math.max(1d, aggregate.totalQuantity);
-            double scarcityRatio = averageQuantity / quantity;
-            double baseUnitPrice = baseCommodityValue / quantity;
-            double dynamicPrice = baseUnitPrice * Math.pow(scarcityRatio, elasticity);
-            double finalPrice = Math.min(maxPrice, Math.max(minPrice, dynamicPrice));
+            double basePrice = aggregate.assignedValue / quantity;
+            double finalPrice = Math.max(minPrice, Math.min(maxPrice, basePrice));
 
             for (MarketItem listing : aggregate.listings) {
                 listing.setPrice(finalPrice);
                 databaseManager.updateMarketItem(listing);
             }
 
+            double commodityValue = finalPrice * quantity;
+            totalAppliedValue += commodityValue;
+            double marketShare = totalMarketValue > 0 ? (commodityValue / totalMarketValue) * 100 : 0;
             plugin.getLogger().info("Updated price for " + aggregate.getCommodityName() + " to $" + String.format("%.2f", finalPrice) +
-                    " (total quantity: " + aggregate.totalQuantity + ")");
+                    " (quantity: " + aggregate.totalQuantity + ", market share: " +
+                    String.format("%.2f%%", marketShare) + ")");
+        }
+
+        if (totalAppliedValue > 0 && Math.abs(totalAppliedValue - totalMarketValue) / totalMarketValue > 0.25) {
+            plugin.getLogger().warning("Applied market value deviates significantly from target. Applied: " + totalAppliedValue + " Target: " + totalMarketValue);
         }
     }
 
     private static class Aggregate {
         private int totalQuantity = 0;
+        private int listingCount = 0;
         private final List<MarketItem> listings = new ArrayList<>();
+        private MarketItem representative;
+        private double weight = 1d;
+        private double assignedValue = 0d;
 
         void addListing(MarketItem item) {
+            if (representative == null) {
+                representative = item;
+            }
             totalQuantity += item.getQuantity();
+            listingCount++;
             listings.add(item);
         }
 
         String getCommodityName() {
-            if (listings.isEmpty()) {
+            if (representative == null) {
                 return "Unknown";
             }
-            return listings.get(0).getType().toString();
+            return representative.getType().toString();
         }
     }
 }

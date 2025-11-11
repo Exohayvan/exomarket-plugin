@@ -132,11 +132,15 @@ public class AutoSellManager implements Listener, CommandExecutor {
                     removeAutoSellItem(playerUUID, clickedItem);
                     player.sendMessage(ChatColor.RED + "Removed " + clickedItem.getType().toString() + " from auto-sell list.");
                 } else {
-                    // Add the clicked item to the auto-sell list
-                    addAutoSellItem(playerUUID, clickedItem);
-                    player.sendMessage(ChatColor.GREEN + "Added " + clickedItem.getType().toString() + " to auto-sell list.");
+                    if (ItemSanitizer.isDamaged(clickedItem)) {
+                        player.sendMessage(ChatColor.RED + "Damaged items cannot be added to auto-sell.");
+                    } else {
+                        // Add the clicked item to the auto-sell list
+                        addAutoSellItem(playerUUID, clickedItem);
+                        player.sendMessage(ChatColor.GREEN + "Added " + clickedItem.getType().toString() + " to auto-sell list.");
+                    }
                 }
-    
+
                 // Reload the inventory to reflect the changes
                 loadItemsFromDatabase(playerUUID, inventory);
                 player.openInventory(inventory);
@@ -230,6 +234,15 @@ public class AutoSellManager implements Listener, CommandExecutor {
                     }
 
                     for (ItemStack template : autoSellItems) {
+                        if (ItemSanitizer.isDamaged(template)) {
+                            removeAutoSellItem(playerUUID, template);
+                            String display = template.hasItemMeta() && template.getItemMeta().hasDisplayName()
+                                    ? template.getItemMeta().getDisplayName()
+                                    : template.getType().toString();
+                            player.sendMessage(ChatColor.RED + "Removed damaged item from auto-sell list: " + display);
+                            continue;
+                        }
+
                         int amountInInventory = getAmountInInventory(player, template);
                         
                         if (amountInInventory > 0) {
