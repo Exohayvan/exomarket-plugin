@@ -26,9 +26,11 @@ public class ExoMarketPlugin extends JavaPlugin implements TabCompleter {
     private AutoSellManager autoSellManager;
     private MarketSellGUI marketSellGUI;
     private MarketItemsGUI marketItemsGUI;
+    private MarketWebServer marketWebServer;
     private double marketValueMultiplier;
     private double maxPricePercent;
     private double minPrice;
+    private static final int WEB_PORT = 6969;
 
     public DatabaseManager getDatabaseManager() {
         return this.databaseManager;
@@ -60,6 +62,7 @@ public class ExoMarketPlugin extends JavaPlugin implements TabCompleter {
         autoSellManager = new AutoSellManager(this);
         marketSellGUI = new MarketSellGUI(this, marketManager);
         marketItemsGUI = new MarketItemsGUI(this, marketManager, databaseManager);
+        marketWebServer = new MarketWebServer(this, databaseManager, WEB_PORT);
 
         getServer().getPluginManager().registerEvents(guiManager, this);
         getServer().getPluginManager().registerEvents(autoSellManager, this);
@@ -75,6 +78,15 @@ public class ExoMarketPlugin extends JavaPlugin implements TabCompleter {
         getCommand("marketreload").setTabCompleter(this);
         getCommand("autosell").setExecutor(autoSellManager);
         getCommand("autosell").setTabCompleter(this);
+
+        marketWebServer.start();
+    }
+
+    @Override
+    public void onDisable() {
+        if (marketWebServer != null) {
+            marketWebServer.stop();
+        }
     }
 
     public void reloadConfig() {
