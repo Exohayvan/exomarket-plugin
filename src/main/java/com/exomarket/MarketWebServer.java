@@ -168,9 +168,14 @@ public class MarketWebServer {
     }
 
     private String resolveSeller(String sellerUuid) {
+        String known = databaseManager.getLastKnownName(sellerUuid);
+        if (known != null && !known.isEmpty()) {
+            return known;
+        }
         try {
             OfflinePlayer offlinePlayer = plugin.getServer().getOfflinePlayer(UUID.fromString(sellerUuid));
             if (offlinePlayer != null && offlinePlayer.getName() != null) {
+                databaseManager.recordPlayerName(offlinePlayer.getUniqueId(), offlinePlayer.getName());
                 return offlinePlayer.getName();
             }
         } catch (IllegalArgumentException ignored) {

@@ -31,6 +31,9 @@ public class DatabaseManager {
             createTable();
             ensureItemDataColumn();
             populateMissingItemData();
+            ensurePlayerTable();
+            ensureStatsTable();
+            seedGlobalStatsRow();
         } catch (ClassNotFoundException | SQLException e) {
             e.printStackTrace();
         }
@@ -89,6 +92,33 @@ public class DatabaseManager {
                     }
                 }
             }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void ensurePlayerTable() {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "CREATE TABLE IF NOT EXISTS market_players (uuid TEXT PRIMARY KEY, last_name TEXT, last_seen INTEGER)")) {
+            statement.executeUpdate();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void ensureStatsTable() {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "CREATE TABLE IF NOT EXISTS market_stats (key TEXT PRIMARY KEY, items_bought INTEGER DEFAULT 0, items_sold INTEGER DEFAULT 0, money_spent REAL DEFAULT 0, money_earned REAL DEFAULT 0)")) {
+            statement.executeUpdate();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void seedGlobalStatsRow() {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "INSERT OR IGNORE INTO market_stats (key, items_bought, items_sold, money_spent, money_earned) VALUES ('global', 0, 0, 0, 0)")) {
+            statement.executeUpdate();
         } catch (SQLException e) {
             e.printStackTrace();
         }
@@ -187,6 +217,17 @@ public class DatabaseManager {
             return;
         }
 
+        if (playerUUID != null) {
+            try {
+                String name = plugin.getServer().getOfflinePlayer(playerUUID).getName();
+                if (name != null) {
+                    recordPlayerName(playerUUID, name);
+                }
+            } catch (Exception ignored) {
+                // Ignore name lookup issues; still proceed with listing
+            }
+        }
+
         MarketItem existingItem = getMarketItem(itemStack, playerUUID.toString());
         if (existingItem == null) {
             MarketItem newItem = new MarketItem(itemStack, quantity, 0, playerUUID.toString());
@@ -279,5 +320,133 @@ public class DatabaseManager {
             e.printStackTrace();
         }
         return marketItems;
+    }
+
+    public synchronized void recordPlayerName(UUID playerUUID, String name) {
+        if (playerUUID == null || name == null || name.isEmpty()) {
+            return;
+        }
+        try (PreparedStatement statement = connection.prepareStatement(
+                "INSERT INTO market_players (uuid, last_name, last_seen) VALUES (?, ?, strftime('%s','now')) " +
+                        "ON CONFLICT(uuid) DO UPDATE SET last_name=excluded.last_name, last_seen=excluded.last_seen")) {
+            statement.setString(1, playerUUID.toString());
+            statement.setString(2, name);
+            statement.executeUpdate();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public synchronized String getLastKnownName(String uuid) {
+        if (uuid == null || uuid.isEmpty()) {
+            return null;
+        }
+        try (PreparedStatement statement = connection.prepareStatement(
+                "SELECT last_name FROM market_players WHERE uuid = ?")) {
+            statement.setString(1, uuid);
+            try (ResultSet rs = statement.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getString("last_name");
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+
+    public synchronized void recordSale(String sellerUuid, String buyerUuid, int quantity, double totalPrice) {
+        if (quantity <= 0 || totalPrice < 0) {
+            return;
+        }
+
+        // Global totals
+        applyStatDelta("global", quantity, quantity, totalPrice, totalPrice);
+
+        if (sellerUuid != null && !sellerUuid.isEmpty()) {
+            applyStatDelta(sellerUuid, 0, quantity, 0, totalPrice);
+        }
+
+        if (buyerUuid != null && !buyerUuid.isEmpty()) {
+            applyStatDelta(buyerUuid, quantity, 0, totalPrice, 0);
+        }
+    }
+
+    private void applyStatDelta(String key, int bought, int sold, double spent, double earned) {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "INSERT INTO market_stats (key, items_bought, items_sold, money_spent, money_earned) VALUES (?, ?, ?, ?, ?) " +
+                        "ON CONFLICT(key) DO UPDATE SET " +
+                        "items_bought = items_bought + excluded.items_bought, " +
+                        "items_sold = items_sold + excluded.items_sold, " +
+                        "money_spent = money_spent + excluded.money_spent, " +
+                        "money_earned = money_earned + excluded.money_earned")) {
+            statement.setString(1, key);
+            statement.setInt(2, bought);
+            statement.setInt(3, sold);
+            statement.setDouble(4, spent);
+            statement.setDouble(5, earned);
+            statement.executeUpdate();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public synchronized Stats getStats(String key) {
+        Stats stats = new Stats();
+        if (key == null || key.isEmpty()) {
+            return stats;
+        }
+        try (PreparedStatement statement = connection.prepareStatement(
+                "SELECT items_bought, items_sold, money_spent, money_earned FROM market_stats WHERE key = ?")) {
+            statement.setString(1, key);
+            try (ResultSet rs = statement.executeQuery()) {
+                if (rs.next()) {
+                    stats.itemsBought = rs.getInt("items_bought");
+                    stats.itemsSold = rs.getInt("items_sold");
+                    stats.moneySpent = rs.getDouble("money_spent");
+                    stats.moneyEarned = rs.getDouble("money_earned");
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return stats;
+    }
+
+    public synchronized long getTotalItemsInShop() {
+        try (PreparedStatement statement = connection.prepareStatement("SELECT SUM(quantity) AS total FROM market_items");
+             ResultSet rs = statement.executeQuery()) {
+            if (rs.next()) {
+                return rs.getLong("total");
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return 0;
+    }
+
+    public synchronized long getTotalItemsInShopForSeller(String sellerUuid) {
+        if (sellerUuid == null || sellerUuid.isEmpty()) {
+            return 0;
+        }
+        try (PreparedStatement statement = connection.prepareStatement(
+                "SELECT SUM(quantity) AS total FROM market_items WHERE seller_uuid = ?")) {
+            statement.setString(1, sellerUuid);
+            try (ResultSet rs = statement.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getLong("total");
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return 0;
+    }
+
+    public static class Stats {
+        public int itemsBought;
+        public int itemsSold;
+        public double moneySpent;
+        public double moneyEarned;
     }
 }

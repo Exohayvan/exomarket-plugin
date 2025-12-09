@@ -27,6 +27,7 @@ public class ExoMarketPlugin extends JavaPlugin implements TabCompleter {
     private MarketSellGUI marketSellGUI;
     private MarketItemsGUI marketItemsGUI;
     private MarketWebServer marketWebServer;
+    private ExoMarketPlaceholders placeholders;
     private double marketValueMultiplier;
     private double maxPricePercent;
     private double minPrice;
@@ -63,6 +64,7 @@ public class ExoMarketPlugin extends JavaPlugin implements TabCompleter {
         marketSellGUI = new MarketSellGUI(this, marketManager);
         marketItemsGUI = new MarketItemsGUI(this, marketManager, databaseManager);
         marketWebServer = new MarketWebServer(this, databaseManager, WEB_PORT);
+        placeholders = new ExoMarketPlaceholders(this, databaseManager);
 
         getServer().getPluginManager().registerEvents(guiManager, this);
         getServer().getPluginManager().registerEvents(autoSellManager, this);
@@ -80,6 +82,13 @@ public class ExoMarketPlugin extends JavaPlugin implements TabCompleter {
         getCommand("autosell").setTabCompleter(this);
 
         marketWebServer.start();
+
+        if (getServer().getPluginManager().getPlugin("PlaceholderAPI") != null) {
+            placeholders.register();
+            getLogger().info("PlaceholderAPI found. Registered ExoMarket placeholders.");
+        } else {
+            getLogger().info("PlaceholderAPI not found. Skipping placeholder registration.");
+        }
     }
 
     @Override

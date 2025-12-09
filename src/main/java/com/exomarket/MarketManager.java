@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
+import org.bukkit.OfflinePlayer;
 
 
 public class MarketManager {
@@ -61,6 +62,8 @@ public class MarketManager {
         if (!sellItem(player, toSell, true)) {
             return;
         }
+
+        databaseManager.recordPlayerName(player.getUniqueId(), player.getName());
 
         // Remove the items from the player's inventory
         itemInHand.setAmount(itemInHand.getAmount() - amount);
@@ -144,6 +147,7 @@ public class MarketManager {
         }
 
         economyManager.withdrawMoney(player, totalCost);
+        databaseManager.recordPlayerName(player.getUniqueId(), player.getName());
 
         remaining = quantity;
         for (MarketItem listing : listings) {
@@ -155,6 +159,8 @@ public class MarketManager {
             listing.setQuantity(listing.getQuantity() - take);
             double payout = listing.getPrice() * take;
             economyManager.addMoney(listing.getSellerUUID(), payout);
+            databaseManager.recordSale(listing.getSellerUUID(), player.getUniqueId().toString(), take, payout);
+            recordSellerName(listing.getSellerUUID());
 
             if (listing.getQuantity() == 0) {
                 databaseManager.removeMarketItem(listing);
@@ -352,6 +358,20 @@ public class MarketManager {
                 return "Unknown";
             }
             return representative.getType().toString();
+        }
+    }
+
+    private void recordSellerName(String sellerUuid) {
+        if (sellerUuid == null || sellerUuid.isEmpty()) {
+            return;
+        }
+        try {
+            OfflinePlayer offlinePlayer = plugin.getServer().getOfflinePlayer(java.util.UUID.fromString(sellerUuid));
+            if (offlinePlayer != null && offlinePlayer.getName() != null) {
+                databaseManager.recordPlayerName(offlinePlayer.getUniqueId(), offlinePlayer.getName());
+            }
+        } catch (IllegalArgumentException ignored) {
+            // Invalid UUID format
         }
     }
 }
