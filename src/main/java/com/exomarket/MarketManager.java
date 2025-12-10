@@ -9,6 +9,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -129,16 +130,11 @@ public class MarketManager {
             return;
         }
 
-        int remaining = quantity;
-        double totalCost = 0;
-        for (MarketItem listing : listings) {
-            int take = Math.min(remaining, listing.getQuantity());
-            totalCost += take * listing.getPrice();
-            remaining -= take;
-            if (remaining <= 0) {
-                break;
-            }
-        }
+        List<ListingAllocation> allocations = buildProportionalAllocations(listings, quantity, totalAvailable);
+
+        double totalCost = allocations.stream()
+                .mapToDouble(a -> a.allocated * a.listing.getPrice())
+                .sum();
 
         if (!economyManager.hasEnoughMoney(player, totalCost)) {
             player.sendMessage(ChatColor.RED + "You do not have enough money to buy " + quantity + " " +
@@ -149,13 +145,13 @@ public class MarketManager {
         economyManager.withdrawMoney(player, totalCost);
         databaseManager.recordPlayerName(player.getUniqueId(), player.getName());
 
-        remaining = quantity;
-        for (MarketItem listing : listings) {
-            int take = Math.min(remaining, listing.getQuantity());
-            if (take <= 0) {
+        for (ListingAllocation allocation : allocations) {
+            if (allocation.allocated <= 0) {
                 continue;
             }
 
+            MarketItem listing = allocation.listing;
+            int take = allocation.allocated;
             listing.setQuantity(listing.getQuantity() - take);
             double payout = listing.getPrice() * take;
             economyManager.addMoney(listing.getSellerUUID(), payout);
@@ -168,15 +164,9 @@ public class MarketManager {
                 databaseManager.updateMarketItem(listing);
             }
 
-            remaining -= take;
-
             plugin.getLogger().info("Player " + player.getName() + " bought " + take + " " +
                     listing.getType().toString() + " for $" + String.format("%.2f", payout) +
                     " from seller " + listing.getSellerUUID());
-
-            if (remaining <= 0) {
-                break;
-            }
         }
 
         ItemStack itemToGive = ItemSanitizer.sanitize(template);
@@ -328,7 +318,7 @@ public class MarketManager {
             double marketShare = totalMarketValue > 0 ? (commodityValue / totalMarketValue) * 100 : 0;
             plugin.getLogger().info("Updated price for " + aggregate.getCommodityName() + " to $" + String.format("%.2f", finalPrice) +
                     " (quantity: " + aggregate.totalQuantity + ", market share: " +
-                    String.format("%.2f%%", marketShare) + ")");
+                String.format("%.2f%%", marketShare) + ")");
         }
 
         if (totalAppliedValue > 0 && Math.abs(totalAppliedValue - totalMarketValue) / totalMarketValue > 0.25) {
@@ -372,6 +362,55 @@ public class MarketManager {
             }
         } catch (IllegalArgumentException ignored) {
             // Invalid UUID format
+        }
+    }
+
+    private List<ListingAllocation> buildProportionalAllocations(List<MarketItem> listings, int requested, int totalAvailable) {
+        List<ListingAllocation> allocations = new ArrayList<>();
+        int baseAllocated = 0;
+
+        for (MarketItem listing : listings) {
+            double desired = ((double) listing.getQuantity() / (double) totalAvailable) * requested;
+            int alloc = Math.min(listing.getQuantity(), (int) Math.floor(desired));
+            double fractional = desired - alloc;
+            allocations.add(new ListingAllocation(listing, alloc, fractional));
+            baseAllocated += alloc;
+        }
+
+        int remaining = requested - baseAllocated;
+        allocations.sort(Comparator.comparingDouble((ListingAllocation a) -> a.fractional).reversed());
+
+        while (remaining > 0) {
+            boolean progressed = false;
+            for (ListingAllocation allocation : allocations) {
+                if (remaining <= 0) {
+                    break;
+                }
+                int capacity = allocation.listing.getQuantity() - allocation.allocated;
+                if (capacity <= 0) {
+                    continue;
+                }
+                allocation.allocated += 1;
+                remaining -= 1;
+                progressed = true;
+            }
+            if (!progressed) {
+                break;
+            }
+        }
+
+        return allocations;
+    }
+
+    private static class ListingAllocation {
+        private final MarketItem listing;
+        private int allocated;
+        private final double fractional;
+
+        ListingAllocation(MarketItem listing, int allocated, double fractional) {
+            this.listing = listing;
+            this.allocated = allocated;
+            this.fractional = fractional;
         }
     }
 }
