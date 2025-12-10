@@ -94,13 +94,3 @@ See the [LICENSE](LICENSE) file for full details.
 
 - **ExoHayvan** — Creator and maintainer of ExoMarketPlugin.  
 - **Community Contributors** — For improvements, suggestions, and reporting issues.
-
----
-
-If you want, I can also:
-
-✅ Add images/GIFs of the GUI  
-✅ Add build instructions (Maven/Gradle)  
-✅ Add API docs for developers  
-✅ Add Web UI screenshots or badges  
-Just tell me!
