@@ -1,57 +1,106 @@
 # ExoMarketPlugin
 
-**ExoMarketPlugin** is a dynamic market management plugin for Minecraft servers, allowing players to engage in buying and selling items. Prices are automatically adjusted based on the market's supply and demand, providing an engaging economic system.
+**ExoMarketPlugin** is a dynamic, data-driven market system for Minecraft servers.  
+Prices automatically shift based on global supply, demand, and player activity—creating a living economy that evolves with your server.
 
-## Features
+## 🌟 Features
 
-- **Market GUI**: A user-friendly graphical interface for viewing, buying, and selling items.
-- **Dynamic Pricing**: Prices automatically adjust based on market supply, demand, and the overall economy.
-- **Economy Integration**: Currently compatible with Essentials for handling transactions, with Vault support coming in future updates.
-- **Simple Commands**: Easy-to-use commands for opening the market and selling items.
+- **Market GUI** – Clean and intuitive interface for buying and selling items.
+- **Dynamic Pricing Engine** – Prices adjust automatically based on market supply, demand, and total circulating economy.
+- **Economy Integration** – Currently integrates with **Essentials**; **Vault support** coming in a future update for wider compatibility.
+- **Web Dashboard (New!)** – A live market analytics dashboard available at  
+  **http://yourserverip:6969**
+- **PlaceholderAPI Support (New!)** – Global and player-specific economic statistics.
 
-## Installation
+## 🧩 PlaceholderAPI Placeholders
 
-1. Download the latest `ExoMarketPlugin.jar` from the [Releases](#) page.
-2. Place the `jar` file into the `plugins` folder of your Minecraft server.
-3. Restart the server to load the plugin.
-4. Configure the plugin settings in the generated `plugins/ExoMarketPlugin/config.yml` file.
+### **Global Market Stats**
+| Placeholder | Description |
+|------------|-------------|
+| `%exomarket_total_items_bought%` | Total items bought globally. |
+| `%exomarket_total_items_sold%` | Total items sold globally. |
+| `%exomarket_total_money_spent%` | Total money players have spent. |
+| `%exomarket_total_money_earned%` | Total money players have earned. |
+| `%exomarket_total_listed_items%` | Total items currently listed on the market. |
 
-## Commands
+### **Per-Player Stats**
+| Placeholder | Description |
+|------------|-------------|
+| `%exomarket_player_items_bought%` | Items bought by the player. |
+| `%exomarket_player_items_sold%` | Items sold by the player. |
+| `%exomarket_player_money_spent%` | Total money the player has spent. |
+| `%exomarket_player_money_earned%` | Total money the player has earned. |
+| `%exomarket_player_listed_items%` | Items the player currently has listed. |
 
-| Command                  | Description                         |
-| ------------------------ | ----------------------------------- |
-| `/market`                | Opens the market GUI.               |
-| `/market sell <amount>`  | Sells the specified amount of items. |
+## 🖥️ Web UI (Port 6969)
 
-## Configuration
+ExoMarketPlugin includes a built-in lightweight web server that provides:
 
-- **Database**: The plugin uses an SQLite database to store market data, which is automatically created in the `plugins/ExoMarketPlugin` folder.
-- **Economy Integration**: Currently supports Essentials. Vault is required for future updates to ensure full compatibility with other economy plugins.
+- Still in early dev, shows items and players selling.
 
-## Dependencies
+**URL:** `http://<server-ip>:6969`
 
-- **Essentials**: For current economy integration.
-- **Vault**: Required for future economy plugin support.
+## 📦 Installation
 
-## Contributing
+1. Download the latest `ExoMarketPlugin.jar` from the **Releases** page.
+2. Place it into your server’s `plugins/` folder.
+3. Restart the server.
+4. Configure settings in `plugins/ExoMarketPlugin/config.yml` and optionally enable/secure the Web UI.
 
-Contributions are welcome! Follow these steps to contribute:
+## 📝 Commands
 
-1. Fork the repository.
-2. Create a new branch (`git checkout -b feature-branch`).
-3. Commit your changes (`git commit -m "Add new feature"`).
-4. Push to your branch (`git push origin feature-branch`).
-5. Open a Pull Request with a description of your changes.
+| Command | Description |
+|--------|-------------|
+| `/market` | Opens the market GUI. |
+| `/market sell <amount>` | Sells the specified amount of the held item. |
 
-## Reporting Issues
+## ⚙️ Configuration
 
-If you encounter any issues or have feature requests, please open an issue on the [Issues](#) page with details.
+- **Database:**  
+  Automatically uses SQLite (`ExoMarket.db`) stored in the plugin directory.
+- **Economy:**  
+  Currently supports **Essentials**.  
+  **Vault** integration will be required for future versions to support other economy plugins.
+- **Web UI:**  
+  Can be enabled/disabled and configured in `config.yml`.
 
-## License
+## 🔧 Dependencies
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for more information.
+- **Essentials** – Used for handling economy transactions.  
+- **Vault** – *(Required for expanded economy support in future updates)*  
+- **PlaceholderAPI** – For all server-wide and player-specific placeholders.
 
-## Credits
+## 🤝 Contributing
 
-- **ExoHayvan**: Creator and maintainer of ExoMarketPlugin.
-- **Community Contributors**: For submitting fixes and improvements.
+1. Fork the repository.  
+2. Create a feature branch:  
+   `git checkout -b feature-name`  
+3. Commit changes:  
+   `git commit -m "Description of change"`  
+4. Push the branch:  
+   `git push origin feature-name`  
+5. Open a Pull Request.
+
+## 🐛 Reporting Issues
+
+If you discover bugs or want to request features, please open an issue on the **Issues** page and include as much detail as possible.
+
+## 📜 License
+
+This project is licensed under the **MIT License**.  
+See the [LICENSE](LICENSE) file for full details.
+
+## 👑 Credits
+
+- **ExoHayvan** — Creator and maintainer of ExoMarketPlugin.  
+- **Community Contributors** — For improvements, suggestions, and reporting issues.
+
+---
+
+If you want, I can also:
+
+✅ Add images/GIFs of the GUI  
+✅ Add build instructions (Maven/Gradle)  
+✅ Add API docs for developers  
+✅ Add Web UI screenshots or badges  
+Just tell me!
