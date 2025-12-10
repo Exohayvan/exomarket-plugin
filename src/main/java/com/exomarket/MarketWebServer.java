@@ -21,6 +21,7 @@ import java.util.concurrent.Executors;
 /**
  * Minimal embedded HTTP server that exposes a read-only view of market items.
  */
+@SuppressWarnings("restriction")
 public class MarketWebServer {
     private final ExoMarketPlugin plugin;
     private final DatabaseManager databaseManager;
@@ -82,7 +83,7 @@ public class MarketWebServer {
                 .append("<table><thead><tr><th>Item</th><th>Total Quantity</th><th>Listings</th><th>Lowest Price</th><th></th></tr></thead><tbody>");
 
         for (Aggregate aggregate : aggregates.values()) {
-            String encodedId = URLEncoder.encode(aggregate.itemData, StandardCharsets.UTF_8);
+            String encodedId = URLEncoder.encode(aggregate.itemData, "UTF-8");
             body.append("<tr>")
                     .append("<td>").append(escapeHtml(aggregate.displayName)).append("</td>")
                     .append("<td>").append(aggregate.totalQuantity).append("</td>")
@@ -113,7 +114,7 @@ public class MarketWebServer {
             return;
         }
 
-        String itemData = URLDecoder.decode(encodedId, StandardCharsets.UTF_8);
+        String itemData = URLDecoder.decode(encodedId, "UTF-8");
         List<MarketItem> listings = databaseManager.getMarketItemsByItemData(itemData);
 
         if (listings.isEmpty()) {
