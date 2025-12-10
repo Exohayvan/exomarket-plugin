@@ -217,20 +217,23 @@ public class DatabaseManager {
             return;
         }
 
-        if (playerUUID != null) {
-            try {
-                String name = plugin.getServer().getOfflinePlayer(playerUUID).getName();
-                if (name != null) {
-                    recordPlayerName(playerUUID, name);
-                }
-            } catch (Exception ignored) {
-                // Ignore name lookup issues; still proceed with listing
-            }
+        if (playerUUID == null) {
+            return;
         }
 
-        MarketItem existingItem = getMarketItem(itemStack, playerUUID.toString());
+        try {
+            String name = plugin.getServer().getOfflinePlayer(playerUUID).getName();
+            if (name != null) {
+                recordPlayerName(playerUUID, name);
+            }
+        } catch (Exception ignored) {
+            // Ignore name lookup issues; still proceed with listing
+        }
+
+        String sellerId = playerUUID.toString();
+        MarketItem existingItem = getMarketItem(itemStack, sellerId);
         if (existingItem == null) {
-            MarketItem newItem = new MarketItem(itemStack, quantity, 0, playerUUID.toString());
+            MarketItem newItem = new MarketItem(itemStack, quantity, 0, sellerId);
             addMarketItem(newItem);
         } else {
             existingItem.addQuantity(quantity);
