@@ -1,6 +1,5 @@
 package com.exomarket;
 
-import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
@@ -8,16 +7,14 @@ import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.command.TabCompleter;
 import java.io.File;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Arrays;
-import java.util.stream.Collectors;
 
-public class ExoMarketPlugin extends JavaPlugin implements TabCompleter {
+public class ExoMarketPlugin extends JavaPlugin {
 
     private MarketManager marketManager;
     private GUIManager guiManager;
