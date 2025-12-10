@@ -37,11 +37,7 @@ public final class ItemSanitizer {
             if (meta.hasLore()) {
                 meta.setLore(null);
             }
-            try {
-                meta.setLocalizedName(null);
-            } catch (NoSuchMethodError ignored) {
-                // Older API - ignore
-            }
+            clearLocalizedName(meta);
 
             if (meta instanceof Damageable) {
                 ItemMeta originalMeta = original.getItemMeta();
@@ -54,6 +50,15 @@ public final class ItemSanitizer {
         }
 
         return sanitized;
+    }
+
+    @SuppressWarnings("removal")
+    private static void clearLocalizedName(ItemMeta meta) {
+        try {
+            meta.setLocalizedName(null);
+        } catch (NoSuchMethodError ignored) {
+            // API level without localized names
+        }
     }
 
     public static boolean isDamaged(ItemStack itemStack) {
