@@ -2,12 +2,14 @@ package com.exomarket;
 
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
+import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.Damageable;
 import org.bukkit.inventory.meta.ItemMeta;
 
 import java.lang.reflect.Type;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -31,7 +33,7 @@ public final class ItemSanitizer {
 
         ItemMeta meta = sanitized.getItemMeta();
         if (meta != null) {
-            boolean preserveMeta = original.getType() == Material.SPAWNER;
+            boolean preserveMeta = shouldPreserveMeta(original);
             if (!preserveMeta) {
                 if (meta.hasDisplayName()) {
                     meta.setDisplayName(null);
@@ -53,6 +55,43 @@ public final class ItemSanitizer {
         }
 
         return sanitized;
+    }
+
+    private static boolean shouldPreserveMeta(ItemStack original) {
+        if (original == null) {
+            return false;
+        }
+
+        Material type = original.getType();
+        if (type == Material.SPAWNER) {
+            return true;
+        }
+
+        if (type == Material.TRIPWIRE_HOOK) {
+            ItemMeta meta = original.getItemMeta();
+            if (meta == null) {
+                return false;
+            }
+
+            String name = meta.hasDisplayName() ? ChatColor.stripColor(meta.getDisplayName()) : null;
+            boolean hasKeyInName = name != null && name.toLowerCase().contains("key");
+
+            List<String> lore = meta.hasLore() ? meta.getLore() : null;
+            boolean hasMorriganInLore = false;
+            if (lore != null) {
+                for (String line : lore) {
+                    String stripped = ChatColor.stripColor(line);
+                    if (stripped != null && stripped.toLowerCase().contains("morrigan")) {
+                        hasMorriganInLore = true;
+                        break;
+                    }
+                }
+            }
+
+            return hasKeyInName && hasMorriganInLore;
+        }
+
+        return false;
     }
 
     @SuppressWarnings("removal")
