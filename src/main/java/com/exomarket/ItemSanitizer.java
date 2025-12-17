@@ -31,13 +31,16 @@ public final class ItemSanitizer {
 
         ItemMeta meta = sanitized.getItemMeta();
         if (meta != null) {
-            if (meta.hasDisplayName()) {
-                meta.setDisplayName(null);
+            boolean preserveMeta = original.getType() == Material.SPAWNER;
+            if (!preserveMeta) {
+                if (meta.hasDisplayName()) {
+                    meta.setDisplayName(null);
+                }
+                if (meta.hasLore()) {
+                    meta.setLore(null);
+                }
+                clearLocalizedName(meta);
             }
-            if (meta.hasLore()) {
-                meta.setLore(null);
-            }
-            clearLocalizedName(meta);
 
             if (meta instanceof Damageable) {
                 ItemMeta originalMeta = original.getItemMeta();
