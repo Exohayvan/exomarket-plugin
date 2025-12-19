@@ -67,8 +67,13 @@ public class MarketItemsGUI implements Listener {
             ItemStack display = listing.getItemStack();
             ItemMeta meta = display.getItemMeta();
             if (meta != null) {
-                meta.setDisplayName(ChatColor.GOLD + listing.getType().toString());
-                List<String> lore = new ArrayList<>();
+                if (!meta.hasDisplayName()) {
+                    meta.setDisplayName(ChatColor.GOLD + listing.getType().toString());
+                }
+                List<String> lore = meta.hasLore() ? new ArrayList<>(meta.getLore()) : new ArrayList<>();
+                if (!lore.isEmpty()) {
+                    lore.add(ChatColor.DARK_GRAY + "" + ChatColor.STRIKETHROUGH + "----------------");
+                }
                 lore.add(ChatColor.GRAY + "Quantity: " + listing.getQuantity());
                 lore.add(ChatColor.GRAY + "Price: $" + String.format("%.2f", listing.getPrice()));
                 meta.setLore(lore);

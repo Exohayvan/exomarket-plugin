@@ -75,8 +75,13 @@ public class GUIManager implements Listener {
             ItemStack displayItem = getTemplate();
             ItemMeta meta = displayItem.getItemMeta();
             if (meta != null) {
-                meta.setDisplayName(ChatColor.GOLD + getTypeName());
-                List<String> lore = new ArrayList<>();
+                if (!meta.hasDisplayName()) {
+                    meta.setDisplayName(ChatColor.GOLD + getTypeName());
+                }
+                List<String> lore = meta.hasLore() ? new ArrayList<>(meta.getLore()) : new ArrayList<>();
+                if (!lore.isEmpty()) {
+                    lore.add(ChatColor.DARK_GRAY + "" + ChatColor.STRIKETHROUGH + "----------------");
+                }
                 lore.add(ChatColor.GRAY + "Price: $" + String.format("%.2f", pricePerItem));
                 lore.add(ChatColor.GRAY + "Quantity: " + totalQuantity);
                 lore.add(ChatColor.GRAY + "Sellers: " + getSellerCount());
