@@ -67,6 +67,26 @@ public final class ItemSanitizer {
             return true;
         }
 
+        if (type == Material.PAPER) {
+            ItemMeta meta = original.getItemMeta();
+            if (meta == null) {
+                return false;
+            }
+            List<String> lore = meta.hasLore() ? meta.getLore() : null;
+            boolean paperHasLore = false;
+            if (lore != null) {
+                for (String line : lore) {
+                    String stripped = ChatColor.stripColor(line);
+                    if (stripped != null && stripped.toLowerCase().contains("sh-")) {
+                        paperHasLore = true;
+                        break;
+                    }
+                }
+            }
+
+            return paperHasLore;
+        }
+
         if (type == Material.TRIPWIRE_HOOK) {
             ItemMeta meta = original.getItemMeta();
             if (meta == null) {
