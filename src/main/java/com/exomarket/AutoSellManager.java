@@ -9,6 +9,8 @@ import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.Material;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -16,6 +18,7 @@ import org.bukkit.scheduler.BukkitRunnable;
 
 import java.sql.*;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -25,13 +28,22 @@ import java.util.UUID;
 
 public class AutoSellManager implements Listener, CommandExecutor {
 
+    private static final String INVENTORY_TITLE = "AutoSell Inventory";
+    private static final int INVENTORY_SIZE = 54;
+    private static final int PAGE_SIZE = 45;
+    private static final int PREVIOUS_SLOT = 48;
+    private static final int NEXT_SLOT = 50;
+    private static final int INFO_SLOT = 49;
+
     private final ExoMarketPlugin plugin;
     private final Map<UUID, Inventory> autoSellInventories;
+    private final Map<UUID, Integer> currentPage;
     private Connection connection;
 
     public AutoSellManager(ExoMarketPlugin plugin) {
         this.plugin = plugin;
         this.autoSellInventories = new HashMap<>();
+        this.currentPage = new HashMap<>();
         setupDatabase();
         startAutoSellTask();
     }
@@ -82,33 +94,38 @@ public class AutoSellManager implements Listener, CommandExecutor {
     }
 
     private void openAutoSellInventory(Player player) {
-        Inventory inventory = autoSellInventories.computeIfAbsent(player.getUniqueId(), k -> Bukkit.createInventory(null, 54, "AutoSell Inventory"));
-        loadItemsFromDatabase(player.getUniqueId(), inventory);
+        UUID playerUUID = player.getUniqueId();
+        currentPage.put(playerUUID, 1);
+        Inventory inventory = autoSellInventories.computeIfAbsent(playerUUID,
+                k -> Bukkit.createInventory(null, INVENTORY_SIZE, INVENTORY_TITLE));
+        renderAutoSellInventory(playerUUID, inventory);
         player.openInventory(inventory);
     }
 
-    private void loadItemsFromDatabase(UUID playerUUID, Inventory inventory) {
-        try {
-            PreparedStatement stmt = connection.prepareStatement("SELECT item FROM autosell_items WHERE uuid = ?");
-            stmt.setString(1, playerUUID.toString());
-            ResultSet rs = stmt.executeQuery();
-            Set<String> uniqueItems = new HashSet<>();
+    private void renderAutoSellInventory(UUID playerUUID, Inventory inventory) {
+        List<ItemStack> items = getAutoSellItemsFromDatabase(playerUUID);
+        int totalPages = Math.max(1, (int) Math.ceil(items.size() / (double) PAGE_SIZE));
+        int page = currentPage.getOrDefault(playerUUID, 1);
+        page = Math.min(Math.max(1, page), totalPages);
+        currentPage.put(playerUUID, page);
 
-            inventory.clear();
-            while (rs.next()) {
-                String itemString = rs.getString("item");
-                if (uniqueItems.add(itemString)) {
-                    ItemStack item = ItemSanitizer.deserializeFromString(itemString);
-                    item.setAmount(1);
-                    inventory.addItem(item);
-                }
+        inventory.clear();
+        int startIndex = (page - 1) * PAGE_SIZE;
+        for (int slot = 0; slot < PAGE_SIZE; slot++) {
+            int index = startIndex + slot;
+            if (index >= items.size()) {
+                break;
             }
-
-            rs.close();
-            stmt.close();
-        } catch (SQLException e) {
-            e.printStackTrace();
+            inventory.setItem(slot, items.get(index));
         }
+
+        inventory.setItem(PREVIOUS_SLOT, createNavigationItem(
+                page > 1 ? Material.ARROW : Material.BARRIER,
+                page > 1 ? ChatColor.GREEN + "Previous Page" : ChatColor.RED + "No Previous Page"));
+        inventory.setItem(NEXT_SLOT, createNavigationItem(
+                page < totalPages ? Material.ARROW : Material.BARRIER,
+                page < totalPages ? ChatColor.GREEN + "Next Page" : ChatColor.RED + "No Next Page"));
+        inventory.setItem(INFO_SLOT, createInfoItem(page, totalPages));
     }
 
     private String serializeItemTemplate(ItemStack item) {
@@ -117,13 +134,36 @@ public class AutoSellManager implements Listener, CommandExecutor {
 
     @EventHandler
     public void onInventoryClick(InventoryClickEvent event) {
-        if (event.getView().getTitle().equals("AutoSell Inventory")) {
+        if (event.getView().getTitle().equals(INVENTORY_TITLE)) {
             event.setCancelled(true); // Cancel the event to prevent item moving
     
             Player player = (Player) event.getWhoClicked();
             UUID playerUUID = player.getUniqueId();
             Inventory inventory = autoSellInventories.get(playerUUID);
             ItemStack clickedItem = event.getCurrentItem();
+
+            if (inventory == null) {
+                return;
+            }
+
+            int rawSlot = event.getRawSlot();
+            if (rawSlot < inventory.getSize()) {
+                if (rawSlot == PREVIOUS_SLOT && clickedItem != null && clickedItem.getType() == Material.ARROW) {
+                    currentPage.put(playerUUID, currentPage.getOrDefault(playerUUID, 1) - 1);
+                    renderAutoSellInventory(playerUUID, inventory);
+                    player.updateInventory();
+                    return;
+                }
+                if (rawSlot == NEXT_SLOT && clickedItem != null && clickedItem.getType() == Material.ARROW) {
+                    currentPage.put(playerUUID, currentPage.getOrDefault(playerUUID, 1) + 1);
+                    renderAutoSellInventory(playerUUID, inventory);
+                    player.updateInventory();
+                    return;
+                }
+                if (rawSlot == INFO_SLOT) {
+                    return;
+                }
+            }
     
             if (clickedItem != null && !clickedItem.getType().isAir()) {
                 // Check if the item is already in the auto-sell list
@@ -142,8 +182,6 @@ public class AutoSellManager implements Listener, CommandExecutor {
                 }
 
                 // Reload the inventory to reflect the changes
-                loadItemsFromDatabase(playerUUID, inventory);
-                player.openInventory(inventory);
             }
         }
     }
@@ -202,11 +240,8 @@ public class AutoSellManager implements Listener, CommandExecutor {
             if (autoSellInventory != null) {
                 // Load items from the database in a separate task to avoid blocking the main thread
                 Bukkit.getScheduler().runTask(plugin, () -> {
-                    loadItemsFromDatabase(playerUUID, autoSellInventory);
-                    // Close the player's current inventory
-                    player.closeInventory();
-                    // Open the updated inventory
-                    player.openInventory(autoSellInventory);
+                    renderAutoSellInventory(playerUUID, autoSellInventory);
+                    player.updateInventory();
                 });
             }
         }
@@ -214,10 +249,11 @@ public class AutoSellManager implements Listener, CommandExecutor {
     
     @EventHandler
     public void onInventoryClose(InventoryCloseEvent event) {
-        if (event.getView().getTitle().equals("AutoSell Inventory")) {
+        if (event.getView().getTitle().equals(INVENTORY_TITLE)) {
             Player player = (Player) event.getPlayer();
             UUID playerUUID = player.getUniqueId();
             autoSellInventories.remove(playerUUID);
+            currentPage.remove(playerUUID);
         }
     }
 
@@ -281,6 +317,9 @@ public class AutoSellManager implements Listener, CommandExecutor {
         } catch (SQLException e) {
             e.printStackTrace();
         }
+        autoSellItems.sort(Comparator
+                .comparing((ItemStack item) -> item.getType().toString(), String.CASE_INSENSITIVE_ORDER)
+                .thenComparing(ItemSanitizer::serializeToString));
         return autoSellItems;
     }
 
@@ -306,8 +345,8 @@ public class AutoSellManager implements Listener, CommandExecutor {
         UUID playerUUID = player.getUniqueId();
         Inventory autoSellInventory = autoSellInventories.get(playerUUID);
         if (autoSellInventory != null) {
-            loadItemsFromDatabase(playerUUID, autoSellInventory);
-            player.openInventory(autoSellInventory);
+            renderAutoSellInventory(playerUUID, autoSellInventory);
+            player.updateInventory();
         }
     }
 
@@ -319,5 +358,29 @@ public class AutoSellManager implements Listener, CommandExecutor {
             }
         }
         return amount;
+    }
+
+    private ItemStack createNavigationItem(Material material, String name) {
+        ItemStack item = new ItemStack(material);
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.setDisplayName(name);
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
+
+    private ItemStack createInfoItem(int page, int totalPages) {
+        ItemStack item = new ItemStack(Material.PAPER);
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.setDisplayName(ChatColor.GOLD + "AutoSell Info");
+            List<String> lore = new ArrayList<>();
+            lore.add(ChatColor.GRAY + "Click items to toggle auto-sell");
+            lore.add(ChatColor.GRAY + "Page " + page + " of " + totalPages);
+            meta.setLore(lore);
+            item.setItemMeta(meta);
+        }
+        return item;
     }
 }
