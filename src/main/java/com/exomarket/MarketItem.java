@@ -54,11 +54,7 @@ public class MarketItem {
     }
 
     public String getDisplayName() {
-        ItemMeta meta = itemStack.getItemMeta();
-        if (meta != null && meta.hasDisplayName()) {
-            return meta.getDisplayName();
-        }
-        return itemStack.getType().toString();
+        return ItemDisplayNameFormatter.format(itemStack);
     }
 
     public void addQuantity(int amount) {

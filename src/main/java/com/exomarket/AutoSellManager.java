@@ -323,6 +323,10 @@ public class AutoSellManager implements Listener, CommandExecutor {
         return autoSellItems;
     }
 
+    static List<ItemStack> access$0(AutoSellManager manager, UUID playerUUID) {
+        return manager.getAutoSellItemsFromDatabase(playerUUID);
+    }
+
     private void removeItemsFromInventory(Player player, ItemStack template, int amount) {
         Inventory inventory = player.getInventory();
         int remainingAmount = amount;

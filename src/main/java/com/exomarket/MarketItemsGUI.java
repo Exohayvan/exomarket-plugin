@@ -89,7 +89,7 @@ public class MarketItemsGUI implements Listener {
             ItemMeta meta = display.getItemMeta();
             if (meta != null) {
                 if (!meta.hasDisplayName()) {
-                    meta.setDisplayName(ChatColor.GOLD + listing.getType().toString());
+                    meta.setDisplayName(ChatColor.GOLD + ItemDisplayNameFormatter.format(display));
                 }
                 List<String> lore = meta.hasLore() ? new ArrayList<>(meta.getLore()) : new ArrayList<>();
                 if (!lore.isEmpty()) {

@@ -123,7 +123,7 @@ public class MarketWebServer {
         }
 
         MarketItem sample = listings.get(0);
-        String itemName = sample.getType().toString();
+        String itemName = ItemDisplayNameFormatter.format(sample.getItemStack());
         int totalQuantity = listings.stream().mapToInt(MarketItem::getQuantity).sum();
         StringBuilder body = new StringBuilder();
         body.append("<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">")
@@ -253,7 +253,7 @@ public class MarketWebServer {
         private double lowestPrice = Double.MAX_VALUE;
 
         Aggregate(ItemStack stack, String itemData) {
-            this.displayName = stack.getType().toString();
+            this.displayName = ItemDisplayNameFormatter.format(stack);
             this.itemData = itemData;
         }
     }

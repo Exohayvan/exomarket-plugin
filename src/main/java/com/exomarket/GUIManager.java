@@ -65,7 +65,7 @@ public class GUIManager implements Listener {
         }
 
         String getTypeName() {
-            return template.getType().toString();
+            return ItemDisplayNameFormatter.format(template);
         }
 
         String getSortKey() {
