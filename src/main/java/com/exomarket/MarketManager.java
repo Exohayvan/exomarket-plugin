@@ -94,7 +94,7 @@ public class MarketManager {
             return false;
         }
 
-        List<EnchantedBookSplitter.SplitEntry> entries = EnchantedBookSplitter.split(stack);
+        List<EnchantedBookSplitter.SplitEntry> entries = EnchantedBookSplitter.splitWithEnchantmentBooks(stack);
         if (entries.isEmpty()) {
             return false;
         }
@@ -228,6 +228,9 @@ public class MarketManager {
     private boolean hasDirtyListingData() {
         List<MarketItem> items = databaseManager.getMarketItems();
         for (MarketItem listing : items) {
+            if (listing.getType() != Material.ENCHANTED_BOOK && !listing.getItemStack().getEnchantments().isEmpty()) {
+                return true;
+            }
             String normalized = ItemSanitizer.serializeToString(listing.getItemStack());
             if (!normalized.equals(listing.getItemData())) {
                 return true;
@@ -267,6 +270,7 @@ public class MarketManager {
 
     private void performPriceRecalculation() {
         List<MarketItem> marketItems = databaseManager.getMarketItems();
+        marketItems = normalizeEnchantedItemListings(marketItems);
         marketItems = normalizeEnchantedBookListings(marketItems);
         marketItems = normalizeListingItemData(marketItems);
         if (marketItems.isEmpty()) {
@@ -538,6 +542,54 @@ public class MarketManager {
                     databaseManager.addMarketItem(newItem);
                 } else {
                     existing.addQuantity(splitQuantity);
+                    databaseManager.updateMarketItem(existing);
+                }
+            }
+
+            databaseManager.removeMarketItem(listing);
+        }
+
+        if (changed) {
+            return databaseManager.getMarketItems();
+        }
+        return marketItems;
+    }
+
+    private List<MarketItem> normalizeEnchantedItemListings(List<MarketItem> marketItems) {
+        boolean changed = false;
+        for (MarketItem listing : marketItems) {
+            ItemStack stack = listing.getItemStack();
+            if (stack.getType() == Material.ENCHANTED_BOOK) {
+                continue;
+            }
+            if (stack.getEnchantments().isEmpty()) {
+                continue;
+            }
+
+            changed = true;
+            int quantity = listing.getQuantity();
+            if (quantity <= 0) {
+                databaseManager.removeMarketItem(listing);
+                continue;
+            }
+
+            ItemStack toSplit = stack.clone();
+            toSplit.setAmount(quantity);
+            List<EnchantedBookSplitter.SplitEntry> entries = EnchantedBookSplitter.splitWithEnchantmentBooks(toSplit);
+            String sellerUuid = listing.getSellerUUID();
+
+            for (EnchantedBookSplitter.SplitEntry entry : entries) {
+                int amount = entry.getQuantity();
+                if (amount <= 0) {
+                    continue;
+                }
+                ItemStack template = ItemSanitizer.sanitize(entry.getItemStack());
+                MarketItem existing = databaseManager.getMarketItem(template, sellerUuid);
+                if (existing == null) {
+                    MarketItem newItem = new MarketItem(template, amount, listing.getPrice(), sellerUuid);
+                    databaseManager.addMarketItem(newItem);
+                } else {
+                    existing.addQuantity(amount);
                     databaseManager.updateMarketItem(existing);
                 }
             }

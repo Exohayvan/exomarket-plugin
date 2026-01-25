@@ -61,6 +61,48 @@ public final class EnchantedBookSplitter {
         return entries;
     }
 
+    public static List<SplitEntry> splitWithEnchantmentBooks(ItemStack stack) {
+        List<SplitEntry> entries = new ArrayList<>();
+        if (stack == null || stack.getType().isAir()) {
+            return entries;
+        }
+
+        int amount = stack.getAmount();
+        if (amount <= 0) {
+            return entries;
+        }
+
+        if (stack.getType() == Material.ENCHANTED_BOOK) {
+            return split(stack);
+        }
+
+        Map<Enchantment, Integer> enchants = stack.getEnchantments();
+        if (enchants.isEmpty()) {
+            return split(stack);
+        }
+
+        ItemStack base = stack.clone();
+        base.setAmount(amount);
+        for (Enchantment enchantment : enchants.keySet()) {
+            base.removeEnchantment(enchantment);
+        }
+        entries.addAll(split(base));
+
+        for (Map.Entry<Enchantment, Integer> entry : enchants.entrySet()) {
+            int level = Math.max(1, entry.getValue());
+            ItemStack book = new ItemStack(Material.ENCHANTED_BOOK);
+            book.setAmount(amount);
+            EnchantmentStorageMeta newMeta = (EnchantmentStorageMeta) book.getItemMeta();
+            if (newMeta != null) {
+                newMeta.addStoredEnchant(entry.getKey(), level, true);
+                book.setItemMeta(newMeta);
+            }
+            entries.addAll(split(book));
+        }
+
+        return entries;
+    }
+
     private static ItemStack cloneSingle(ItemStack stack) {
         ItemStack clone = stack.clone();
         clone.setAmount(1);

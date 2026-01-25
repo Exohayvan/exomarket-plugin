@@ -237,7 +237,7 @@ public class DatabaseManager {
         String sellerId = playerUUID.toString();
         ItemStack toSplit = itemStack.clone();
         toSplit.setAmount(quantity);
-        List<EnchantedBookSplitter.SplitEntry> entries = EnchantedBookSplitter.split(toSplit);
+        List<EnchantedBookSplitter.SplitEntry> entries = EnchantedBookSplitter.splitWithEnchantmentBooks(toSplit);
         for (EnchantedBookSplitter.SplitEntry entry : entries) {
             int amount = entry.getQuantity();
             if (amount <= 0) {

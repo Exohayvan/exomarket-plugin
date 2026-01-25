@@ -13,6 +13,9 @@ import org.bukkit.configuration.file.YamlConfiguration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Locale;
+import java.util.Set;
 
 public class ExoMarketPlugin extends JavaPlugin {
 
@@ -131,6 +134,9 @@ public class ExoMarketPlugin extends JavaPlugin {
                 String filter = joinArgs(args, 1);
                 marketItemsGUI.openListings(player, filter);
                 return true;
+            } else if (args[0].equalsIgnoreCase("info")) {
+                sendMarketInfo(player);
+                return true;
             }
             openMarketWithRecalculation(player, null);
             return true;
@@ -227,6 +233,54 @@ public class ExoMarketPlugin extends JavaPlugin {
         if (willRecalculate) {
             player.sendMessage(ChatColor.YELLOW + "Recalculating market prices...");
         }
+    }
+
+    private void sendMarketInfo(Player player) {
+        List<MarketItem> items = databaseManager.getMarketItems();
+        int totalListings = items.size();
+        long totalQuantity = 0L;
+        double totalValue = 0d;
+        Set<String> uniqueItems = new HashSet<>();
+        for (MarketItem item : items) {
+            int qty = Math.max(0, item.getQuantity());
+            totalQuantity += qty;
+            totalValue += item.getPrice() * qty;
+            uniqueItems.add(item.getItemData());
+        }
+
+        DatabaseManager.Stats global = databaseManager.getStats("global");
+
+        player.sendMessage(ChatColor.GOLD + "Market Totals");
+        player.sendMessage(ChatColor.GRAY + "Listings: " + totalListings +
+                " | Unique items: " + uniqueItems.size());
+        player.sendMessage(ChatColor.GRAY + "Quantity listed: " + totalQuantity);
+        player.sendMessage(ChatColor.GRAY + "Listed value: $" + String.format(Locale.US, "%.2f", totalValue));
+        player.sendMessage(ChatColor.GRAY + "Items traded: " + global.itemsSold +
+                " | Value traded: $" + String.format(Locale.US, "%.2f", global.moneyEarned));
+
+        List<MarketItem> owned = databaseManager.getMarketItemsByOwner(player.getUniqueId().toString());
+        int ownedListings = owned.size();
+        long ownedQuantity = 0L;
+        double ownedValue = 0d;
+        Set<String> ownedUnique = new HashSet<>();
+        for (MarketItem item : owned) {
+            int qty = Math.max(0, item.getQuantity());
+            ownedQuantity += qty;
+            ownedValue += item.getPrice() * qty;
+            ownedUnique.add(item.getItemData());
+        }
+
+        DatabaseManager.Stats personal = databaseManager.getStats(player.getUniqueId().toString());
+
+        player.sendMessage(ChatColor.GOLD + "Your Market Stats");
+        player.sendMessage(ChatColor.GRAY + "Listings: " + ownedListings +
+                " | Unique items: " + ownedUnique.size());
+        player.sendMessage(ChatColor.GRAY + "Quantity listed: " + ownedQuantity);
+        player.sendMessage(ChatColor.GRAY + "Listed value: $" + String.format(Locale.US, "%.2f", ownedValue));
+        player.sendMessage(ChatColor.GRAY + "Items sold: " + personal.itemsSold +
+                " | Earned: $" + String.format(Locale.US, "%.2f", personal.moneyEarned));
+        player.sendMessage(ChatColor.GRAY + "Items bought: " + personal.itemsBought +
+                " | Spent: $" + String.format(Locale.US, "%.2f", personal.moneySpent));
     }
 
     private String joinArgs(String[] args, int startIndex) {
