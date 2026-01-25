@@ -101,7 +101,7 @@ public class MarketItemsGUI implements Listener {
                     lore.add(ChatColor.DARK_GRAY + "" + ChatColor.STRIKETHROUGH + "----------------");
                 }
                 lore.add(ChatColor.GRAY + "Quantity: " + QuantityFormatter.format(listing.getQuantity()));
-                lore.add(ChatColor.GRAY + "Price: $" + String.format("%.2f", listing.getPrice()));
+                lore.add(ChatColor.GRAY + "Price: " + CurrencyFormatter.format(listing.getPrice()));
                 meta.setLore(lore);
                 display.setItemMeta(meta);
             }

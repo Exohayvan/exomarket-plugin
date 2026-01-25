@@ -185,7 +185,7 @@ public class MarketManager {
             }
 
             plugin.getLogger().info("Player " + player.getName() + " bought " + take.toString() + " " +
-                    listing.getType().toString() + " for $" + String.format("%.2f", payout) +
+                    listing.getType().toString() + " for " + CurrencyFormatter.format(payout) +
                     " from seller " + listing.getSellerUUID());
         }
 
@@ -194,7 +194,7 @@ public class MarketManager {
         player.getInventory().addItem(itemToGive);
 
         player.sendMessage(ChatColor.GREEN + "You have successfully bought " + quantity + " " +
-                template.getType().toString() + " for $" + String.format("%.2f", totalCost));
+                template.getType().toString() + " for " + CurrencyFormatter.format(totalCost));
 
         recalculatePrices();
     }
@@ -258,7 +258,7 @@ public class MarketManager {
             }
 
             plugin.getLogger().info("Player " + player.getName() + " bought " + take.toString() + " " +
-                    listing.getType().toString() + " for $" + String.format("%.2f", payout) +
+                    listing.getType().toString() + " for " + CurrencyFormatter.format(payout) +
                     " from seller " + listing.getSellerUUID());
         }
 
@@ -266,7 +266,7 @@ public class MarketManager {
         player.getInventory().addItem(itemToGive);
 
         player.sendMessage(ChatColor.GREEN + "You have successfully bought " + quantity + " " +
-                ItemDisplayNameFormatter.format(itemToGive) + " for $" + String.format("%.2f", totalCost));
+                ItemDisplayNameFormatter.format(itemToGive) + " for " + CurrencyFormatter.format(totalCost));
 
         recalculatePrices();
     }
@@ -455,7 +455,7 @@ public class MarketManager {
             double commodityValue = finalPrice * quantity;
             totalAppliedValue += commodityValue;
             double marketShare = totalMarketValue > 0 ? (commodityValue / totalMarketValue) * 100 : 0;
-            plugin.getLogger().info("Updated price for " + aggregate.getCommodityName() + " to $" + String.format("%.2f", finalPrice) +
+            plugin.getLogger().info("Updated price for " + aggregate.getCommodityName() + " to " + CurrencyFormatter.format(finalPrice) +
                     " (quantity: " + aggregate.totalQuantity.toString() + ", market share: " +
                 String.format("%.2f%%", marketShare) + ")");
         }

@@ -86,7 +86,7 @@ public class GUIManager implements Listener {
                 if (!lore.isEmpty()) {
                     lore.add(ChatColor.DARK_GRAY + "" + ChatColor.STRIKETHROUGH + "----------------");
                 }
-                lore.add(ChatColor.GRAY + "Price: $" + String.format("%.2f", pricePerItem));
+                lore.add(ChatColor.GRAY + "Price: " + CurrencyFormatter.format(pricePerItem));
                 lore.add(ChatColor.GRAY + "Quantity: " + QuantityFormatter.format(totalQuantity));
                 lore.add(ChatColor.GRAY + "Sellers: " + getSellerCount());
                 if (!displayItem.getEnchantments().isEmpty()) {
@@ -158,7 +158,7 @@ public class GUIManager implements Listener {
         meta.setDisplayName(ChatColor.GOLD + name);
         List<String> lore = new ArrayList<>();
         lore.add(ChatColor.GRAY + "Click to buy " + quantity);
-        lore.add(ChatColor.GRAY + "Total: $" + String.format("%.2f", totalCost));
+        lore.add(ChatColor.GRAY + "Total: " + CurrencyFormatter.format(totalCost));
         meta.setLore(lore);
         item.setItemMeta(meta);
         return item;
@@ -378,7 +378,7 @@ public class GUIManager implements Listener {
             List<String> lore = new ArrayList<>();
             lore.add(ChatColor.GRAY + "Level: " + level);
             lore.add(ChatColor.GRAY + "Requires: " + QuantityFormatter.format(required) + " level I book(s)");
-            lore.add(ChatColor.GRAY + "Price: $" + String.format("%.2f", pricePerBook));
+            lore.add(ChatColor.GRAY + "Price: " + CurrencyFormatter.format(pricePerBook));
             displayMeta.setLore(lore);
             book.setItemMeta(displayMeta);
         }

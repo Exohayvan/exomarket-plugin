@@ -2,3 +2,5 @@ MarketManager:
   MarketValueMultipier: 6
   MaxPricePercent: 5
   MinPrice: 0.01
+
+CurrencySymbol: "⚚Ɍ"

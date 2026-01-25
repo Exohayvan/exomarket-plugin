@@ -24,7 +24,7 @@ public class EconomyManager {
 
     public void withdrawMoney(Player player, double amount) {
         economy.withdrawPlayer(player, amount);
-        plugin.getLogger().info("Withdrew $" + String.format("%.2f", amount) + " from " + player.getName());
+        plugin.getLogger().info("Withdrew " + CurrencyFormatter.format(amount) + " from " + player.getName());
     }
 
     public void addMoney(String playerUUID, double amount) {
@@ -36,15 +36,15 @@ public class EconomyManager {
             double newBalance = economy.getBalance(offlinePlayer);
             
             // Log the transaction
-            plugin.getLogger().info("Added $" + String.format("%.2f", amount) + " to player " + offlinePlayer.getName() + 
-                                    ". Old balance: $" + String.format("%.2f", oldBalance) + 
-                                    ", New balance: $" + String.format("%.2f", newBalance));
+            plugin.getLogger().info("Added " + CurrencyFormatter.format(amount) + " to player " + offlinePlayer.getName() +
+                                    ". Old balance: " + CurrencyFormatter.format(oldBalance) +
+                                    ", New balance: " + CurrencyFormatter.format(newBalance));
             
             // Check if the player is online and send a message
             Player onlinePlayer = offlinePlayer.getPlayer();
             if (onlinePlayer != null && onlinePlayer.isOnline()) {
-                onlinePlayer.sendMessage(ChatColor.GREEN + "You received $" + String.format("%.2f", amount) + 
-                                        "from the market! Your new balance is $" + String.format("%.2f", newBalance));
+                onlinePlayer.sendMessage(ChatColor.GREEN + "You received " + CurrencyFormatter.format(amount) +
+                                        " from the market! Your new balance is " + CurrencyFormatter.format(newBalance));
             }
         } catch (Exception e) {
             plugin.getLogger().severe("Error adding money to player " + playerUUID + ": " + e.getMessage());

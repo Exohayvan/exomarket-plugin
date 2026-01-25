@@ -87,6 +87,6 @@ public class ExoMarketPlaceholders extends PlaceholderExpansion {
     }
 
     private String formatMoney(double amount) {
-        return String.format("%.2f", amount);
+        return CurrencyFormatter.format(amount);
     }
 }

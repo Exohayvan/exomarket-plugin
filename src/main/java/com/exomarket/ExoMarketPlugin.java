@@ -16,7 +16,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Arrays;
 import java.util.HashSet;
-import java.util.Locale;
 import java.util.Set;
 
 public class ExoMarketPlugin extends JavaPlugin {
@@ -57,6 +56,7 @@ public class ExoMarketPlugin extends JavaPlugin {
         marketValueMultiplier = config.getDouble("MarketManager.MarketValueMultipier");
         maxPricePercent = config.getDouble("MarketManager.MaxPricePercent") / 100;
         minPrice = config.getDouble("MarketManager.MinPrice");
+        CurrencyFormatter.setSymbol(config.getString("CurrencySymbol", "⚚Ɍ"));
         
         databaseManager = new DatabaseManager(this);
         economyManager = new EconomyManager(this);
@@ -110,6 +110,7 @@ public class ExoMarketPlugin extends JavaPlugin {
         marketValueMultiplier = config.getDouble("MarketManager.MarketValueMultipier");
         maxPricePercent = config.getDouble("MarketManager.MaxPricePercent") / 100;
         minPrice = config.getDouble("MarketManager.MinPrice");
+        CurrencyFormatter.setSymbol(config.getString("CurrencySymbol", "⚚Ɍ"));
     }
 
     @Override
@@ -256,9 +257,9 @@ public class ExoMarketPlugin extends JavaPlugin {
         player.sendMessage(ChatColor.GRAY + "Listings: " + totalListings +
                 " | Unique items: " + uniqueItems.size());
         player.sendMessage(ChatColor.GRAY + "Quantity listed: " + QuantityFormatter.format(totalQuantity));
-        player.sendMessage(ChatColor.GRAY + "Listed value: $" + String.format(Locale.US, "%.2f", totalValue));
+        player.sendMessage(ChatColor.GRAY + "Listed value: " + CurrencyFormatter.format(totalValue));
         player.sendMessage(ChatColor.GRAY + "Items traded: " + QuantityFormatter.format(global.itemsSold) +
-                " | Value traded: $" + String.format(Locale.US, "%.2f", global.moneyEarned));
+                " | Value traded: " + CurrencyFormatter.format(global.moneyEarned));
 
         List<MarketItem> owned = databaseManager.getMarketItemsByOwner(player.getUniqueId().toString());
         int ownedListings = owned.size();
@@ -278,11 +279,11 @@ public class ExoMarketPlugin extends JavaPlugin {
         player.sendMessage(ChatColor.GRAY + "Listings: " + ownedListings +
                 " | Unique items: " + ownedUnique.size());
         player.sendMessage(ChatColor.GRAY + "Quantity listed: " + QuantityFormatter.format(ownedQuantity));
-        player.sendMessage(ChatColor.GRAY + "Listed value: $" + String.format(Locale.US, "%.2f", ownedValue));
+        player.sendMessage(ChatColor.GRAY + "Listed value: " + CurrencyFormatter.format(ownedValue));
         player.sendMessage(ChatColor.GRAY + "Items sold: " + QuantityFormatter.format(personal.itemsSold) +
-                " | Earned: $" + String.format(Locale.US, "%.2f", personal.moneyEarned));
+                " | Earned: " + CurrencyFormatter.format(personal.moneyEarned));
         player.sendMessage(ChatColor.GRAY + "Items bought: " + QuantityFormatter.format(personal.itemsBought) +
-                " | Spent: $" + String.format(Locale.US, "%.2f", personal.moneySpent));
+                " | Spent: " + CurrencyFormatter.format(personal.moneySpent));
     }
 
     private double toDoubleCapped(BigInteger value) {

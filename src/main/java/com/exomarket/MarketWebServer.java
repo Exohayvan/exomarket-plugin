@@ -14,7 +14,6 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Executors;
@@ -100,8 +99,8 @@ public class MarketWebServer {
                     .append(QuantityFormatter.format(aggregate.totalQuantity)).append("</td>")
                     .append("<td data-value=\"").append(aggregate.listingCount).append("\">")
                     .append(aggregate.listingCount).append("</td>")
-                    .append("<td data-value=\"").append(aggregate.lowestPrice).append("\">$")
-                    .append(formatPrice(aggregate.lowestPrice)).append("</td>")
+                    .append("<td data-value=\"").append(aggregate.lowestPrice).append("\">")
+                    .append(escapeHtml(CurrencyFormatter.format(aggregate.lowestPrice))).append("</td>")
                     .append("<td data-value=\"\">")
                     .append("<a href=\"/item?id=").append(encodedId).append("\">View sellers</a></td>")
                     .append("</tr>");
@@ -188,7 +187,7 @@ public class MarketWebServer {
             body.append("<tr>")
                     .append("<td>").append(escapeHtml(resolveSeller(listing.getSellerUUID()))).append("</td>")
                     .append("<td>").append(QuantityFormatter.format(listing.getQuantity())).append("</td>")
-                    .append("<td>$").append(formatPrice(listing.getPrice())).append("</td>")
+                    .append("<td>").append(escapeHtml(CurrencyFormatter.format(listing.getPrice()))).append("</td>")
                     .append("</tr>");
         }
 
@@ -253,10 +252,6 @@ public class MarketWebServer {
         try (OutputStream os = exchange.getResponseBody()) {
             os.write(bytes);
         }
-    }
-
-    private String formatPrice(double price) {
-        return String.format(Locale.US, "%.2f", price);
     }
 
     private String escapeHtml(String value) {
