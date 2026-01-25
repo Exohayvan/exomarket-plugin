@@ -74,22 +74,35 @@ public class MarketWebServer {
                 .append("body{font-family:'Trebuchet MS',Helvetica,Arial,sans-serif;background:#0f1724;color:#e9f1ff;margin:0;padding:24px;}")
                 .append("h1{margin-top:0;}table{width:100%;border-collapse:collapse;margin-top:12px;}")
                 .append("th,td{padding:10px 12px;border-bottom:1px solid #233146;text-align:left;}")
-                .append("th{background:#1a2536;color:#9bc0ff;font-weight:700;}")
+                .append("th{background:#1a2536;color:#9bc0ff;font-weight:700;cursor:pointer;user-select:none;}")
+                .append("th.sort-asc::after{content:' ▲';font-size:12px;color:#7fb4ff;}")
+                .append("th.sort-desc::after{content:' ▼';font-size:12px;color:#7fb4ff;}")
                 .append("tr:hover td{background:#122038;}a{color:#7fb4ff;text-decoration:none;}a:hover{text-decoration:underline;}")
                 .append(".pill{display:inline-block;padding:4px 8px;border-radius:999px;background:#1f2f46;color:#b8dcff;font-size:12px;}")
                 .append("</style></head><body>")
                 .append("<h1>ExoMarket Listings</h1>")
                 .append("<p class=\"pill\">Port ").append(port).append("</p>")
-                .append("<table><thead><tr><th>Item</th><th>Total Quantity</th><th>Listings</th><th>Lowest Price</th><th></th></tr></thead><tbody>");
+                .append("<table id=\"market-table\"><thead><tr>")
+                .append("<th data-type=\"text\">Item</th>")
+                .append("<th data-type=\"number\">Total Quantity</th>")
+                .append("<th data-type=\"number\">Listings</th>")
+                .append("<th data-type=\"number\">Lowest Price</th>")
+                .append("<th data-type=\"text\"></th>")
+                .append("</tr></thead><tbody>");
 
         for (Aggregate aggregate : aggregates.values()) {
             String encodedId = URLEncoder.encode(aggregate.itemData, "UTF-8");
             body.append("<tr>")
-                    .append("<td>").append(escapeHtml(aggregate.displayName)).append("</td>")
-                    .append("<td>").append(aggregate.totalQuantity).append("</td>")
-                    .append("<td>").append(aggregate.listingCount).append("</td>")
-                    .append("<td>$").append(formatPrice(aggregate.lowestPrice)).append("</td>")
-                    .append("<td><a href=\"/item?id=").append(encodedId).append("\">View sellers</a></td>")
+                    .append("<td data-value=\"").append(escapeHtml(aggregate.displayName)).append("\">")
+                    .append(escapeHtml(aggregate.displayName)).append("</td>")
+                    .append("<td data-value=\"").append(aggregate.totalQuantity).append("\">")
+                    .append(aggregate.totalQuantity).append("</td>")
+                    .append("<td data-value=\"").append(aggregate.listingCount).append("\">")
+                    .append(aggregate.listingCount).append("</td>")
+                    .append("<td data-value=\"").append(aggregate.lowestPrice).append("\">$")
+                    .append(formatPrice(aggregate.lowestPrice)).append("</td>")
+                    .append("<td data-value=\"\">")
+                    .append("<a href=\"/item?id=").append(encodedId).append("\">View sellers</a></td>")
                     .append("</tr>");
         }
 
@@ -97,7 +110,34 @@ public class MarketWebServer {
             body.append("<tr><td colspan=\"5\">No items are listed right now.</td></tr>");
         }
 
-        body.append("</tbody></table></body></html>");
+        body.append("</tbody></table>")
+                .append("<script>")
+                .append("const table=document.getElementById('market-table');")
+                .append("const headers=table.querySelectorAll('th');")
+                .append("const tbody=table.querySelector('tbody');")
+                .append("let sortIndex=-1,sortDir=1;")
+                .append("function clearSort(){headers.forEach(h=>h.classList.remove('sort-asc','sort-desc'));}")
+                .append("function getValue(cell,type){const raw=cell.getAttribute('data-value')||cell.textContent||'';")
+                .append("return type==='number'?parseFloat(raw)||0:raw.toLowerCase();}")
+                .append("headers.forEach((header,idx)=>{")
+                .append("header.addEventListener('click',()=>{")
+                .append("const type=header.getAttribute('data-type')||'text';")
+                .append("sortDir=(sortIndex===idx)?-sortDir:1;")
+                .append("sortIndex=idx;")
+                .append("const rows=Array.from(tbody.querySelectorAll('tr'));")
+                .append("rows.sort((a,b)=>{")
+                .append("const aVal=getValue(a.children[idx],type);")
+                .append("const bVal=getValue(b.children[idx],type);")
+                .append("if(aVal<bVal)return -1*sortDir;")
+                .append("if(aVal>bVal)return 1*sortDir;")
+                .append("return 0;")
+                .append("});")
+                .append("rows.forEach(r=>tbody.appendChild(r));")
+                .append("clearSort();")
+                .append("header.classList.add(sortDir===1?'sort-asc':'sort-desc');")
+                .append("});")
+                .append("});")
+                .append("</script></body></html>");
         respond(exchange, 200, body.toString());
     }
 
