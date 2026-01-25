@@ -116,18 +116,23 @@ public class ExoMarketPlugin extends JavaPlugin {
             }
             Player player = (Player) sender;
             if (args.length == 0) {
-                marketManager.recalculatePrices(); // Recalculate prices before opening GUI
-                guiManager.openMarketGUI(player);
+                openMarketWithRecalculation(player, null);
                 return true;
             }
             if (args[0].equalsIgnoreCase("sell")) {
                 marketSellGUI.openSellGUI(player);
                 return true;
+            }
+            if (args[0].equalsIgnoreCase("buy")) {
+                String filter = joinArgs(args, 1);
+                openMarketWithRecalculation(player, filter);
+                return true;
             } else if (args[0].equalsIgnoreCase("items")) {
-                marketItemsGUI.openListings(player);
+                String filter = joinArgs(args, 1);
+                marketItemsGUI.openListings(player, filter);
                 return true;
             }
-            guiManager.openMarketGUI(player);
+            openMarketWithRecalculation(player, null);
             return true;
         } else if (command.getName().equalsIgnoreCase("sellhand")) {
             if (!(sender instanceof Player)) {
@@ -165,6 +170,19 @@ public class ExoMarketPlugin extends JavaPlugin {
                         completions.add(option);
                     }
                 }
+            } else if (args.length >= 2) {
+                String subcommand = args[0].toLowerCase();
+                String prefix = args[args.length - 1].toLowerCase();
+                if (subcommand.equals("buy")) {
+                    for (String suggestion : getMarketItemSuggestions(prefix)) {
+                        completions.add(suggestion);
+                    }
+                } else if (subcommand.equals("items") && sender instanceof Player) {
+                    Player player = (Player) sender;
+                    for (String suggestion : getOwnedItemSuggestions(player, prefix)) {
+                        completions.add(suggestion);
+                    }
+                }
             }
         } else if (command.getName().equalsIgnoreCase("sellhand")) {
             // No arguments for sell hand command
@@ -175,5 +193,59 @@ public class ExoMarketPlugin extends JavaPlugin {
         }
 
         return completions;
+    }
+
+    private List<String> getMarketItemSuggestions(String prefix) {
+        List<String> suggestions = new ArrayList<>();
+        for (MarketItem item : databaseManager.getMarketItems()) {
+            String name = item.getType().toString().toLowerCase();
+            if (name.startsWith(prefix) && !suggestions.contains(name)) {
+                suggestions.add(name);
+            }
+        }
+        return suggestions;
+    }
+
+    private List<String> getOwnedItemSuggestions(Player player, String prefix) {
+        List<String> suggestions = new ArrayList<>();
+        List<MarketItem> listings = databaseManager.getMarketItemsByOwner(player.getUniqueId().toString());
+        for (MarketItem item : listings) {
+            String name = item.getType().toString().toLowerCase();
+            if (name.startsWith(prefix) && !suggestions.contains(name)) {
+                suggestions.add(name);
+            }
+        }
+        return suggestions;
+    }
+
+    private void openMarketWithRecalculation(Player player, String filter) {
+        boolean willRecalculate = marketManager.recalculatePricesIfNeeded(
+                () -> guiManager.openMarketGUI(player, filter),
+                () -> player.sendMessage(ChatColor.RED + "There was an error recalculating market prices. " +
+                        "Please contact ExoHayvan on Discord or report an issue on GitHub.")
+        );
+        if (willRecalculate) {
+            player.sendMessage(ChatColor.YELLOW + "Recalculating market prices...");
+        }
+    }
+
+    private String joinArgs(String[] args, int startIndex) {
+        if (args == null || startIndex >= args.length) {
+            return null;
+        }
+        StringBuilder builder = new StringBuilder();
+        for (int i = startIndex; i < args.length; i++) {
+            if (args[i] == null || args[i].isEmpty()) {
+                continue;
+            }
+            if (builder.length() > 0) {
+                builder.append(' ');
+            }
+            builder.append(args[i]);
+        }
+        if (builder.length() == 0) {
+            return null;
+        }
+        return builder.toString();
     }
 }

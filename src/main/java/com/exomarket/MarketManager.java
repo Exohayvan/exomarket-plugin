@@ -33,6 +33,9 @@ public class MarketManager {
     private final AtomicBoolean recalculationRunning = new AtomicBoolean(false);
     private final AtomicBoolean recalculationQueued = new AtomicBoolean(false);
     private volatile long lastSuccessfulRecalculation = 0L;
+    private volatile long lastRecalculationItemCount = -1L;
+    private final Object recalculationCallbackLock = new Object();
+    private final List<RecalculationCallback> recalculationCallbacks = new ArrayList<>();
 
     public MarketManager(ExoMarketPlugin plugin, DatabaseManager databaseManager, EconomyManager economyManager, double marketValueMultiplier, double maxPricePercent, double minPrice) {
         this.plugin = plugin;
@@ -192,11 +195,34 @@ public class MarketManager {
     }
 
     public void recalculatePrices() {
-        scheduleRecalculation(false);
+        recalculatePricesIfNeeded(null, null);
     }
 
     public void forceRecalculatePrices() {
         scheduleRecalculation(true);
+    }
+
+    public boolean recalculatePricesIfNeeded(Runnable onSuccess, Runnable onFailure) {
+        long currentItemCount = databaseManager.getTotalItemsInShop();
+        if (currentItemCount == lastRecalculationItemCount && !recalculationRunning.get()) {
+            if (onSuccess != null) {
+                plugin.getServer().getScheduler().runTask(plugin, onSuccess);
+            }
+            return false;
+        }
+
+        if (onSuccess != null || onFailure != null) {
+            synchronized (recalculationCallbackLock) {
+                recalculationCallbacks.add(new RecalculationCallback(onSuccess, onFailure));
+            }
+        }
+
+        if (recalculationRunning.get()) {
+            return true;
+        }
+
+        scheduleRecalculation(true);
+        return true;
     }
 
     private void scheduleRecalculation(boolean force) {
@@ -207,16 +233,20 @@ public class MarketManager {
 
         if (recalculationRunning.compareAndSet(false, true)) {
             plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
+                boolean success = false;
                 try {
                     performPriceRecalculation();
                     lastSuccessfulRecalculation = System.currentTimeMillis();
+                    success = true;
                 } catch (Exception ex) {
                     plugin.getLogger().log(Level.SEVERE, "Failed to recalculate market prices", ex);
                 } finally {
                     recalculationRunning.set(false);
                     if (recalculationQueued.getAndSet(false)) {
                         scheduleRecalculation(true);
+                        return;
                     }
+                    notifyRecalculationCallbacks(success);
                 }
             });
         } else {
@@ -228,6 +258,7 @@ public class MarketManager {
         List<MarketItem> marketItems = databaseManager.getMarketItems();
         marketItems = normalizeEnchantedBookListings(marketItems);
         if (marketItems.isEmpty()) {
+            lastRecalculationItemCount = 0L;
             return;
         }
 
@@ -246,6 +277,7 @@ public class MarketManager {
             aggregates.computeIfAbsent(listing.getItemData(), key -> new Aggregate()).addListing(listing);
         }
 
+        int actualTotalItems = totalItems;
         if (totalItems <= 0) {
             totalItems = aggregates.size();
         }
@@ -337,6 +369,8 @@ public class MarketManager {
         if (totalAppliedValue > 0 && Math.abs(totalAppliedValue - totalMarketValue) / totalMarketValue > 0.25) {
             plugin.getLogger().warning("Applied market value deviates significantly from target. Applied: " + totalAppliedValue + " Target: " + totalMarketValue);
         }
+
+        lastRecalculationItemCount = Math.max(0, actualTotalItems);
     }
 
     private static class Aggregate {
@@ -424,6 +458,39 @@ public class MarketManager {
             this.listing = listing;
             this.allocated = allocated;
             this.fractional = fractional;
+        }
+    }
+
+    private void notifyRecalculationCallbacks(boolean success) {
+        List<RecalculationCallback> callbacks;
+        synchronized (recalculationCallbackLock) {
+            if (recalculationCallbacks.isEmpty()) {
+                return;
+            }
+            callbacks = new ArrayList<>(recalculationCallbacks);
+            recalculationCallbacks.clear();
+        }
+
+        plugin.getServer().getScheduler().runTask(plugin, () -> {
+            for (RecalculationCallback callback : callbacks) {
+                if (success) {
+                    if (callback.onSuccess != null) {
+                        callback.onSuccess.run();
+                    }
+                } else if (callback.onFailure != null) {
+                    callback.onFailure.run();
+                }
+            }
+        });
+    }
+
+    private static class RecalculationCallback {
+        private final Runnable onSuccess;
+        private final Runnable onFailure;
+
+        RecalculationCallback(Runnable onSuccess, Runnable onFailure) {
+            this.onSuccess = onSuccess;
+            this.onFailure = onFailure;
         }
     }
 
