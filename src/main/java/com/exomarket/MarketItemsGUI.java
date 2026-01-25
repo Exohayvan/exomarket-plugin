@@ -10,11 +10,13 @@ import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.inventory.meta.EnchantmentStorageMeta;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Locale;
 import java.util.UUID;
 
 public class MarketItemsGUI implements Listener {
@@ -28,6 +30,7 @@ public class MarketItemsGUI implements Listener {
     private final Map<UUID, MarketItem> selectedItem = new HashMap<>();
     private final Map<UUID, Integer> currentPage = new HashMap<>();
     private final Map<UUID, Map<Integer, MarketItem>> pageItems = new HashMap<>();
+    private final Map<UUID, String> currentFilter = new HashMap<>();
 
     public MarketItemsGUI(ExoMarketPlugin plugin, MarketManager marketManager, DatabaseManager databaseManager) {
         this.plugin = plugin;
@@ -39,10 +42,28 @@ public class MarketItemsGUI implements Listener {
         openListings(player, 1);
     }
 
+    public void openListings(Player player, String filter) {
+        String normalized = normalizeFilter(filter);
+        if (normalized == null) {
+            currentFilter.remove(player.getUniqueId());
+        } else {
+            currentFilter.put(player.getUniqueId(), normalized);
+        }
+        openListings(player, 1);
+    }
+
     private void openListings(Player player, int requestedPage) {
         List<MarketItem> listings = databaseManager.getMarketItemsByOwner(player.getUniqueId().toString());
+        String filter = currentFilter.get(player.getUniqueId());
+        if (filter != null) {
+            listings.removeIf(listing -> !matchesFilter(listing, filter));
+        }
         if (listings.isEmpty()) {
-            player.sendMessage(ChatColor.YELLOW + "You do not have any active listings.");
+            if (filter == null) {
+                player.sendMessage(ChatColor.YELLOW + "You do not have any active listings.");
+            } else {
+                player.sendMessage(ChatColor.YELLOW + "No listings match \"" + filter + "\".");
+            }
             pageItems.remove(player.getUniqueId());
             currentPage.remove(player.getUniqueId());
             player.closeInventory();
@@ -206,6 +227,54 @@ public class MarketItemsGUI implements Listener {
             player.closeInventory();
             Bukkit.getScheduler().runTask(plugin, () -> openListings(player, currentPage.getOrDefault(player.getUniqueId(), 1)));
         }
+    }
+
+    private String normalizeFilter(String filter) {
+        if (filter == null) {
+            return null;
+        }
+        String trimmed = filter.trim();
+        if (trimmed.isEmpty()) {
+            return null;
+        }
+        return trimmed.toLowerCase(Locale.ROOT);
+    }
+
+    private boolean matchesFilter(MarketItem listing, String filter) {
+        ItemStack stack = listing.getItemStack();
+        String typeName = listing.getType().toString().toLowerCase(Locale.ROOT);
+        if (typeName.contains(filter)) {
+            return true;
+        }
+
+        ItemMeta meta = stack.getItemMeta();
+        if (meta != null && meta.hasDisplayName()) {
+            String stripped = ChatColor.stripColor(meta.getDisplayName());
+            if (stripped != null && stripped.toLowerCase(Locale.ROOT).contains(filter)) {
+                return true;
+            }
+        }
+
+        if (!stack.getEnchantments().isEmpty()) {
+            for (Map.Entry<org.bukkit.enchantments.Enchantment, Integer> entry : stack.getEnchantments().entrySet()) {
+                String key = entry.getKey().getKey().getKey().toLowerCase(Locale.ROOT);
+                if (key.contains(filter)) {
+                    return true;
+                }
+            }
+        }
+
+        if (meta instanceof EnchantmentStorageMeta) {
+            EnchantmentStorageMeta storageMeta = (EnchantmentStorageMeta) meta;
+            for (Map.Entry<org.bukkit.enchantments.Enchantment, Integer> entry : storageMeta.getStoredEnchants().entrySet()) {
+                String key = entry.getKey().getKey().getKey().toLowerCase(Locale.ROOT);
+                if (key.contains(filter)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     private void removeListingQuantity(Player player, MarketItem listing, int quantity) {

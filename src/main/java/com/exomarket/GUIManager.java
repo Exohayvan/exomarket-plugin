@@ -22,6 +22,7 @@ public class GUIManager implements Listener {
     private Map<Player, Integer> currentPage = new HashMap<>();
     private Map<Player, AggregatedListing> selectedMarketItem = new HashMap<>();
     private Map<Player, Map<Integer, AggregatedListing>> pageItems = new HashMap<>();
+    private Map<Player, String> currentFilter = new HashMap<>();
 
     private static class AggregatedListing {
         private final String itemData;
@@ -106,7 +107,17 @@ public class GUIManager implements Listener {
     }
 
     public void openMarketGUI(Player player) {
+        openMarketGUI(player, null);
+    }
+
+    public void openMarketGUI(Player player, String filter) {
         currentPage.put(player, 1);
+        String normalized = normalizeFilter(filter);
+        if (normalized == null) {
+            currentFilter.remove(player);
+        } else {
+            currentFilter.put(player, normalized);
+        }
         openMarketPage(player);
     }
 
@@ -173,6 +184,10 @@ public class GUIManager implements Listener {
         }
 
         List<AggregatedListing> aggregatedListings = new ArrayList<>(aggregatedMap.values());
+        String filter = currentFilter.get(player);
+        if (filter != null) {
+            aggregatedListings.removeIf(listing -> !matchesFilter(listing, filter));
+        }
         aggregatedListings.sort(Comparator.comparing(AggregatedListing::getSortKey, String.CASE_INSENSITIVE_ORDER));
         int totalListings = aggregatedListings.size();
         int maxPage = Math.max(1, (int) Math.ceil(totalListings / 45.0));
@@ -214,6 +229,54 @@ public class GUIManager implements Listener {
         }
 
         player.openInventory(inventory);
+    }
+
+    private String normalizeFilter(String filter) {
+        if (filter == null) {
+            return null;
+        }
+        String trimmed = filter.trim();
+        if (trimmed.isEmpty()) {
+            return null;
+        }
+        return trimmed.toLowerCase(Locale.ROOT);
+    }
+
+    private boolean matchesFilter(AggregatedListing listing, String filter) {
+        String typeName = listing.getTypeName().toLowerCase(Locale.ROOT);
+        if (typeName.contains(filter)) {
+            return true;
+        }
+
+        ItemStack template = listing.getTemplate();
+        ItemMeta meta = template.getItemMeta();
+        if (meta != null && meta.hasDisplayName()) {
+            String stripped = ChatColor.stripColor(meta.getDisplayName());
+            if (stripped != null && stripped.toLowerCase(Locale.ROOT).contains(filter)) {
+                return true;
+            }
+        }
+
+        if (!template.getEnchantments().isEmpty()) {
+            for (Map.Entry<org.bukkit.enchantments.Enchantment, Integer> entry : template.getEnchantments().entrySet()) {
+                String key = entry.getKey().getKey().getKey().toLowerCase(Locale.ROOT);
+                if (key.contains(filter)) {
+                    return true;
+                }
+            }
+        }
+
+        if (meta instanceof EnchantmentStorageMeta) {
+            EnchantmentStorageMeta storageMeta = (EnchantmentStorageMeta) meta;
+            for (Map.Entry<org.bukkit.enchantments.Enchantment, Integer> entry : storageMeta.getStoredEnchants().entrySet()) {
+                String key = entry.getKey().getKey().getKey().toLowerCase(Locale.ROOT);
+                if (key.contains(filter)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     private ItemStack createNavigationItem(Material material, String name) {
