@@ -11,6 +11,8 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.EnchantmentStorageMeta;
 import org.bukkit.inventory.meta.ItemMeta;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -33,7 +35,7 @@ public class MarketManager {
     private final AtomicBoolean recalculationRunning = new AtomicBoolean(false);
     private final AtomicBoolean recalculationQueued = new AtomicBoolean(false);
     private volatile long lastSuccessfulRecalculation = 0L;
-    private volatile long lastRecalculationItemCount = -1L;
+    private volatile BigInteger lastRecalculationItemCount = BigInteger.valueOf(-1L);
     private final Object recalculationCallbackLock = new Object();
     private final List<RecalculationCallback> recalculationCallbacks = new ArrayList<>();
 
@@ -101,8 +103,8 @@ public class MarketManager {
 
         boolean listedAny = false;
         for (EnchantedBookSplitter.SplitEntry entry : entries) {
-            int amount = entry.getQuantity();
-            if (amount <= 0) {
+            BigInteger amount = entry.getQuantity();
+            if (amount.signum() <= 0) {
                 continue;
             }
 
@@ -112,11 +114,11 @@ public class MarketManager {
             if (existingItem == null) {
                 MarketItem newItem = new MarketItem(template, amount, 0, player.getUniqueId().toString());
                 databaseManager.addMarketItem(newItem);
-                player.sendMessage(ChatColor.GREEN + "Added " + amount + " " + template.getType().toString() + " to the market.");
+                player.sendMessage(ChatColor.GREEN + "Added " + amount.toString() + " " + template.getType().toString() + " to the market.");
             } else {
                 existingItem.addQuantity(amount);
                 databaseManager.updateMarketItem(existingItem);
-                player.sendMessage(ChatColor.GREEN + "Added " + amount + " " + template.getType().toString() + " to existing market listing.");
+                player.sendMessage(ChatColor.GREEN + "Added " + amount.toString() + " " + template.getType().toString() + " to existing market listing.");
             }
             listedAny = true;
         }
@@ -139,16 +141,19 @@ public class MarketManager {
             return;
         }
 
-        int totalAvailable = listings.stream().mapToInt(MarketItem::getQuantity).sum();
-        if (totalAvailable < quantity) {
+        BigInteger requested = BigInteger.valueOf(quantity);
+        BigInteger totalAvailable = listings.stream()
+                .map(MarketItem::getQuantity)
+                .reduce(BigInteger.ZERO, BigInteger::add);
+        if (totalAvailable.compareTo(requested) < 0) {
             player.sendMessage(ChatColor.RED + "There are not enough items in stock to fulfill your request.");
             return;
         }
 
-        List<ListingAllocation> allocations = buildProportionalAllocations(listings, quantity, totalAvailable);
+        List<ListingAllocation> allocations = buildProportionalAllocations(listings, requested, totalAvailable);
 
         double totalCost = allocations.stream()
-                .mapToDouble(a -> a.allocated * a.listing.getPrice())
+                .mapToDouble(a -> toDoubleCapped(a.allocated) * a.listing.getPrice())
                 .sum();
 
         if (!economyManager.hasEnoughMoney(player, totalCost)) {
@@ -161,25 +166,25 @@ public class MarketManager {
         databaseManager.recordPlayerName(player.getUniqueId(), player.getName());
 
         for (ListingAllocation allocation : allocations) {
-            if (allocation.allocated <= 0) {
+            if (allocation.allocated.signum() <= 0) {
                 continue;
             }
 
             MarketItem listing = allocation.listing;
-            int take = allocation.allocated;
-            listing.setQuantity(listing.getQuantity() - take);
-            double payout = listing.getPrice() * take;
+            BigInteger take = allocation.allocated;
+            listing.setQuantity(listing.getQuantity().subtract(take));
+            double payout = listing.getPrice() * toDoubleCapped(take);
             economyManager.addMoney(listing.getSellerUUID(), payout);
             databaseManager.recordSale(listing.getSellerUUID(), player.getUniqueId().toString(), take, payout);
             recordSellerName(listing.getSellerUUID());
 
-            if (listing.getQuantity() == 0) {
+            if (listing.getQuantity().signum() == 0) {
                 databaseManager.removeMarketItem(listing);
             } else {
                 databaseManager.updateMarketItem(listing);
             }
 
-            plugin.getLogger().info("Player " + player.getName() + " bought " + take + " " +
+            plugin.getLogger().info("Player " + player.getName() + " bought " + take.toString() + " " +
                     listing.getType().toString() + " for $" + String.format("%.2f", payout) +
                     " from seller " + listing.getSellerUUID());
         }
@@ -195,18 +200,13 @@ public class MarketManager {
     }
 
     public void buyEnchantedBookLevel(Player player, String itemData, ItemStack template, int level, int quantity) {
-        long perBook = countForLevel(level);
-        if (perBook <= 0 || perBook > Integer.MAX_VALUE) {
+        BigInteger perBook = countForLevel(level);
+        if (perBook.signum() <= 0) {
             player.sendMessage(ChatColor.RED + "That enchantment level is not available.");
             return;
         }
 
-        long requiredLong = perBook * (long) quantity;
-        if (requiredLong > Integer.MAX_VALUE) {
-            player.sendMessage(ChatColor.RED + "There are not enough books in stock to fulfill your request.");
-            return;
-        }
-        int requiredUnits = (int) requiredLong;
+        BigInteger requiredUnits = perBook.multiply(BigInteger.valueOf(quantity));
 
         List<MarketItem> listings = databaseManager.getMarketItemsByItemData(itemData);
         if (listings.isEmpty()) {
@@ -214,8 +214,10 @@ public class MarketManager {
             return;
         }
 
-        int totalAvailable = listings.stream().mapToInt(MarketItem::getQuantity).sum();
-        if (totalAvailable < requiredUnits) {
+        BigInteger totalAvailable = listings.stream()
+                .map(MarketItem::getQuantity)
+                .reduce(BigInteger.ZERO, BigInteger::add);
+        if (totalAvailable.compareTo(requiredUnits) < 0) {
             player.sendMessage(ChatColor.RED + "There are not enough books in stock to fulfill your request.");
             return;
         }
@@ -223,7 +225,7 @@ public class MarketManager {
         List<ListingAllocation> allocations = buildProportionalAllocations(listings, requiredUnits, totalAvailable);
 
         double totalCost = allocations.stream()
-                .mapToDouble(a -> a.allocated * a.listing.getPrice())
+                .mapToDouble(a -> toDoubleCapped(a.allocated) * a.listing.getPrice())
                 .sum();
 
         ItemStack preview = buildEnchantedBook(template, level, 1);
@@ -237,25 +239,25 @@ public class MarketManager {
         databaseManager.recordPlayerName(player.getUniqueId(), player.getName());
 
         for (ListingAllocation allocation : allocations) {
-            if (allocation.allocated <= 0) {
+            if (allocation.allocated.signum() <= 0) {
                 continue;
             }
 
             MarketItem listing = allocation.listing;
-            int take = allocation.allocated;
-            listing.setQuantity(listing.getQuantity() - take);
-            double payout = listing.getPrice() * take;
+            BigInteger take = allocation.allocated;
+            listing.setQuantity(listing.getQuantity().subtract(take));
+            double payout = listing.getPrice() * toDoubleCapped(take);
             economyManager.addMoney(listing.getSellerUUID(), payout);
             databaseManager.recordSale(listing.getSellerUUID(), player.getUniqueId().toString(), take, payout);
             recordSellerName(listing.getSellerUUID());
 
-            if (listing.getQuantity() == 0) {
+            if (listing.getQuantity().signum() == 0) {
                 databaseManager.removeMarketItem(listing);
             } else {
                 databaseManager.updateMarketItem(listing);
             }
 
-            plugin.getLogger().info("Player " + player.getName() + " bought " + take + " " +
+            plugin.getLogger().info("Player " + player.getName() + " bought " + take.toString() + " " +
                     listing.getType().toString() + " for $" + String.format("%.2f", payout) +
                     " from seller " + listing.getSellerUUID());
         }
@@ -278,8 +280,8 @@ public class MarketManager {
     }
 
     public boolean recalculatePricesIfNeeded(Runnable onSuccess, Runnable onFailure) {
-        long currentItemCount = databaseManager.getTotalItemsInShop();
-        if (currentItemCount == lastRecalculationItemCount && !recalculationRunning.get() && !hasDirtyListingData()) {
+        BigInteger currentItemCount = databaseManager.getTotalItemsInShop();
+        if (currentItemCount.equals(lastRecalculationItemCount) && !recalculationRunning.get() && !hasDirtyListingData()) {
             if (onSuccess != null) {
                 plugin.getServer().getScheduler().runTask(plugin, onSuccess);
             }
@@ -349,7 +351,7 @@ public class MarketManager {
         marketItems = normalizeEnchantedBookListings(marketItems);
         marketItems = normalizeListingItemData(marketItems);
         if (marketItems.isEmpty()) {
-            lastRecalculationItemCount = 0L;
+            lastRecalculationItemCount = BigInteger.ZERO;
             return;
         }
 
@@ -359,21 +361,21 @@ public class MarketManager {
         double commodityCap = totalMoney * 0.20; // cap any single commodity at 20% of total economy value
 
         Map<String, Aggregate> aggregates = new HashMap<>();
-        int totalItems = 0;
+        BigInteger totalItems = BigInteger.ZERO;
         int totalListings = 0;
 
         for (MarketItem listing : marketItems) {
-            totalItems += Math.max(0, listing.getQuantity());
+            totalItems = totalItems.add(listing.getQuantity().max(BigInteger.ZERO));
             totalListings++;
             aggregates.computeIfAbsent(listing.getItemData(), key -> new Aggregate()).addListing(listing);
         }
 
-        int actualTotalItems = totalItems;
-        if (totalItems <= 0) {
-            totalItems = aggregates.size();
+        BigInteger actualTotalItems = totalItems;
+        if (totalItems.signum() <= 0) {
+            totalItems = BigInteger.valueOf(aggregates.size());
         }
 
-        double averageQuantity = Math.max(1d, (double) totalItems / aggregates.size());
+        double averageQuantity = Math.max(1d, toDoubleCapped(totalItems) / aggregates.size());
         double averageListings = Math.max(1d, (double) totalListings / aggregates.size());
 
         double quantityExponent = 0.65;
@@ -382,7 +384,8 @@ public class MarketManager {
         double maxWeight = 5.0;
 
         for (Aggregate aggregate : aggregates.values()) {
-            double quantityFactor = Math.pow(averageQuantity / Math.max(1d, aggregate.totalQuantity), quantityExponent);
+            double aggregateQuantity = Math.max(1d, toDoubleCapped(aggregate.totalQuantity));
+            double quantityFactor = Math.pow(averageQuantity / aggregateQuantity, quantityExponent);
             double listingFactor = Math.pow(averageListings / Math.max(1d, aggregate.listingCount), listingExponent);
             double weight = quantityFactor * listingFactor;
             if (!Double.isFinite(weight) || weight < minWeight) {
@@ -440,7 +443,7 @@ public class MarketManager {
 
         double totalAppliedValue = 0d;
         for (Aggregate aggregate : aggregates.values()) {
-            double quantity = Math.max(1d, aggregate.totalQuantity);
+            double quantity = Math.max(1d, toDoubleCapped(aggregate.totalQuantity));
             double basePrice = aggregate.assignedValue / quantity;
             double finalPrice = Math.max(minPrice, Math.min(maxPrice, basePrice));
 
@@ -453,7 +456,7 @@ public class MarketManager {
             totalAppliedValue += commodityValue;
             double marketShare = totalMarketValue > 0 ? (commodityValue / totalMarketValue) * 100 : 0;
             plugin.getLogger().info("Updated price for " + aggregate.getCommodityName() + " to $" + String.format("%.2f", finalPrice) +
-                    " (quantity: " + aggregate.totalQuantity + ", market share: " +
+                    " (quantity: " + aggregate.totalQuantity.toString() + ", market share: " +
                 String.format("%.2f%%", marketShare) + ")");
         }
 
@@ -461,11 +464,11 @@ public class MarketManager {
             plugin.getLogger().warning("Applied market value deviates significantly from target. Applied: " + totalAppliedValue + " Target: " + totalMarketValue);
         }
 
-        lastRecalculationItemCount = Math.max(0, actualTotalItems);
+        lastRecalculationItemCount = actualTotalItems.max(BigInteger.ZERO);
     }
 
     private static class Aggregate {
-        private int totalQuantity = 0;
+        private BigInteger totalQuantity = BigInteger.ZERO;
         private int listingCount = 0;
         private final List<MarketItem> listings = new ArrayList<>();
         private MarketItem representative;
@@ -476,7 +479,7 @@ public class MarketManager {
             if (representative == null) {
                 representative = item;
             }
-            totalQuantity += item.getQuantity();
+            totalQuantity = totalQuantity.add(item.getQuantity());
             listingCount++;
             listings.add(item);
         }
@@ -503,33 +506,45 @@ public class MarketManager {
         }
     }
 
-    private List<ListingAllocation> buildProportionalAllocations(List<MarketItem> listings, int requested, int totalAvailable) {
+    private List<ListingAllocation> buildProportionalAllocations(List<MarketItem> listings, BigInteger requested, BigInteger totalAvailable) {
         List<ListingAllocation> allocations = new ArrayList<>();
-        int baseAllocated = 0;
-
-        for (MarketItem listing : listings) {
-            double desired = ((double) listing.getQuantity() / (double) totalAvailable) * requested;
-            int alloc = Math.min(listing.getQuantity(), (int) Math.floor(desired));
-            double fractional = desired - alloc;
-            allocations.add(new ListingAllocation(listing, alloc, fractional));
-            baseAllocated += alloc;
+        if (requested == null || totalAvailable == null) {
+            return allocations;
+        }
+        if (requested.signum() <= 0 || totalAvailable.signum() <= 0) {
+            return allocations;
         }
 
-        int remaining = requested - baseAllocated;
-        allocations.sort(Comparator.comparingDouble((ListingAllocation a) -> a.fractional).reversed());
+        BigInteger baseAllocated = BigInteger.ZERO;
 
-        while (remaining > 0) {
+        for (MarketItem listing : listings) {
+            BigInteger available = listing.getQuantity();
+            BigInteger numerator = available.multiply(requested);
+            BigInteger alloc = numerator.divide(totalAvailable);
+            if (alloc.compareTo(available) > 0) {
+                alloc = available;
+            }
+            BigInteger remainder = numerator.remainder(totalAvailable);
+            allocations.add(new ListingAllocation(listing, alloc, remainder));
+            baseAllocated = baseAllocated.add(alloc);
+        }
+
+        BigInteger remaining = requested.subtract(baseAllocated);
+        allocations.sort(Comparator.comparing((ListingAllocation a) -> a.fractionalRemainder).reversed());
+
+        int remainingInt = remaining.min(BigInteger.valueOf(Integer.MAX_VALUE)).intValue();
+        while (remainingInt > 0) {
             boolean progressed = false;
             for (ListingAllocation allocation : allocations) {
-                if (remaining <= 0) {
+                if (remainingInt <= 0) {
                     break;
                 }
-                int capacity = allocation.listing.getQuantity() - allocation.allocated;
-                if (capacity <= 0) {
+                BigInteger capacity = allocation.listing.getQuantity().subtract(allocation.allocated);
+                if (capacity.signum() <= 0) {
                     continue;
                 }
-                allocation.allocated += 1;
-                remaining -= 1;
+                allocation.allocated = allocation.allocated.add(BigInteger.ONE);
+                remainingInt -= 1;
                 progressed = true;
             }
             if (!progressed) {
@@ -542,22 +557,30 @@ public class MarketManager {
 
     private static class ListingAllocation {
         private final MarketItem listing;
-        private int allocated;
-        private final double fractional;
+        private BigInteger allocated;
+        private final BigInteger fractionalRemainder;
 
-        ListingAllocation(MarketItem listing, int allocated, double fractional) {
+        ListingAllocation(MarketItem listing, BigInteger allocated, BigInteger fractionalRemainder) {
             this.listing = listing;
             this.allocated = allocated;
-            this.fractional = fractional;
+            this.fractionalRemainder = fractionalRemainder;
         }
     }
 
-    private long countForLevel(int level) {
+    private BigInteger countForLevel(int level) {
         int safeLevel = Math.max(1, level);
-        if (safeLevel >= 63) {
-            return Long.MAX_VALUE;
+        return BigInteger.ONE.shiftLeft(safeLevel - 1);
+    }
+
+    private double toDoubleCapped(BigInteger value) {
+        if (value == null) {
+            return 0d;
         }
-        return 1L << (safeLevel - 1);
+        BigInteger limit = BigDecimal.valueOf(Double.MAX_VALUE).toBigInteger();
+        if (value.compareTo(limit) > 0) {
+            return Double.MAX_VALUE;
+        }
+        return value.doubleValue();
     }
 
     private ItemStack buildEnchantedBook(ItemStack template, int level, int amount) {
@@ -617,20 +640,20 @@ public class MarketManager {
             }
 
             changed = true;
-            int quantity = listing.getQuantity();
-            if (quantity <= 0) {
+            BigInteger quantity = listing.getQuantity();
+            if (quantity.signum() <= 0) {
                 databaseManager.removeMarketItem(listing);
                 continue;
             }
 
             ItemStack toSplit = stack.clone();
-            toSplit.setAmount(quantity);
-            List<EnchantedBookSplitter.SplitEntry> entries = EnchantedBookSplitter.split(toSplit);
+            toSplit.setAmount(1);
+            List<EnchantedBookSplitter.SplitEntry> entries = EnchantedBookSplitter.split(toSplit, quantity);
             String sellerUuid = listing.getSellerUUID();
 
             for (EnchantedBookSplitter.SplitEntry entry : entries) {
-                int splitQuantity = entry.getQuantity();
-                if (splitQuantity <= 0) {
+                BigInteger splitQuantity = entry.getQuantity();
+                if (splitQuantity.signum() <= 0) {
                     continue;
                 }
                 ItemStack template = ItemSanitizer.sanitize(entry.getItemStack());
@@ -665,20 +688,20 @@ public class MarketManager {
             }
 
             changed = true;
-            int quantity = listing.getQuantity();
-            if (quantity <= 0) {
+            BigInteger quantity = listing.getQuantity();
+            if (quantity.signum() <= 0) {
                 databaseManager.removeMarketItem(listing);
                 continue;
             }
 
             ItemStack toSplit = stack.clone();
-            toSplit.setAmount(quantity);
-            List<EnchantedBookSplitter.SplitEntry> entries = EnchantedBookSplitter.splitWithEnchantmentBooks(toSplit);
+            toSplit.setAmount(1);
+            List<EnchantedBookSplitter.SplitEntry> entries = EnchantedBookSplitter.splitWithEnchantmentBooks(toSplit, quantity);
             String sellerUuid = listing.getSellerUUID();
 
             for (EnchantedBookSplitter.SplitEntry entry : entries) {
-                int amount = entry.getQuantity();
-                if (amount <= 0) {
+                BigInteger amount = entry.getQuantity();
+                if (amount.signum() <= 0) {
                     continue;
                 }
                 ItemStack template = ItemSanitizer.sanitize(entry.getItemStack());
@@ -704,8 +727,8 @@ public class MarketManager {
     private List<MarketItem> normalizeListingItemData(List<MarketItem> marketItems) {
         boolean changed = false;
         for (MarketItem listing : marketItems) {
-            int quantity = listing.getQuantity();
-            if (quantity <= 0) {
+            BigInteger quantity = listing.getQuantity();
+            if (quantity.signum() <= 0) {
                 databaseManager.removeMarketItem(listing);
                 changed = true;
                 continue;

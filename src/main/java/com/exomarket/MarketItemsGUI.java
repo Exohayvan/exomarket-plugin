@@ -12,6 +12,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.EnchantmentStorageMeta;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -99,7 +100,7 @@ public class MarketItemsGUI implements Listener {
                 if (!lore.isEmpty()) {
                     lore.add(ChatColor.DARK_GRAY + "" + ChatColor.STRIKETHROUGH + "----------------");
                 }
-                lore.add(ChatColor.GRAY + "Quantity: " + listing.getQuantity());
+                lore.add(ChatColor.GRAY + "Quantity: " + QuantityFormatter.format(listing.getQuantity()));
                 lore.add(ChatColor.GRAY + "Price: $" + String.format("%.2f", listing.getPrice()));
                 meta.setLore(lore);
                 display.setItemMeta(meta);
@@ -137,7 +138,7 @@ public class MarketItemsGUI implements Listener {
         amounts.add(32);
         amounts.add(64);
 
-        amounts.removeIf(amount -> amount > listing.getQuantity());
+        amounts.removeIf(amount -> listing.getQuantity().compareTo(BigInteger.valueOf(amount)) < 0);
 
         for (int i = 0; i < amounts.size() && i < 9; i++) {
             int quantity = amounts.get(i);
@@ -311,13 +312,13 @@ public class MarketItemsGUI implements Listener {
     }
 
     private void removeListingQuantity(Player player, MarketItem listing, int quantity) {
-        if (listing.getQuantity() < quantity) {
+        if (listing.getQuantity().compareTo(BigInteger.valueOf(quantity)) < 0) {
             player.sendMessage(ChatColor.RED + "You do not have that many items listed.");
             return;
         }
 
-        listing.setQuantity(listing.getQuantity() - quantity);
-        if (listing.getQuantity() <= 0) {
+        listing.setQuantity(listing.getQuantity().subtract(BigInteger.valueOf(quantity)));
+        if (listing.getQuantity().signum() <= 0) {
             databaseManager.removeMarketItem(listing);
         } else {
             databaseManager.updateMarketItem(listing);
@@ -334,24 +335,19 @@ public class MarketItemsGUI implements Listener {
     }
 
     private void removeEnchantedBookQuantity(Player player, MarketItem listing, int level, int quantity) {
-        long required = countForLevel(level);
-        if (required <= 0) {
+        BigInteger required = countForLevel(level);
+        if (required.signum() <= 0) {
             player.sendMessage(ChatColor.RED + "That enchantment level is not available.");
             return;
         }
-        long requiredUnits = required * (long) quantity;
-        if (requiredUnits > Integer.MAX_VALUE) {
-            player.sendMessage(ChatColor.RED + "You do not have that many books listed.");
-            return;
-        }
-        int removeUnits = (int) requiredUnits;
-        if (listing.getQuantity() < removeUnits) {
+        BigInteger removeUnits = required.multiply(BigInteger.valueOf(quantity));
+        if (listing.getQuantity().compareTo(removeUnits) < 0) {
             player.sendMessage(ChatColor.RED + "You do not have that many books listed.");
             return;
         }
 
-        listing.setQuantity(listing.getQuantity() - removeUnits);
-        if (listing.getQuantity() <= 0) {
+        listing.setQuantity(listing.getQuantity().subtract(removeUnits));
+        if (listing.getQuantity().signum() <= 0) {
             databaseManager.removeMarketItem(listing);
         } else {
             databaseManager.updateMarketItem(listing);
@@ -368,7 +364,7 @@ public class MarketItemsGUI implements Listener {
     }
 
     private void openRemoveEnchantLevelMenu(Player player, MarketItem listing) {
-        long availableQuantity = listing.getQuantity();
+        BigInteger availableQuantity = listing.getQuantity();
         List<Integer> levels = new ArrayList<>();
         levels.add(1);
         levels.add(2);
@@ -382,8 +378,8 @@ public class MarketItemsGUI implements Listener {
 
         List<Integer> validLevels = new ArrayList<>();
         for (int level : levels) {
-            long required = countForLevel(level);
-            if (required > 0 && required <= availableQuantity) {
+            BigInteger required = countForLevel(level);
+            if (required.signum() > 0 && required.compareTo(availableQuantity) <= 0) {
                 validLevels.add(level);
             }
         }
@@ -397,7 +393,7 @@ public class MarketItemsGUI implements Listener {
         ItemStack template = listing.getItemStack();
         for (int i = 0; i < validLevels.size() && i < 9; i++) {
             int level = validLevels.get(i);
-            long required = countForLevel(level);
+            BigInteger required = countForLevel(level);
             ItemStack levelItem = createEnchantLevelItem(template, level, required);
             inventory.setItem(i, levelItem);
         }
@@ -408,14 +404,15 @@ public class MarketItemsGUI implements Listener {
     }
 
     private void openRemoveEnchantQuantityMenu(Player player, MarketItem listing, int level) {
-        long required = countForLevel(level);
-        if (required <= 0) {
+        BigInteger required = countForLevel(level);
+        if (required.signum() <= 0) {
             player.sendMessage(ChatColor.RED + "That level is not available.");
             return;
         }
 
-        int maxBooks = (int) Math.min(Integer.MAX_VALUE, listing.getQuantity() / required);
-        if (maxBooks <= 0) {
+        BigInteger maxBooks = listing.getQuantity().divide(required);
+        int maxBooksInt = maxBooks.min(BigInteger.valueOf(Integer.MAX_VALUE)).intValue();
+        if (maxBooksInt <= 0) {
             player.sendMessage(ChatColor.RED + "There are not enough books in stock for that level.");
             return;
         }
@@ -430,7 +427,7 @@ public class MarketItemsGUI implements Listener {
         quantities.add(64);
         quantities.add(128);
         quantities.add(255);
-        quantities.removeIf(q -> q > maxBooks);
+        quantities.removeIf(q -> q > maxBooksInt);
 
         Inventory inventory = Bukkit.createInventory(null, 9, REMOVE_TITLE);
         for (int i = 0; i < quantities.size() && i < 9; i++) {
@@ -439,7 +436,7 @@ public class MarketItemsGUI implements Listener {
             ItemMeta meta = button.getItemMeta();
             meta.setDisplayName(ChatColor.GOLD + "Remove " + quantity + "x");
             List<String> lore = new ArrayList<>();
-            lore.add(ChatColor.GRAY + "Requires: " + required + " level I book(s)");
+            lore.add(ChatColor.GRAY + "Requires: " + QuantityFormatter.format(required) + " level I book(s)");
             meta.setLore(lore);
             button.setItemMeta(meta);
             inventory.setItem(i, button);
@@ -474,15 +471,12 @@ public class MarketItemsGUI implements Listener {
         return item;
     }
 
-    private long countForLevel(int level) {
+    private BigInteger countForLevel(int level) {
         int safeLevel = Math.max(1, level);
-        if (safeLevel >= 63) {
-            return Long.MAX_VALUE;
-        }
-        return 1L << (safeLevel - 1);
+        return BigInteger.ONE.shiftLeft(safeLevel - 1);
     }
 
-    private ItemStack createEnchantLevelItem(ItemStack template, int level, long required) {
+    private ItemStack createEnchantLevelItem(ItemStack template, int level, BigInteger required) {
         ItemStack book = new ItemStack(Material.ENCHANTED_BOOK);
         ItemMeta meta = book.getItemMeta();
         if (meta instanceof EnchantmentStorageMeta) {
@@ -500,7 +494,7 @@ public class MarketItemsGUI implements Listener {
             displayMeta.setDisplayName(ChatColor.GOLD + ItemDisplayNameFormatter.format(book));
             List<String> lore = new ArrayList<>();
             lore.add(ChatColor.GRAY + "Level: " + level);
-            lore.add(ChatColor.GRAY + "Requires: " + required + " level I book(s)");
+            lore.add(ChatColor.GRAY + "Requires: " + QuantityFormatter.format(required) + " level I book(s)");
             displayMeta.setLore(lore);
             book.setItemMeta(displayMeta);
         }

@@ -14,6 +14,8 @@ import org.bukkit.inventory.meta.EnchantmentStorageMeta;
 import org.bukkit.ChatColor;
 import org.bukkit.inventory.InventoryView;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.*;
 
 public class GUIManager implements Listener {
@@ -29,7 +31,7 @@ public class GUIManager implements Listener {
         private final String itemData;
         private final ItemStack template;
         private final Set<String> sellers = new HashSet<>();
-        private int totalQuantity;
+        private BigInteger totalQuantity = BigInteger.ZERO;
         private double pricePerItem;
 
         AggregatedListing(String itemData, ItemStack template, double pricePerItem) {
@@ -39,7 +41,7 @@ public class GUIManager implements Listener {
         }
 
         void incorporate(MarketItem marketItem) {
-            totalQuantity += marketItem.getQuantity();
+            totalQuantity = totalQuantity.add(marketItem.getQuantity());
             sellers.add(marketItem.getSellerUUID());
             pricePerItem = marketItem.getPrice();
         }
@@ -52,7 +54,7 @@ public class GUIManager implements Listener {
             return template.clone();
         }
 
-        int getTotalQuantity() {
+        BigInteger getTotalQuantity() {
             return totalQuantity;
         }
 
@@ -85,7 +87,7 @@ public class GUIManager implements Listener {
                     lore.add(ChatColor.DARK_GRAY + "" + ChatColor.STRIKETHROUGH + "----------------");
                 }
                 lore.add(ChatColor.GRAY + "Price: $" + String.format("%.2f", pricePerItem));
-                lore.add(ChatColor.GRAY + "Quantity: " + totalQuantity);
+                lore.add(ChatColor.GRAY + "Quantity: " + QuantityFormatter.format(totalQuantity));
                 lore.add(ChatColor.GRAY + "Sellers: " + getSellerCount());
                 if (!displayItem.getEnchantments().isEmpty()) {
                     displayItem.getEnchantments().forEach((enchantment, level) ->
@@ -129,12 +131,12 @@ public class GUIManager implements Listener {
             return;
         }
 
-        int availableQuantity = listing.getTotalQuantity();
+        BigInteger availableQuantity = listing.getTotalQuantity();
         int inventorySize = 9;
         List<Integer> quantities = new ArrayList<>(Arrays.asList(1, 2, 4, 8, 16, 32, 64, 128, 256));
 
         // Filter out quantities that exceed the available stock
-        quantities.removeIf(q -> q > availableQuantity);
+        quantities.removeIf(q -> availableQuantity.compareTo(BigInteger.valueOf(q)) < 0);
 
         Inventory inventory = Bukkit.createInventory(null, inventorySize, "Select Quantity");
 
@@ -167,12 +169,12 @@ public class GUIManager implements Listener {
     }
 
     private void openEnchantLevelMenu(Player player, AggregatedListing listing) {
-        int availableQuantity = listing.getTotalQuantity();
+        BigInteger availableQuantity = listing.getTotalQuantity();
         List<Integer> levels = new ArrayList<>(Arrays.asList(1, 2, 4, 8, 16, 32, 64, 128, 255));
         List<Integer> validLevels = new ArrayList<>();
         for (int level : levels) {
-            long required = countForLevel(level);
-            if (required > 0 && required <= availableQuantity) {
+            BigInteger required = countForLevel(level);
+            if (required.signum() > 0 && required.compareTo(availableQuantity) <= 0) {
                 validLevels.add(level);
             }
         }
@@ -186,8 +188,8 @@ public class GUIManager implements Listener {
         ItemStack template = listing.getTemplate();
         for (int i = 0; i < validLevels.size() && i < 9; i++) {
             int level = validLevels.get(i);
-            long required = countForLevel(level);
-            double pricePerBook = listing.getPricePerItem() * required;
+            BigInteger required = countForLevel(level);
+            double pricePerBook = listing.getPricePerItem() * toDoubleCapped(required);
             ItemStack levelItem = createEnchantLevelItem(template, level, required, pricePerBook);
             inventory.setItem(i, levelItem);
         }
@@ -198,25 +200,26 @@ public class GUIManager implements Listener {
     }
 
     private void openEnchantQuantityMenu(Player player, AggregatedListing listing, int level) {
-        long required = countForLevel(level);
-        if (required <= 0) {
+        BigInteger required = countForLevel(level);
+        if (required.signum() <= 0) {
             player.sendMessage(ChatColor.RED + "That level is not available.");
             return;
         }
 
-        int maxBooks = (int) Math.min(Integer.MAX_VALUE, listing.getTotalQuantity() / required);
-        if (maxBooks <= 0) {
+        BigInteger maxBooks = listing.getTotalQuantity().divide(required);
+        int maxBooksInt = maxBooks.min(BigInteger.valueOf(Integer.MAX_VALUE)).intValue();
+        if (maxBooksInt <= 0) {
             player.sendMessage(ChatColor.RED + "There are not enough books in stock for that level.");
             return;
         }
 
         List<Integer> quantities = new ArrayList<>(Arrays.asList(1, 2, 4, 8, 16, 32, 64, 128, 255));
-        quantities.removeIf(q -> q > maxBooks);
+        quantities.removeIf(q -> q > maxBooksInt);
 
         Inventory inventory = Bukkit.createInventory(null, 9, "Select Quantity");
         for (int i = 0; i < quantities.size() && i < 9; i++) {
             int quantity = quantities.get(i);
-            double totalCost = listing.getPricePerItem() * required * quantity;
+            double totalCost = listing.getPricePerItem() * toDoubleCapped(required) * quantity;
             ItemStack quantityItem = createQuantityItem(Material.PAPER, quantity, "Buy " + quantity + "x", totalCost);
             inventory.setItem(i, quantityItem);
         }
@@ -340,15 +343,23 @@ public class GUIManager implements Listener {
         return listing != null && listing.getTemplate().getType() == Material.ENCHANTED_BOOK;
     }
 
-    private long countForLevel(int level) {
+    private BigInteger countForLevel(int level) {
         int safeLevel = Math.max(1, level);
-        if (safeLevel >= 63) {
-            return Long.MAX_VALUE;
-        }
-        return 1L << (safeLevel - 1);
+        return BigInteger.ONE.shiftLeft(safeLevel - 1);
     }
 
-    private ItemStack createEnchantLevelItem(ItemStack template, int level, long required, double pricePerBook) {
+    private double toDoubleCapped(BigInteger value) {
+        if (value == null) {
+            return 0d;
+        }
+        BigInteger limit = BigDecimal.valueOf(Double.MAX_VALUE).toBigInteger();
+        if (value.compareTo(limit) > 0) {
+            return Double.MAX_VALUE;
+        }
+        return value.doubleValue();
+    }
+
+    private ItemStack createEnchantLevelItem(ItemStack template, int level, BigInteger required, double pricePerBook) {
         ItemStack book = new ItemStack(Material.ENCHANTED_BOOK);
         ItemMeta meta = book.getItemMeta();
         if (meta instanceof EnchantmentStorageMeta) {
@@ -366,7 +377,7 @@ public class GUIManager implements Listener {
             displayMeta.setDisplayName(ChatColor.GOLD + ItemDisplayNameFormatter.format(book));
             List<String> lore = new ArrayList<>();
             lore.add(ChatColor.GRAY + "Level: " + level);
-            lore.add(ChatColor.GRAY + "Requires: " + required + " level I book(s)");
+            lore.add(ChatColor.GRAY + "Requires: " + QuantityFormatter.format(required) + " level I book(s)");
             lore.add(ChatColor.GRAY + "Price: $" + String.format("%.2f", pricePerBook));
             displayMeta.setLore(lore);
             book.setItemMeta(displayMeta);

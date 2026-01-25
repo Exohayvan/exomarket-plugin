@@ -6,6 +6,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.EnchantmentStorageMeta;
 import org.bukkit.inventory.meta.ItemMeta;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -15,18 +16,25 @@ public final class EnchantedBookSplitter {
     }
 
     public static List<SplitEntry> split(ItemStack stack) {
+        if (stack == null) {
+            return new ArrayList<>();
+        }
+        return split(stack, BigInteger.valueOf(stack.getAmount()));
+    }
+
+    public static List<SplitEntry> split(ItemStack stack, BigInteger amount) {
         List<SplitEntry> entries = new ArrayList<>();
         if (stack == null || stack.getType().isAir()) {
             return entries;
         }
 
-        int amount = stack.getAmount();
-        if (amount <= 0) {
+        BigInteger safeAmount = normalizeQuantity(amount);
+        if (safeAmount.signum() <= 0) {
             return entries;
         }
 
         if (stack.getType() != Material.ENCHANTED_BOOK) {
-            entries.add(new SplitEntry(cloneSingle(stack), amount));
+            entries.add(new SplitEntry(cloneSingle(stack), safeAmount));
             return entries;
         }
 
@@ -44,9 +52,9 @@ public final class EnchantedBookSplitter {
 
         for (Map.Entry<Enchantment, Integer> entry : stored.entrySet()) {
             int level = Math.max(1, entry.getValue());
-            int perBook = countForLevel(level);
-            int total = safeMultiply(amount, perBook);
-            if (total <= 0) {
+            BigInteger perBook = countForLevel(level);
+            BigInteger total = safeAmount.multiply(perBook);
+            if (total.signum() <= 0) {
                 continue;
             }
             ItemStack book = new ItemStack(Material.ENCHANTED_BOOK);
@@ -62,42 +70,49 @@ public final class EnchantedBookSplitter {
     }
 
     public static List<SplitEntry> splitWithEnchantmentBooks(ItemStack stack) {
+        if (stack == null) {
+            return new ArrayList<>();
+        }
+        return splitWithEnchantmentBooks(stack, BigInteger.valueOf(stack.getAmount()));
+    }
+
+    public static List<SplitEntry> splitWithEnchantmentBooks(ItemStack stack, BigInteger amount) {
         List<SplitEntry> entries = new ArrayList<>();
         if (stack == null || stack.getType().isAir()) {
             return entries;
         }
 
-        int amount = stack.getAmount();
-        if (amount <= 0) {
+        BigInteger safeAmount = normalizeQuantity(amount);
+        if (safeAmount.signum() <= 0) {
             return entries;
         }
 
         if (stack.getType() == Material.ENCHANTED_BOOK) {
-            return split(stack);
+            return split(stack, safeAmount);
         }
 
         Map<Enchantment, Integer> enchants = stack.getEnchantments();
         if (enchants.isEmpty()) {
-            return split(stack);
+            return split(stack, safeAmount);
         }
 
         ItemStack base = stack.clone();
-        base.setAmount(amount);
+        base.setAmount(1);
         for (Enchantment enchantment : enchants.keySet()) {
             base.removeEnchantment(enchantment);
         }
-        entries.addAll(split(base));
+        entries.addAll(split(base, safeAmount));
 
         for (Map.Entry<Enchantment, Integer> entry : enchants.entrySet()) {
             int level = Math.max(1, entry.getValue());
             ItemStack book = new ItemStack(Material.ENCHANTED_BOOK);
-            book.setAmount(amount);
+            book.setAmount(1);
             EnchantmentStorageMeta newMeta = (EnchantmentStorageMeta) book.getItemMeta();
             if (newMeta != null) {
                 newMeta.addStoredEnchant(entry.getKey(), level, true);
                 book.setItemMeta(newMeta);
             }
-            entries.addAll(split(book));
+            entries.addAll(split(book, safeAmount));
         }
 
         return entries;
@@ -109,36 +124,32 @@ public final class EnchantedBookSplitter {
         return clone;
     }
 
-    private static int countForLevel(int level) {
+    private static BigInteger countForLevel(int level) {
         int safeLevel = Math.max(1, level);
-        if (safeLevel >= 31) {
-            return Integer.MAX_VALUE;
-        }
-        return 1 << (safeLevel - 1);
+        return BigInteger.ONE.shiftLeft(safeLevel - 1);
     }
 
-    private static int safeMultiply(int left, int right) {
-        long total = (long) left * (long) right;
-        if (total > Integer.MAX_VALUE) {
-            return Integer.MAX_VALUE;
+    private static BigInteger normalizeQuantity(BigInteger value) {
+        if (value == null) {
+            return BigInteger.ZERO;
         }
-        return (int) total;
+        return value.max(BigInteger.ZERO);
     }
 
     public static final class SplitEntry {
         private final ItemStack itemStack;
-        private final int quantity;
+        private final BigInteger quantity;
 
-        private SplitEntry(ItemStack itemStack, int quantity) {
+        private SplitEntry(ItemStack itemStack, BigInteger quantity) {
             this.itemStack = itemStack;
-            this.quantity = quantity;
+            this.quantity = normalizeQuantity(quantity);
         }
 
         public ItemStack getItemStack() {
             return itemStack;
         }
 
-        public int getQuantity() {
+        public BigInteger getQuantity() {
             return quantity;
         }
     }

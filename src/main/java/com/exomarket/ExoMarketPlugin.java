@@ -8,6 +8,8 @@ import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 import java.io.File;
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import java.util.ArrayList;
@@ -238,13 +240,13 @@ public class ExoMarketPlugin extends JavaPlugin {
     private void sendMarketInfo(Player player) {
         List<MarketItem> items = databaseManager.getMarketItems();
         int totalListings = items.size();
-        long totalQuantity = 0L;
+        BigInteger totalQuantity = BigInteger.ZERO;
         double totalValue = 0d;
         Set<String> uniqueItems = new HashSet<>();
         for (MarketItem item : items) {
-            int qty = Math.max(0, item.getQuantity());
-            totalQuantity += qty;
-            totalValue += item.getPrice() * qty;
+            BigInteger qty = item.getQuantity().max(BigInteger.ZERO);
+            totalQuantity = totalQuantity.add(qty);
+            totalValue += item.getPrice() * toDoubleCapped(qty);
             uniqueItems.add(item.getItemData());
         }
 
@@ -253,20 +255,20 @@ public class ExoMarketPlugin extends JavaPlugin {
         player.sendMessage(ChatColor.GOLD + "Market Totals");
         player.sendMessage(ChatColor.GRAY + "Listings: " + totalListings +
                 " | Unique items: " + uniqueItems.size());
-        player.sendMessage(ChatColor.GRAY + "Quantity listed: " + totalQuantity);
+        player.sendMessage(ChatColor.GRAY + "Quantity listed: " + QuantityFormatter.format(totalQuantity));
         player.sendMessage(ChatColor.GRAY + "Listed value: $" + String.format(Locale.US, "%.2f", totalValue));
-        player.sendMessage(ChatColor.GRAY + "Items traded: " + global.itemsSold +
+        player.sendMessage(ChatColor.GRAY + "Items traded: " + QuantityFormatter.format(global.itemsSold) +
                 " | Value traded: $" + String.format(Locale.US, "%.2f", global.moneyEarned));
 
         List<MarketItem> owned = databaseManager.getMarketItemsByOwner(player.getUniqueId().toString());
         int ownedListings = owned.size();
-        long ownedQuantity = 0L;
+        BigInteger ownedQuantity = BigInteger.ZERO;
         double ownedValue = 0d;
         Set<String> ownedUnique = new HashSet<>();
         for (MarketItem item : owned) {
-            int qty = Math.max(0, item.getQuantity());
-            ownedQuantity += qty;
-            ownedValue += item.getPrice() * qty;
+            BigInteger qty = item.getQuantity().max(BigInteger.ZERO);
+            ownedQuantity = ownedQuantity.add(qty);
+            ownedValue += item.getPrice() * toDoubleCapped(qty);
             ownedUnique.add(item.getItemData());
         }
 
@@ -275,12 +277,23 @@ public class ExoMarketPlugin extends JavaPlugin {
         player.sendMessage(ChatColor.GOLD + "Your Market Stats");
         player.sendMessage(ChatColor.GRAY + "Listings: " + ownedListings +
                 " | Unique items: " + ownedUnique.size());
-        player.sendMessage(ChatColor.GRAY + "Quantity listed: " + ownedQuantity);
+        player.sendMessage(ChatColor.GRAY + "Quantity listed: " + QuantityFormatter.format(ownedQuantity));
         player.sendMessage(ChatColor.GRAY + "Listed value: $" + String.format(Locale.US, "%.2f", ownedValue));
-        player.sendMessage(ChatColor.GRAY + "Items sold: " + personal.itemsSold +
+        player.sendMessage(ChatColor.GRAY + "Items sold: " + QuantityFormatter.format(personal.itemsSold) +
                 " | Earned: $" + String.format(Locale.US, "%.2f", personal.moneyEarned));
-        player.sendMessage(ChatColor.GRAY + "Items bought: " + personal.itemsBought +
+        player.sendMessage(ChatColor.GRAY + "Items bought: " + QuantityFormatter.format(personal.itemsBought) +
                 " | Spent: $" + String.format(Locale.US, "%.2f", personal.moneySpent));
+    }
+
+    private double toDoubleCapped(BigInteger value) {
+        if (value == null) {
+            return 0d;
+        }
+        BigInteger limit = BigDecimal.valueOf(Double.MAX_VALUE).toBigInteger();
+        if (value.compareTo(limit) > 0) {
+            return Double.MAX_VALUE;
+        }
+        return value.doubleValue();
     }
 
     private String joinArgs(String[] args, int startIndex) {

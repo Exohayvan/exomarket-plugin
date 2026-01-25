@@ -4,9 +4,12 @@ import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 
 import java.io.File;
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 
 public class DatabaseManager {
@@ -29,10 +32,12 @@ public class DatabaseManager {
             Class.forName("org.sqlite.JDBC");
             connection = DriverManager.getConnection("jdbc:sqlite:plugins/ExoMarketPlugin/database.db");
             createTable();
+            ensureQuantityColumnType();
             ensureItemDataColumn();
             populateMissingItemData();
             ensurePlayerTable();
             ensureStatsTable();
+            ensureStatsQuantityColumns();
             seedGlobalStatsRow();
         } catch (ClassNotFoundException | SQLException e) {
             e.printStackTrace();
@@ -41,9 +46,49 @@ public class DatabaseManager {
 
     private void createTable() {
         try (PreparedStatement statement = connection.prepareStatement(
-                "CREATE TABLE IF NOT EXISTS market_items (type TEXT, quantity INTEGER, price REAL, seller_uuid TEXT, item_data TEXT)")) {
+                "CREATE TABLE IF NOT EXISTS market_items (type TEXT, quantity TEXT, price REAL, seller_uuid TEXT, item_data TEXT)")) {
             statement.executeUpdate();
         } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void ensureQuantityColumnType() {
+        boolean needsMigration = false;
+        try (Statement statement = connection.createStatement();
+             ResultSet resultSet = statement.executeQuery("PRAGMA table_info(market_items)")) {
+            while (resultSet.next()) {
+                if ("quantity".equalsIgnoreCase(resultSet.getString("name"))) {
+                    String type = resultSet.getString("type");
+                    if (type == null || !type.toUpperCase(Locale.ROOT).contains("TEXT")) {
+                        needsMigration = true;
+                    }
+                    break;
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return;
+        }
+
+        if (!needsMigration) {
+            return;
+        }
+
+        try (Statement statement = connection.createStatement()) {
+            statement.execute("BEGIN TRANSACTION");
+            statement.execute("ALTER TABLE market_items RENAME TO market_items_old");
+            statement.execute("CREATE TABLE market_items (type TEXT, quantity TEXT, price REAL, seller_uuid TEXT, item_data TEXT)");
+            statement.execute("INSERT INTO market_items (type, quantity, price, seller_uuid, item_data) " +
+                    "SELECT type, CAST(quantity AS TEXT), price, seller_uuid, item_data FROM market_items_old");
+            statement.execute("DROP TABLE market_items_old");
+            statement.execute("COMMIT");
+        } catch (SQLException e) {
+            try (Statement rollback = connection.createStatement()) {
+                rollback.execute("ROLLBACK");
+            } catch (SQLException ignored) {
+                // Ignore rollback failures
+            }
             e.printStackTrace();
         }
     }
@@ -108,16 +153,57 @@ public class DatabaseManager {
 
     private void ensureStatsTable() {
         try (PreparedStatement statement = connection.prepareStatement(
-                "CREATE TABLE IF NOT EXISTS market_stats (key TEXT PRIMARY KEY, items_bought INTEGER DEFAULT 0, items_sold INTEGER DEFAULT 0, money_spent REAL DEFAULT 0, money_earned REAL DEFAULT 0)")) {
+                "CREATE TABLE IF NOT EXISTS market_stats (key TEXT PRIMARY KEY, items_bought TEXT DEFAULT '0', items_sold TEXT DEFAULT '0', money_spent REAL DEFAULT 0, money_earned REAL DEFAULT 0)")) {
             statement.executeUpdate();
         } catch (SQLException e) {
             e.printStackTrace();
         }
     }
 
+    private void ensureStatsQuantityColumns() {
+        boolean needsMigration = false;
+        try (Statement statement = connection.createStatement();
+             ResultSet resultSet = statement.executeQuery("PRAGMA table_info(market_stats)")) {
+            while (resultSet.next()) {
+                String name = resultSet.getString("name");
+                if ("items_bought".equalsIgnoreCase(name) || "items_sold".equalsIgnoreCase(name)) {
+                    String type = resultSet.getString("type");
+                    if (type == null || !type.toUpperCase(Locale.ROOT).contains("TEXT")) {
+                        needsMigration = true;
+                        break;
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return;
+        }
+
+        if (!needsMigration) {
+            return;
+        }
+
+        try (Statement statement = connection.createStatement()) {
+            statement.execute("BEGIN TRANSACTION");
+            statement.execute("ALTER TABLE market_stats RENAME TO market_stats_old");
+            statement.execute("CREATE TABLE market_stats (key TEXT PRIMARY KEY, items_bought TEXT DEFAULT '0', items_sold TEXT DEFAULT '0', money_spent REAL DEFAULT 0, money_earned REAL DEFAULT 0)");
+            statement.execute("INSERT INTO market_stats (key, items_bought, items_sold, money_spent, money_earned) " +
+                    "SELECT key, CAST(items_bought AS TEXT), CAST(items_sold AS TEXT), money_spent, money_earned FROM market_stats_old");
+            statement.execute("DROP TABLE market_stats_old");
+            statement.execute("COMMIT");
+        } catch (SQLException e) {
+            try (Statement rollback = connection.createStatement()) {
+                rollback.execute("ROLLBACK");
+            } catch (SQLException ignored) {
+                // Ignore rollback failures
+            }
+            e.printStackTrace();
+        }
+    }
+
     private void seedGlobalStatsRow() {
         try (PreparedStatement statement = connection.prepareStatement(
-                "INSERT OR IGNORE INTO market_stats (key, items_bought, items_sold, money_spent, money_earned) VALUES ('global', 0, 0, 0, 0)")) {
+                "INSERT OR IGNORE INTO market_stats (key, items_bought, items_sold, money_spent, money_earned) VALUES ('global', '0', '0', 0, 0)")) {
             statement.executeUpdate();
         } catch (SQLException e) {
             e.printStackTrace();
@@ -146,7 +232,7 @@ public class DatabaseManager {
         return new MarketItem(
                 itemStack,
                 itemData,
-                resultSet.getInt("quantity"),
+                parseBigInteger(resultSet.getString("quantity")),
                 resultSet.getDouble("price"),
                 resultSet.getString("seller_uuid")
         );
@@ -237,10 +323,10 @@ public class DatabaseManager {
         String sellerId = playerUUID.toString();
         ItemStack toSplit = itemStack.clone();
         toSplit.setAmount(quantity);
-        List<EnchantedBookSplitter.SplitEntry> entries = EnchantedBookSplitter.splitWithEnchantmentBooks(toSplit);
+        List<EnchantedBookSplitter.SplitEntry> entries = EnchantedBookSplitter.splitWithEnchantmentBooks(toSplit, BigInteger.valueOf(quantity));
         for (EnchantedBookSplitter.SplitEntry entry : entries) {
-            int amount = entry.getQuantity();
-            if (amount <= 0) {
+            BigInteger amount = entry.getQuantity();
+            if (amount.signum() <= 0) {
                 continue;
             }
             ItemStack template = ItemSanitizer.sanitize(entry.getItemStack());
@@ -259,7 +345,7 @@ public class DatabaseManager {
         try (PreparedStatement statement = connection.prepareStatement(
                 "INSERT INTO market_items (type, quantity, price, seller_uuid, item_data) VALUES (?, ?, ?, ?, ?)")) {
             statement.setString(1, marketItem.getType().toString());
-            statement.setInt(2, marketItem.getQuantity());
+            statement.setString(2, marketItem.getQuantity().toString());
             statement.setDouble(3, marketItem.getPrice());
             statement.setString(4, marketItem.getSellerUUID());
             statement.setString(5, marketItem.getItemData());
@@ -272,7 +358,7 @@ public class DatabaseManager {
     public synchronized void updateMarketItem(MarketItem marketItem) {
         try (PreparedStatement statement = connection.prepareStatement(
                 "UPDATE market_items SET quantity = ?, price = ?, item_data = ? WHERE type = ? AND seller_uuid = ? AND item_data = ?")) {
-            statement.setInt(1, marketItem.getQuantity());
+            statement.setString(1, marketItem.getQuantity().toString());
             statement.setDouble(2, marketItem.getPrice());
             statement.setString(3, marketItem.getItemData());
             statement.setString(4, marketItem.getType().toString());
@@ -373,7 +459,11 @@ public class DatabaseManager {
     }
 
     public synchronized void recordSale(String sellerUuid, String buyerUuid, int quantity, double totalPrice) {
-        if (quantity <= 0 || totalPrice < 0) {
+        recordSale(sellerUuid, buyerUuid, BigInteger.valueOf(quantity), totalPrice);
+    }
+
+    public synchronized void recordSale(String sellerUuid, String buyerUuid, BigInteger quantity, double totalPrice) {
+        if (quantity == null || quantity.signum() <= 0 || totalPrice < 0) {
             return;
         }
 
@@ -381,28 +471,60 @@ public class DatabaseManager {
         applyStatDelta("global", quantity, quantity, totalPrice, totalPrice);
 
         if (sellerUuid != null && !sellerUuid.isEmpty()) {
-            applyStatDelta(sellerUuid, 0, quantity, 0, totalPrice);
+            applyStatDelta(sellerUuid, BigInteger.ZERO, quantity, 0, totalPrice);
         }
 
         if (buyerUuid != null && !buyerUuid.isEmpty()) {
-            applyStatDelta(buyerUuid, quantity, 0, totalPrice, 0);
+            applyStatDelta(buyerUuid, quantity, BigInteger.ZERO, totalPrice, 0);
         }
     }
 
-    private void applyStatDelta(String key, int bought, int sold, double spent, double earned) {
-        try (PreparedStatement statement = connection.prepareStatement(
-                "INSERT INTO market_stats (key, items_bought, items_sold, money_spent, money_earned) VALUES (?, ?, ?, ?, ?) " +
-                        "ON CONFLICT(key) DO UPDATE SET " +
-                        "items_bought = items_bought + excluded.items_bought, " +
-                        "items_sold = items_sold + excluded.items_sold, " +
-                        "money_spent = money_spent + excluded.money_spent, " +
-                        "money_earned = money_earned + excluded.money_earned")) {
-            statement.setString(1, key);
-            statement.setInt(2, bought);
-            statement.setInt(3, sold);
-            statement.setDouble(4, spent);
-            statement.setDouble(5, earned);
-            statement.executeUpdate();
+    private void applyStatDelta(String key, BigInteger bought, BigInteger sold, double spent, double earned) {
+        if (key == null || key.isEmpty()) {
+            return;
+        }
+        BigInteger safeBought = bought == null ? BigInteger.ZERO : bought;
+        BigInteger safeSold = sold == null ? BigInteger.ZERO : sold;
+        try (PreparedStatement insert = connection.prepareStatement(
+                "INSERT OR IGNORE INTO market_stats (key, items_bought, items_sold, money_spent, money_earned) VALUES (?, '0', '0', 0, 0)")) {
+            insert.setString(1, key);
+            insert.executeUpdate();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+
+        BigInteger currentBought = BigInteger.ZERO;
+        BigInteger currentSold = BigInteger.ZERO;
+        double currentSpent = 0d;
+        double currentEarned = 0d;
+        try (PreparedStatement select = connection.prepareStatement(
+                "SELECT items_bought, items_sold, money_spent, money_earned FROM market_stats WHERE key = ?")) {
+            select.setString(1, key);
+            try (ResultSet rs = select.executeQuery()) {
+                if (rs.next()) {
+                    currentBought = parseBigInteger(rs.getString("items_bought"));
+                    currentSold = parseBigInteger(rs.getString("items_sold"));
+                    currentSpent = rs.getDouble("money_spent");
+                    currentEarned = rs.getDouble("money_earned");
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+
+        BigInteger newBought = currentBought.add(safeBought);
+        BigInteger newSold = currentSold.add(safeSold);
+        double newSpent = currentSpent + spent;
+        double newEarned = currentEarned + earned;
+
+        try (PreparedStatement update = connection.prepareStatement(
+                "UPDATE market_stats SET items_bought = ?, items_sold = ?, money_spent = ?, money_earned = ? WHERE key = ?")) {
+            update.setString(1, newBought.toString());
+            update.setString(2, newSold.toString());
+            update.setDouble(3, newSpent);
+            update.setDouble(4, newEarned);
+            update.setString(5, key);
+            update.executeUpdate();
         } catch (SQLException e) {
             e.printStackTrace();
         }
@@ -418,8 +540,8 @@ public class DatabaseManager {
             statement.setString(1, key);
             try (ResultSet rs = statement.executeQuery()) {
                 if (rs.next()) {
-                    stats.itemsBought = rs.getInt("items_bought");
-                    stats.itemsSold = rs.getInt("items_sold");
+                    stats.itemsBought = parseBigInteger(rs.getString("items_bought"));
+                    stats.itemsSold = parseBigInteger(rs.getString("items_sold"));
                     stats.moneySpent = rs.getDouble("money_spent");
                     stats.moneyEarned = rs.getDouble("money_earned");
                 }
@@ -430,39 +552,56 @@ public class DatabaseManager {
         return stats;
     }
 
-    public synchronized long getTotalItemsInShop() {
-        try (PreparedStatement statement = connection.prepareStatement("SELECT SUM(quantity) AS total FROM market_items");
+    public synchronized BigInteger getTotalItemsInShop() {
+        BigInteger total = BigInteger.ZERO;
+        try (PreparedStatement statement = connection.prepareStatement("SELECT quantity FROM market_items");
              ResultSet rs = statement.executeQuery()) {
-            if (rs.next()) {
-                return rs.getLong("total");
+            while (rs.next()) {
+                total = total.add(parseBigInteger(rs.getString("quantity")));
             }
         } catch (SQLException e) {
             e.printStackTrace();
         }
-        return 0;
+        return total;
     }
 
-    public synchronized long getTotalItemsInShopForSeller(String sellerUuid) {
+    public synchronized BigInteger getTotalItemsInShopForSeller(String sellerUuid) {
         if (sellerUuid == null || sellerUuid.isEmpty()) {
-            return 0;
+            return BigInteger.ZERO;
         }
+        BigInteger total = BigInteger.ZERO;
         try (PreparedStatement statement = connection.prepareStatement(
-                "SELECT SUM(quantity) AS total FROM market_items WHERE seller_uuid = ?")) {
+                "SELECT quantity FROM market_items WHERE seller_uuid = ?")) {
             statement.setString(1, sellerUuid);
             try (ResultSet rs = statement.executeQuery()) {
-                if (rs.next()) {
-                    return rs.getLong("total");
+                while (rs.next()) {
+                    total = total.add(parseBigInteger(rs.getString("quantity")));
                 }
             }
         } catch (SQLException e) {
             e.printStackTrace();
         }
-        return 0;
+        return total;
+    }
+
+    private BigInteger parseBigInteger(String value) {
+        if (value == null || value.isEmpty()) {
+            return BigInteger.ZERO;
+        }
+        try {
+            return new BigInteger(value);
+        } catch (NumberFormatException ex) {
+            try {
+                return new BigDecimal(value).toBigInteger();
+            } catch (NumberFormatException ignored) {
+                return BigInteger.ZERO;
+            }
+        }
     }
 
     public static class Stats {
-        public int itemsBought;
-        public int itemsSold;
+        public BigInteger itemsBought = BigInteger.ZERO;
+        public BigInteger itemsSold = BigInteger.ZERO;
         public double moneySpent;
         public double moneyEarned;
     }

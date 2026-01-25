@@ -7,6 +7,7 @@ import org.bukkit.inventory.ItemStack;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.math.BigInteger;
 import java.net.InetSocketAddress;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
@@ -95,8 +96,8 @@ public class MarketWebServer {
             body.append("<tr>")
                     .append("<td data-value=\"").append(escapeHtml(aggregate.displayName)).append("\">")
                     .append(escapeHtml(aggregate.displayName)).append("</td>")
-                    .append("<td data-value=\"").append(aggregate.totalQuantity).append("\">")
-                    .append(aggregate.totalQuantity).append("</td>")
+                    .append("<td data-value=\"").append(aggregate.totalQuantity.toString()).append("\">")
+                    .append(QuantityFormatter.format(aggregate.totalQuantity)).append("</td>")
                     .append("<td data-value=\"").append(aggregate.listingCount).append("\">")
                     .append(aggregate.listingCount).append("</td>")
                     .append("<td data-value=\"").append(aggregate.lowestPrice).append("\">$")
@@ -164,7 +165,9 @@ public class MarketWebServer {
 
         MarketItem sample = listings.get(0);
         String itemName = ItemDisplayNameFormatter.format(sample.getItemStack());
-        int totalQuantity = listings.stream().mapToInt(MarketItem::getQuantity).sum();
+        BigInteger totalQuantity = listings.stream()
+                .map(MarketItem::getQuantity)
+                .reduce(BigInteger.ZERO, BigInteger::add);
         StringBuilder body = new StringBuilder();
         body.append("<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">")
                 .append("<title>").append(escapeHtml(itemName)).append(" | ExoMarket</title>")
@@ -178,13 +181,13 @@ public class MarketWebServer {
                 .append("</style></head><body>")
                 .append("<a href=\"/\">&#8592; Back to list</a>")
                 .append("<h1>").append(escapeHtml(itemName)).append("</h1>")
-                .append("<p>Total quantity available: ").append(totalQuantity).append("</p>")
+                .append("<p>Total quantity available: ").append(QuantityFormatter.format(totalQuantity)).append("</p>")
                 .append("<table><thead><tr><th>Seller</th><th>Quantity</th><th>Price (each)</th></tr></thead><tbody>");
 
         for (MarketItem listing : listings) {
             body.append("<tr>")
                     .append("<td>").append(escapeHtml(resolveSeller(listing.getSellerUUID()))).append("</td>")
-                    .append("<td>").append(listing.getQuantity()).append("</td>")
+                    .append("<td>").append(QuantityFormatter.format(listing.getQuantity())).append("</td>")
                     .append("<td>$").append(formatPrice(listing.getPrice())).append("</td>")
                     .append("</tr>");
         }
@@ -201,7 +204,7 @@ public class MarketWebServer {
                 aggregate = new Aggregate(item.getItemStack(), item.getItemData());
                 aggregates.put(item.getItemData(), aggregate);
             }
-            aggregate.totalQuantity += item.getQuantity();
+            aggregate.totalQuantity = aggregate.totalQuantity.add(item.getQuantity());
             aggregate.listingCount += 1;
             aggregate.lowestPrice = Math.min(aggregate.lowestPrice, item.getPrice());
         }
@@ -288,7 +291,7 @@ public class MarketWebServer {
     private static class Aggregate {
         private final String displayName;
         private final String itemData;
-        private int totalQuantity = 0;
+        private BigInteger totalQuantity = BigInteger.ZERO;
         private int listingCount = 0;
         private double lowestPrice = Double.MAX_VALUE;
 
