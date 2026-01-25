@@ -2,7 +2,7 @@ name: ExoMarketPlugin
 description: A plugin for managing the market GUI
 depend: [Essentials]
 softdepend: [PlaceholderAPI]
-version: 1.10.0
+version: 1.10.3
 api-version: 1.21
 main: com.exomarket.ExoMarketPlugin
 
