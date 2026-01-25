@@ -1,7 +1,7 @@
 # ExoMarketPlugin
 
-**ExoMarketPlugin** is a dynamic, data-driven market system for Minecraft servers.  
-Prices automatically shift based on global supply, demand, and player activity—creating a living economy that evolves with your server.
+**ExoMarketPlugin** is a dynamic, data-driven market system made for [StarHaven SMP](http://starhavensmp.mcserver.us:8000).
+Prices automatically shift based on global supply, demand, and player activity. Creating a living economy that evolves with your server.
 
 ## 🌟 Features
 
