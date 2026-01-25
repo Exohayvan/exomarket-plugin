@@ -204,7 +204,7 @@ public class MarketManager {
 
     public boolean recalculatePricesIfNeeded(Runnable onSuccess, Runnable onFailure) {
         long currentItemCount = databaseManager.getTotalItemsInShop();
-        if (currentItemCount == lastRecalculationItemCount && !recalculationRunning.get()) {
+        if (currentItemCount == lastRecalculationItemCount && !recalculationRunning.get() && !hasDirtyListingData()) {
             if (onSuccess != null) {
                 plugin.getServer().getScheduler().runTask(plugin, onSuccess);
             }
@@ -223,6 +223,17 @@ public class MarketManager {
 
         scheduleRecalculation(true);
         return true;
+    }
+
+    private boolean hasDirtyListingData() {
+        List<MarketItem> items = databaseManager.getMarketItems();
+        for (MarketItem listing : items) {
+            String normalized = ItemSanitizer.serializeToString(listing.getItemStack());
+            if (!normalized.equals(listing.getItemData())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void scheduleRecalculation(boolean force) {
@@ -257,6 +268,7 @@ public class MarketManager {
     private void performPriceRecalculation() {
         List<MarketItem> marketItems = databaseManager.getMarketItems();
         marketItems = normalizeEnchantedBookListings(marketItems);
+        marketItems = normalizeListingItemData(marketItems);
         if (marketItems.isEmpty()) {
             lastRecalculationItemCount = 0L;
             return;
@@ -528,6 +540,42 @@ public class MarketManager {
                     existing.addQuantity(splitQuantity);
                     databaseManager.updateMarketItem(existing);
                 }
+            }
+
+            databaseManager.removeMarketItem(listing);
+        }
+
+        if (changed) {
+            return databaseManager.getMarketItems();
+        }
+        return marketItems;
+    }
+
+    private List<MarketItem> normalizeListingItemData(List<MarketItem> marketItems) {
+        boolean changed = false;
+        for (MarketItem listing : marketItems) {
+            int quantity = listing.getQuantity();
+            if (quantity <= 0) {
+                databaseManager.removeMarketItem(listing);
+                changed = true;
+                continue;
+            }
+
+            String normalizedData = ItemSanitizer.serializeToString(listing.getItemStack());
+            if (normalizedData.equals(listing.getItemData())) {
+                continue;
+            }
+
+            changed = true;
+            String sellerUuid = listing.getSellerUUID();
+            ItemStack template = ItemSanitizer.sanitize(listing.getItemStack());
+            MarketItem existing = databaseManager.getMarketItem(template, sellerUuid);
+            if (existing == null) {
+                MarketItem newItem = new MarketItem(template, normalizedData, quantity, listing.getPrice(), sellerUuid);
+                databaseManager.addMarketItem(newItem);
+            } else {
+                existing.addQuantity(quantity);
+                databaseManager.updateMarketItem(existing);
             }
 
             databaseManager.removeMarketItem(listing);
