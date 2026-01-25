@@ -39,6 +39,9 @@ public final class ItemSanitizer {
         }
 
         sanitized.setItemMeta(meta);
+        if (sanitized.getType() == Material.ENCHANTED_BOOK) {
+            return cleanEnchantedBook(sanitized);
+        }
         return stripZeroDamageComponent(sanitized);
     }
 
@@ -173,6 +176,34 @@ public final class ItemSanitizer {
         }
 
         return false;
+    }
+
+    private static ItemStack cleanEnchantedBook(ItemStack stack) {
+        if (stack == null || stack.getType() != Material.ENCHANTED_BOOK) {
+            return stack;
+        }
+
+        ItemMeta meta = stack.getItemMeta();
+        if (!(meta instanceof EnchantmentStorageMeta)) {
+            return stripZeroDamageComponent(stack);
+        }
+
+        EnchantmentStorageMeta source = (EnchantmentStorageMeta) meta;
+        ItemStack cleaned = new ItemStack(Material.ENCHANTED_BOOK);
+        EnchantmentStorageMeta cleanedMeta = (EnchantmentStorageMeta) cleaned.getItemMeta();
+        if (cleanedMeta != null) {
+            source.getStoredEnchants().forEach((enchant, level) ->
+                    cleanedMeta.addStoredEnchant(enchant, level, true));
+            if (source.hasDisplayName()) {
+                cleanedMeta.setDisplayName(source.getDisplayName());
+            }
+            if (source.hasLore()) {
+                cleanedMeta.setLore(source.getLore());
+            }
+            cleaned.setItemMeta(cleanedMeta);
+        }
+
+        return stripZeroDamageComponent(cleaned);
     }
 
     public static boolean isDamaged(ItemStack itemStack) {
