@@ -9,7 +9,7 @@ Prices automatically shift based on global supply, demand, and player activity�
 - **Dynamic Pricing Engine** – Prices adjust automatically based on market supply, demand, and total circulating economy.
 - **Economy Integration** – Currently integrates with **Essentials**; **Vault support** coming in a future update for wider compatibility.
 - **Web Dashboard (New!)** – A live market analytics dashboard available at YOUIP:6969
-  Example **http://starhaven.mcserver.us:6969**
+  Example **http://starhavensmp.mcserver.us:6969**
 - **PlaceholderAPI Support (New!)** – Global and player-specific economic statistics.
 
 ## 🧩 PlaceholderAPI Placeholders
