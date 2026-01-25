@@ -23,6 +23,7 @@ public class GUIManager implements Listener {
     private Map<Player, AggregatedListing> selectedMarketItem = new HashMap<>();
     private Map<Player, Map<Integer, AggregatedListing>> pageItems = new HashMap<>();
     private Map<Player, String> currentFilter = new HashMap<>();
+    private Map<Player, Integer> selectedEnchantLevel = new HashMap<>();
 
     private static class AggregatedListing {
         private final String itemData;
@@ -118,23 +119,22 @@ public class GUIManager implements Listener {
         } else {
             currentFilter.put(player, normalized);
         }
+        selectedEnchantLevel.remove(player);
         openMarketPage(player);
     }
 
     public void openQuantityMenu(Player player, AggregatedListing listing) {
+        if (isEnchantedBookListing(listing)) {
+            openEnchantLevelMenu(player, listing);
+            return;
+        }
+
         int availableQuantity = listing.getTotalQuantity();
-        int inventorySize = 9; // Start with the smallest size
-        List<Integer> quantities = new ArrayList<>(Arrays.asList(1, 2, 4, 8, 16, 32, 64));
+        int inventorySize = 9;
+        List<Integer> quantities = new ArrayList<>(Arrays.asList(1, 2, 4, 8, 16, 32, 64, 128, 256));
 
         // Filter out quantities that exceed the available stock
         quantities.removeIf(q -> q > availableQuantity);
-
-        // Adjust inventory size based on how many options we have
-        if (quantities.size() > 7) {
-            inventorySize = 18;
-        } else if (quantities.size() > 5) {
-            inventorySize = 9;
-        }
 
         Inventory inventory = Bukkit.createInventory(null, inventorySize, "Select Quantity");
 
@@ -146,6 +146,7 @@ public class GUIManager implements Listener {
         }
 
         selectedMarketItem.put(player, listing);
+        selectedEnchantLevel.remove(player);
         player.openInventory(inventory);
     }
 
@@ -162,16 +163,72 @@ public class GUIManager implements Listener {
     }
 
     private int getSlot(int index, int inventorySize) {
-        if (inventorySize == 9) {
-            return index;
-        } else {
-            // For 18-slot inventory, center the items
-            return 1 + index + (index / 7) * 2;
+        return index;
+    }
+
+    private void openEnchantLevelMenu(Player player, AggregatedListing listing) {
+        int availableQuantity = listing.getTotalQuantity();
+        List<Integer> levels = new ArrayList<>(Arrays.asList(1, 2, 4, 8, 16, 32, 64, 128, 255));
+        List<Integer> validLevels = new ArrayList<>();
+        for (int level : levels) {
+            long required = countForLevel(level);
+            if (required > 0 && required <= availableQuantity) {
+                validLevels.add(level);
+            }
         }
+
+        if (validLevels.isEmpty()) {
+            player.sendMessage(ChatColor.RED + "There are not enough books in stock for that enchantment.");
+            return;
+        }
+
+        Inventory inventory = Bukkit.createInventory(null, 9, "Select Enchant Level");
+        ItemStack template = listing.getTemplate();
+        for (int i = 0; i < validLevels.size() && i < 9; i++) {
+            int level = validLevels.get(i);
+            long required = countForLevel(level);
+            double pricePerBook = listing.getPricePerItem() * required;
+            ItemStack levelItem = createEnchantLevelItem(template, level, required, pricePerBook);
+            inventory.setItem(i, levelItem);
+        }
+
+        selectedMarketItem.put(player, listing);
+        selectedEnchantLevel.remove(player);
+        player.openInventory(inventory);
+    }
+
+    private void openEnchantQuantityMenu(Player player, AggregatedListing listing, int level) {
+        long required = countForLevel(level);
+        if (required <= 0) {
+            player.sendMessage(ChatColor.RED + "That level is not available.");
+            return;
+        }
+
+        int maxBooks = (int) Math.min(Integer.MAX_VALUE, listing.getTotalQuantity() / required);
+        if (maxBooks <= 0) {
+            player.sendMessage(ChatColor.RED + "There are not enough books in stock for that level.");
+            return;
+        }
+
+        List<Integer> quantities = new ArrayList<>(Arrays.asList(1, 2, 4, 8, 16, 32, 64, 128, 255));
+        quantities.removeIf(q -> q > maxBooks);
+
+        Inventory inventory = Bukkit.createInventory(null, 9, "Select Quantity");
+        for (int i = 0; i < quantities.size() && i < 9; i++) {
+            int quantity = quantities.get(i);
+            double totalCost = listing.getPricePerItem() * required * quantity;
+            ItemStack quantityItem = createQuantityItem(Material.PAPER, quantity, "Buy " + quantity + "x", totalCost);
+            inventory.setItem(i, quantityItem);
+        }
+
+        selectedMarketItem.put(player, listing);
+        selectedEnchantLevel.put(player, level);
+        player.openInventory(inventory);
     }
 
     public void openMarketPage(Player player) {
         selectedMarketItem.remove(player);
+        selectedEnchantLevel.remove(player);
         DatabaseManager databaseManager = plugin.getDatabaseManager();
         List<MarketItem> marketItems = databaseManager.getMarketItems();
         Map<String, AggregatedListing> aggregatedMap = new LinkedHashMap<>();
@@ -279,6 +336,64 @@ public class GUIManager implements Listener {
         return false;
     }
 
+    private boolean isEnchantedBookListing(AggregatedListing listing) {
+        return listing != null && listing.getTemplate().getType() == Material.ENCHANTED_BOOK;
+    }
+
+    private long countForLevel(int level) {
+        int safeLevel = Math.max(1, level);
+        if (safeLevel >= 63) {
+            return Long.MAX_VALUE;
+        }
+        return 1L << (safeLevel - 1);
+    }
+
+    private ItemStack createEnchantLevelItem(ItemStack template, int level, long required, double pricePerBook) {
+        ItemStack book = new ItemStack(Material.ENCHANTED_BOOK);
+        ItemMeta meta = book.getItemMeta();
+        if (meta instanceof EnchantmentStorageMeta) {
+            EnchantmentStorageMeta storageMeta = (EnchantmentStorageMeta) meta;
+            ItemMeta templateMeta = template.getItemMeta();
+            if (templateMeta instanceof EnchantmentStorageMeta) {
+                ((EnchantmentStorageMeta) templateMeta).getStoredEnchants()
+                        .forEach((enchant, ignored) -> storageMeta.addStoredEnchant(enchant, level, true));
+            }
+            book.setItemMeta(storageMeta);
+        }
+
+        ItemMeta displayMeta = book.getItemMeta();
+        if (displayMeta != null) {
+            displayMeta.setDisplayName(ChatColor.GOLD + ItemDisplayNameFormatter.format(book));
+            List<String> lore = new ArrayList<>();
+            lore.add(ChatColor.GRAY + "Level: " + level);
+            lore.add(ChatColor.GRAY + "Requires: " + required + " level I book(s)");
+            lore.add(ChatColor.GRAY + "Price: $" + String.format("%.2f", pricePerBook));
+            displayMeta.setLore(lore);
+            book.setItemMeta(displayMeta);
+        }
+
+        return book;
+    }
+
+    private Integer extractLevelFromItem(ItemStack item) {
+        ItemMeta meta = item.getItemMeta();
+        if (meta == null || !meta.hasLore()) {
+            return null;
+        }
+        for (String line : meta.getLore()) {
+            String stripped = ChatColor.stripColor(line);
+            if (stripped != null && stripped.toLowerCase(Locale.ROOT).startsWith("level:")) {
+                String value = stripped.substring("level:".length()).trim();
+                try {
+                    return Integer.parseInt(value);
+                } catch (NumberFormatException ignored) {
+                    return null;
+                }
+            }
+        }
+        return null;
+    }
+
     private ItemStack createNavigationItem(Material material, String name) {
         ItemStack item = new ItemStack(material);
         ItemMeta meta = item.getItemMeta();
@@ -316,6 +431,18 @@ public class GUIManager implements Listener {
                     }
                 }
             }
+        } else if (title.startsWith("Select Enchant Level")) {
+            event.setCancelled(true);
+            Player player = (Player) event.getWhoClicked();
+            ItemStack clickedItem = event.getCurrentItem();
+
+            if (clickedItem != null && !clickedItem.getType().isAir()) {
+                Integer level = extractLevelFromItem(clickedItem);
+                AggregatedListing selected = selectedMarketItem.get(player);
+                if (level != null && selected != null) {
+                    openEnchantQuantityMenu(player, selected, level);
+                }
+            }
         } else if (title.startsWith("Select Quantity")) {
             event.setCancelled(true);
             Player player = (Player) event.getWhoClicked();
@@ -326,7 +453,12 @@ public class GUIManager implements Listener {
                 int quantity = Integer.parseInt(quantityString.substring(0, quantityString.length() - 1)); // Remove the 'x' at the end
                 AggregatedListing selected = selectedMarketItem.get(player);
                 if (selected != null) {
-                    plugin.getMarketManager().buyStackedItem(player, selected.getItemData(), selected.getTemplate(), quantity);
+                    Integer enchantLevel = selectedEnchantLevel.remove(player);
+                    if (enchantLevel != null && isEnchantedBookListing(selected)) {
+                        plugin.getMarketManager().buyEnchantedBookLevel(player, selected.getItemData(), selected.getTemplate(), enchantLevel, quantity);
+                    } else {
+                        plugin.getMarketManager().buyStackedItem(player, selected.getItemData(), selected.getTemplate(), quantity);
+                    }
                     Bukkit.getScheduler().runTask(plugin, () -> openMarketPage(player));
                     selectedMarketItem.remove(player);
                 }
@@ -338,7 +470,7 @@ public class GUIManager implements Listener {
     public void onInventoryDrag(InventoryDragEvent event) {
         InventoryView view = event.getView();
         String title = view.getTitle();
-        if (title.startsWith("Market Page") || title.equals("Select Quantity")) {
+        if (title.startsWith("Market Page") || title.equals("Select Quantity") || title.equals("Select Enchant Level")) {
             event.setCancelled(true);
         }
     }

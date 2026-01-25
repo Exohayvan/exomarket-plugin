@@ -23,11 +23,13 @@ public class MarketItemsGUI implements Listener {
 
     private static final String LIST_TITLE_PREFIX = "Your Market Listings";
     private static final String REMOVE_TITLE = "Remove Amount";
+    private static final String REMOVE_LEVEL_TITLE = "Remove Enchant Level";
 
     private final ExoMarketPlugin plugin;
     private final MarketManager marketManager;
     private final DatabaseManager databaseManager;
     private final Map<UUID, MarketItem> selectedItem = new HashMap<>();
+    private final Map<UUID, Integer> selectedEnchantLevel = new HashMap<>();
     private final Map<UUID, Integer> currentPage = new HashMap<>();
     private final Map<UUID, Map<Integer, MarketItem>> pageItems = new HashMap<>();
     private final Map<UUID, String> currentFilter = new HashMap<>();
@@ -53,6 +55,8 @@ public class MarketItemsGUI implements Listener {
     }
 
     private void openListings(Player player, int requestedPage) {
+        selectedItem.remove(player.getUniqueId());
+        selectedEnchantLevel.remove(player.getUniqueId());
         List<MarketItem> listings = databaseManager.getMarketItemsByOwner(player.getUniqueId().toString());
         String filter = currentFilter.get(player.getUniqueId());
         if (filter != null) {
@@ -145,6 +149,7 @@ public class MarketItemsGUI implements Listener {
         }
 
         selectedItem.put(player.getUniqueId(), listing);
+        selectedEnchantLevel.remove(player.getUniqueId());
         player.openInventory(inventory);
     }
 
@@ -187,7 +192,11 @@ public class MarketItemsGUI implements Listener {
 
             MarketItem listing = slots.get(event.getRawSlot());
             if (listing != null) {
-                openRemoveAmountMenu(player, listing);
+                if (listing.getType() == Material.ENCHANTED_BOOK) {
+                    openRemoveEnchantLevelMenu(player, listing);
+                } else {
+                    openRemoveAmountMenu(player, listing);
+                }
             }
         } else if (title.equals(REMOVE_TITLE)) {
             event.setCancelled(true);
@@ -223,9 +232,33 @@ public class MarketItemsGUI implements Listener {
                 return;
             }
 
-            removeListingQuantity(player, listing, quantity);
+            Integer enchantLevel = selectedEnchantLevel.remove(player.getUniqueId());
+            if (enchantLevel != null && listing.getType() == Material.ENCHANTED_BOOK) {
+                removeEnchantedBookQuantity(player, listing, enchantLevel, quantity);
+            } else {
+                removeListingQuantity(player, listing, quantity);
+            }
             player.closeInventory();
             Bukkit.getScheduler().runTask(plugin, () -> openListings(player, currentPage.getOrDefault(player.getUniqueId(), 1)));
+        } else if (title.equals(REMOVE_LEVEL_TITLE)) {
+            event.setCancelled(true);
+            ItemStack clicked = event.getCurrentItem();
+            if (clicked == null || clicked.getType().isAir()) {
+                return;
+            }
+
+            MarketItem listing = selectedItem.get(player.getUniqueId());
+            if (listing == null) {
+                player.closeInventory();
+                return;
+            }
+
+            Integer level = extractLevelFromItem(clicked);
+            if (level == null) {
+                return;
+            }
+
+            openRemoveEnchantQuantityMenu(player, listing, level);
         }
     }
 
@@ -300,6 +333,123 @@ public class MarketItemsGUI implements Listener {
         selectedItem.remove(player.getUniqueId());
     }
 
+    private void removeEnchantedBookQuantity(Player player, MarketItem listing, int level, int quantity) {
+        long required = countForLevel(level);
+        if (required <= 0) {
+            player.sendMessage(ChatColor.RED + "That enchantment level is not available.");
+            return;
+        }
+        long requiredUnits = required * (long) quantity;
+        if (requiredUnits > Integer.MAX_VALUE) {
+            player.sendMessage(ChatColor.RED + "You do not have that many books listed.");
+            return;
+        }
+        int removeUnits = (int) requiredUnits;
+        if (listing.getQuantity() < removeUnits) {
+            player.sendMessage(ChatColor.RED + "You do not have that many books listed.");
+            return;
+        }
+
+        listing.setQuantity(listing.getQuantity() - removeUnits);
+        if (listing.getQuantity() <= 0) {
+            databaseManager.removeMarketItem(listing);
+        } else {
+            databaseManager.updateMarketItem(listing);
+        }
+
+        ItemStack item = buildEnchantedBook(listing.getItemStack(), level, quantity);
+        Map<Integer, ItemStack> leftovers = player.getInventory().addItem(item);
+        leftovers.values().forEach(leftover -> player.getWorld().dropItemNaturally(player.getLocation(), leftover));
+
+        player.sendMessage(ChatColor.GREEN + "Removed " + quantity + " " +
+                ItemDisplayNameFormatter.format(item) + " from your listings.");
+        marketManager.recalculatePrices();
+        selectedItem.remove(player.getUniqueId());
+    }
+
+    private void openRemoveEnchantLevelMenu(Player player, MarketItem listing) {
+        long availableQuantity = listing.getQuantity();
+        List<Integer> levels = new ArrayList<>();
+        levels.add(1);
+        levels.add(2);
+        levels.add(4);
+        levels.add(8);
+        levels.add(16);
+        levels.add(32);
+        levels.add(64);
+        levels.add(128);
+        levels.add(255);
+
+        List<Integer> validLevels = new ArrayList<>();
+        for (int level : levels) {
+            long required = countForLevel(level);
+            if (required > 0 && required <= availableQuantity) {
+                validLevels.add(level);
+            }
+        }
+
+        if (validLevels.isEmpty()) {
+            player.sendMessage(ChatColor.RED + "There are not enough books in stock for that enchantment.");
+            return;
+        }
+
+        Inventory inventory = Bukkit.createInventory(null, 9, REMOVE_LEVEL_TITLE);
+        ItemStack template = listing.getItemStack();
+        for (int i = 0; i < validLevels.size() && i < 9; i++) {
+            int level = validLevels.get(i);
+            long required = countForLevel(level);
+            ItemStack levelItem = createEnchantLevelItem(template, level, required);
+            inventory.setItem(i, levelItem);
+        }
+
+        selectedItem.put(player.getUniqueId(), listing);
+        selectedEnchantLevel.remove(player.getUniqueId());
+        player.openInventory(inventory);
+    }
+
+    private void openRemoveEnchantQuantityMenu(Player player, MarketItem listing, int level) {
+        long required = countForLevel(level);
+        if (required <= 0) {
+            player.sendMessage(ChatColor.RED + "That level is not available.");
+            return;
+        }
+
+        int maxBooks = (int) Math.min(Integer.MAX_VALUE, listing.getQuantity() / required);
+        if (maxBooks <= 0) {
+            player.sendMessage(ChatColor.RED + "There are not enough books in stock for that level.");
+            return;
+        }
+
+        List<Integer> quantities = new ArrayList<>();
+        quantities.add(1);
+        quantities.add(2);
+        quantities.add(4);
+        quantities.add(8);
+        quantities.add(16);
+        quantities.add(32);
+        quantities.add(64);
+        quantities.add(128);
+        quantities.add(255);
+        quantities.removeIf(q -> q > maxBooks);
+
+        Inventory inventory = Bukkit.createInventory(null, 9, REMOVE_TITLE);
+        for (int i = 0; i < quantities.size() && i < 9; i++) {
+            int quantity = quantities.get(i);
+            ItemStack button = new ItemStack(Material.PAPER);
+            ItemMeta meta = button.getItemMeta();
+            meta.setDisplayName(ChatColor.GOLD + "Remove " + quantity + "x");
+            List<String> lore = new ArrayList<>();
+            lore.add(ChatColor.GRAY + "Requires: " + required + " level I book(s)");
+            meta.setLore(lore);
+            button.setItemMeta(meta);
+            inventory.setItem(i, button);
+        }
+
+        selectedItem.put(player.getUniqueId(), listing);
+        selectedEnchantLevel.put(player.getUniqueId(), level);
+        player.openInventory(inventory);
+    }
+
     private ItemStack createNavigationItem(Material material, String name) {
         ItemStack item = new ItemStack(material);
         ItemMeta meta = item.getItemMeta();
@@ -322,5 +472,73 @@ public class MarketItemsGUI implements Listener {
             item.setItemMeta(meta);
         }
         return item;
+    }
+
+    private long countForLevel(int level) {
+        int safeLevel = Math.max(1, level);
+        if (safeLevel >= 63) {
+            return Long.MAX_VALUE;
+        }
+        return 1L << (safeLevel - 1);
+    }
+
+    private ItemStack createEnchantLevelItem(ItemStack template, int level, long required) {
+        ItemStack book = new ItemStack(Material.ENCHANTED_BOOK);
+        ItemMeta meta = book.getItemMeta();
+        if (meta instanceof EnchantmentStorageMeta) {
+            EnchantmentStorageMeta storageMeta = (EnchantmentStorageMeta) meta;
+            ItemMeta templateMeta = template.getItemMeta();
+            if (templateMeta instanceof EnchantmentStorageMeta) {
+                ((EnchantmentStorageMeta) templateMeta).getStoredEnchants()
+                        .forEach((enchant, ignored) -> storageMeta.addStoredEnchant(enchant, level, true));
+            }
+            book.setItemMeta(storageMeta);
+        }
+
+        ItemMeta displayMeta = book.getItemMeta();
+        if (displayMeta != null) {
+            displayMeta.setDisplayName(ChatColor.GOLD + ItemDisplayNameFormatter.format(book));
+            List<String> lore = new ArrayList<>();
+            lore.add(ChatColor.GRAY + "Level: " + level);
+            lore.add(ChatColor.GRAY + "Requires: " + required + " level I book(s)");
+            displayMeta.setLore(lore);
+            book.setItemMeta(displayMeta);
+        }
+
+        return book;
+    }
+
+    private Integer extractLevelFromItem(ItemStack item) {
+        ItemMeta meta = item.getItemMeta();
+        if (meta == null || !meta.hasLore()) {
+            return null;
+        }
+        for (String line : meta.getLore()) {
+            String stripped = ChatColor.stripColor(line);
+            if (stripped != null && stripped.toLowerCase(Locale.ROOT).startsWith("level:")) {
+                String value = stripped.substring("level:".length()).trim();
+                try {
+                    return Integer.parseInt(value);
+                } catch (NumberFormatException ignored) {
+                    return null;
+                }
+            }
+        }
+        return null;
+    }
+
+    private ItemStack buildEnchantedBook(ItemStack template, int level, int amount) {
+        ItemStack book = new ItemStack(Material.ENCHANTED_BOOK);
+        EnchantmentStorageMeta meta = (EnchantmentStorageMeta) book.getItemMeta();
+        ItemMeta templateMeta = template.getItemMeta();
+        if (meta != null && templateMeta instanceof EnchantmentStorageMeta) {
+            EnchantmentStorageMeta templateStorage = (EnchantmentStorageMeta) templateMeta;
+            templateStorage.getStoredEnchants().forEach((enchant, ignored) ->
+                    meta.addStoredEnchant(enchant, level, true));
+            book.setItemMeta(meta);
+        }
+        ItemStack sanitized = ItemSanitizer.sanitize(book);
+        sanitized.setAmount(amount);
+        return sanitized;
     }
 }

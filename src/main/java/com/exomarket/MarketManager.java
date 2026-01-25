@@ -194,6 +194,81 @@ public class MarketManager {
         recalculatePrices();
     }
 
+    public void buyEnchantedBookLevel(Player player, String itemData, ItemStack template, int level, int quantity) {
+        long perBook = countForLevel(level);
+        if (perBook <= 0 || perBook > Integer.MAX_VALUE) {
+            player.sendMessage(ChatColor.RED + "That enchantment level is not available.");
+            return;
+        }
+
+        long requiredLong = perBook * (long) quantity;
+        if (requiredLong > Integer.MAX_VALUE) {
+            player.sendMessage(ChatColor.RED + "There are not enough books in stock to fulfill your request.");
+            return;
+        }
+        int requiredUnits = (int) requiredLong;
+
+        List<MarketItem> listings = databaseManager.getMarketItemsByItemData(itemData);
+        if (listings.isEmpty()) {
+            player.sendMessage(ChatColor.RED + "That listing is no longer available.");
+            return;
+        }
+
+        int totalAvailable = listings.stream().mapToInt(MarketItem::getQuantity).sum();
+        if (totalAvailable < requiredUnits) {
+            player.sendMessage(ChatColor.RED + "There are not enough books in stock to fulfill your request.");
+            return;
+        }
+
+        List<ListingAllocation> allocations = buildProportionalAllocations(listings, requiredUnits, totalAvailable);
+
+        double totalCost = allocations.stream()
+                .mapToDouble(a -> a.allocated * a.listing.getPrice())
+                .sum();
+
+        ItemStack preview = buildEnchantedBook(template, level, 1);
+        if (!economyManager.hasEnoughMoney(player, totalCost)) {
+            player.sendMessage(ChatColor.RED + "You do not have enough money to buy " + quantity + " " +
+                    ItemDisplayNameFormatter.format(preview));
+            return;
+        }
+
+        economyManager.withdrawMoney(player, totalCost);
+        databaseManager.recordPlayerName(player.getUniqueId(), player.getName());
+
+        for (ListingAllocation allocation : allocations) {
+            if (allocation.allocated <= 0) {
+                continue;
+            }
+
+            MarketItem listing = allocation.listing;
+            int take = allocation.allocated;
+            listing.setQuantity(listing.getQuantity() - take);
+            double payout = listing.getPrice() * take;
+            economyManager.addMoney(listing.getSellerUUID(), payout);
+            databaseManager.recordSale(listing.getSellerUUID(), player.getUniqueId().toString(), take, payout);
+            recordSellerName(listing.getSellerUUID());
+
+            if (listing.getQuantity() == 0) {
+                databaseManager.removeMarketItem(listing);
+            } else {
+                databaseManager.updateMarketItem(listing);
+            }
+
+            plugin.getLogger().info("Player " + player.getName() + " bought " + take + " " +
+                    listing.getType().toString() + " for $" + String.format("%.2f", payout) +
+                    " from seller " + listing.getSellerUUID());
+        }
+
+        ItemStack itemToGive = buildEnchantedBook(template, level, quantity);
+        player.getInventory().addItem(itemToGive);
+
+        player.sendMessage(ChatColor.GREEN + "You have successfully bought " + quantity + " " +
+                ItemDisplayNameFormatter.format(itemToGive) + " for $" + String.format("%.2f", totalCost));
+
+        recalculatePrices();
+    }
+
     public void recalculatePrices() {
         recalculatePricesIfNeeded(null, null);
     }
@@ -475,6 +550,29 @@ public class MarketManager {
             this.allocated = allocated;
             this.fractional = fractional;
         }
+    }
+
+    private long countForLevel(int level) {
+        int safeLevel = Math.max(1, level);
+        if (safeLevel >= 63) {
+            return Long.MAX_VALUE;
+        }
+        return 1L << (safeLevel - 1);
+    }
+
+    private ItemStack buildEnchantedBook(ItemStack template, int level, int amount) {
+        ItemStack book = new ItemStack(Material.ENCHANTED_BOOK);
+        EnchantmentStorageMeta meta = (EnchantmentStorageMeta) book.getItemMeta();
+        ItemMeta templateMeta = template.getItemMeta();
+        if (meta != null && templateMeta instanceof EnchantmentStorageMeta) {
+            EnchantmentStorageMeta templateStorage = (EnchantmentStorageMeta) templateMeta;
+            templateStorage.getStoredEnchants().forEach((enchant, ignored) ->
+                    meta.addStoredEnchant(enchant, level, true));
+            book.setItemMeta(meta);
+        }
+        ItemStack sanitized = ItemSanitizer.sanitize(book);
+        sanitized.setAmount(amount);
+        return sanitized;
     }
 
     private void notifyRecalculationCallbacks(boolean success) {
