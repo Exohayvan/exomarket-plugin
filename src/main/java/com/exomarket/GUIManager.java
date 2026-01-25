@@ -129,7 +129,8 @@ public class GUIManager implements Listener {
 
         for (int i = 0; i < quantities.size(); i++) {
             int quantity = quantities.get(i);
-            ItemStack quantityItem = createQuantityItem(Material.PAPER, quantity, "Buy " + quantity + "x");
+            double totalCost = listing.getPricePerItem() * quantity;
+            ItemStack quantityItem = createQuantityItem(Material.PAPER, quantity, "Buy " + quantity + "x", totalCost);
             inventory.setItem(getSlot(i, inventorySize), quantityItem);
         }
 
@@ -137,11 +138,14 @@ public class GUIManager implements Listener {
         player.openInventory(inventory);
     }
 
-    private ItemStack createQuantityItem(Material material, int quantity, String name) {
+    private ItemStack createQuantityItem(Material material, int quantity, String name, double totalCost) {
         ItemStack item = new ItemStack(material);
         ItemMeta meta = item.getItemMeta();
         meta.setDisplayName(ChatColor.GOLD + name);
-        meta.setLore(Collections.singletonList(ChatColor.GRAY + "Click to buy " + quantity));
+        List<String> lore = new ArrayList<>();
+        lore.add(ChatColor.GRAY + "Click to buy " + quantity);
+        lore.add(ChatColor.GRAY + "Total: $" + String.format("%.2f", totalCost));
+        meta.setLore(lore);
         item.setItemMeta(meta);
         return item;
     }
