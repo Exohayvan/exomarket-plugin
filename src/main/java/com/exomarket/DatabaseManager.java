@@ -213,6 +213,10 @@ public class DatabaseManager {
     }
 
     public synchronized void sellItemsDirectly(UUID playerUUID, ItemStack itemStack, int quantity) {
+        if (itemStack == null || itemStack.getType().isAir()) {
+            return;
+        }
+
         if (ItemSanitizer.isDamaged(itemStack)) {
             return;
         }
@@ -231,13 +235,23 @@ public class DatabaseManager {
         }
 
         String sellerId = playerUUID.toString();
-        MarketItem existingItem = getMarketItem(itemStack, sellerId);
-        if (existingItem == null) {
-            MarketItem newItem = new MarketItem(itemStack, quantity, 0, sellerId);
-            addMarketItem(newItem);
-        } else {
-            existingItem.addQuantity(quantity);
-            updateMarketItem(existingItem);
+        ItemStack toSplit = itemStack.clone();
+        toSplit.setAmount(quantity);
+        List<EnchantedBookSplitter.SplitEntry> entries = EnchantedBookSplitter.split(toSplit);
+        for (EnchantedBookSplitter.SplitEntry entry : entries) {
+            int amount = entry.getQuantity();
+            if (amount <= 0) {
+                continue;
+            }
+            ItemStack template = ItemSanitizer.sanitize(entry.getItemStack());
+            MarketItem existingItem = getMarketItem(template, sellerId);
+            if (existingItem == null) {
+                MarketItem newItem = new MarketItem(template, amount, 0, sellerId);
+                addMarketItem(newItem);
+            } else {
+                existingItem.addQuantity(amount);
+                updateMarketItem(existingItem);
+            }
         }
     }
 

@@ -5,8 +5,11 @@
 package com.exomarket;
 
 import org.bukkit.ChatColor;
+import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.EnchantmentStorageMeta;
+import org.bukkit.inventory.meta.ItemMeta;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -83,34 +86,43 @@ public class MarketManager {
             return false;
         }
 
-        int amount = stack.getAmount();
-        if (amount <= 0) {
-            return false;
-        }
-
         if (ItemSanitizer.isDamaged(stack)) {
             player.sendMessage(ChatColor.RED + "Damaged items cannot be listed on the market.");
             return false;
         }
 
-        ItemStack template = ItemSanitizer.sanitize(stack);
-        MarketItem existingItem = databaseManager.getMarketItem(template, player.getUniqueId().toString());
-
-        if (existingItem == null) {
-            MarketItem newItem = new MarketItem(template, amount, 0, player.getUniqueId().toString());
-            databaseManager.addMarketItem(newItem);
-            player.sendMessage(ChatColor.GREEN + "Added " + amount + " " + template.getType().toString() + " to the market.");
-        } else {
-            existingItem.addQuantity(amount);
-            databaseManager.updateMarketItem(existingItem);
-            player.sendMessage(ChatColor.GREEN + "Added " + amount + " " + template.getType().toString() + " to existing market listing.");
+        List<EnchantedBookSplitter.SplitEntry> entries = EnchantedBookSplitter.split(stack);
+        if (entries.isEmpty()) {
+            return false;
         }
 
-        if (broadcast) {
+        boolean listedAny = false;
+        for (EnchantedBookSplitter.SplitEntry entry : entries) {
+            int amount = entry.getQuantity();
+            if (amount <= 0) {
+                continue;
+            }
+
+            ItemStack template = ItemSanitizer.sanitize(entry.getItemStack());
+            MarketItem existingItem = databaseManager.getMarketItem(template, player.getUniqueId().toString());
+
+            if (existingItem == null) {
+                MarketItem newItem = new MarketItem(template, amount, 0, player.getUniqueId().toString());
+                databaseManager.addMarketItem(newItem);
+                player.sendMessage(ChatColor.GREEN + "Added " + amount + " " + template.getType().toString() + " to the market.");
+            } else {
+                existingItem.addQuantity(amount);
+                databaseManager.updateMarketItem(existingItem);
+                player.sendMessage(ChatColor.GREEN + "Added " + amount + " " + template.getType().toString() + " to existing market listing.");
+            }
+            listedAny = true;
+        }
+
+        if (broadcast && listedAny) {
             plugin.getServer().broadcastMessage(ChatColor.YELLOW + player.getName() + " has added something to the market!");
         }
 
-        return true;
+        return listedAny;
     }
 
     public void buyItem(Player player, MarketItem marketItem, int quantity) {
@@ -214,6 +226,7 @@ public class MarketManager {
 
     private void performPriceRecalculation() {
         List<MarketItem> marketItems = databaseManager.getMarketItems();
+        marketItems = normalizeEnchantedBookListings(marketItems);
         if (marketItems.isEmpty()) {
             return;
         }
@@ -412,5 +425,69 @@ public class MarketManager {
             this.allocated = allocated;
             this.fractional = fractional;
         }
+    }
+
+    private List<MarketItem> normalizeEnchantedBookListings(List<MarketItem> marketItems) {
+        boolean changed = false;
+        for (MarketItem listing : marketItems) {
+            ItemStack stack = listing.getItemStack();
+            if (!needsEnchantedBookNormalization(stack)) {
+                continue;
+            }
+
+            changed = true;
+            int quantity = listing.getQuantity();
+            if (quantity <= 0) {
+                databaseManager.removeMarketItem(listing);
+                continue;
+            }
+
+            ItemStack toSplit = stack.clone();
+            toSplit.setAmount(quantity);
+            List<EnchantedBookSplitter.SplitEntry> entries = EnchantedBookSplitter.split(toSplit);
+            String sellerUuid = listing.getSellerUUID();
+
+            for (EnchantedBookSplitter.SplitEntry entry : entries) {
+                int splitQuantity = entry.getQuantity();
+                if (splitQuantity <= 0) {
+                    continue;
+                }
+                ItemStack template = ItemSanitizer.sanitize(entry.getItemStack());
+                MarketItem existing = databaseManager.getMarketItem(template, sellerUuid);
+                if (existing == null) {
+                    MarketItem newItem = new MarketItem(template, splitQuantity, 0, sellerUuid);
+                    databaseManager.addMarketItem(newItem);
+                } else {
+                    existing.addQuantity(splitQuantity);
+                    databaseManager.updateMarketItem(existing);
+                }
+            }
+
+            databaseManager.removeMarketItem(listing);
+        }
+
+        if (changed) {
+            return databaseManager.getMarketItems();
+        }
+        return marketItems;
+    }
+
+    private boolean needsEnchantedBookNormalization(ItemStack stack) {
+        if (stack == null || stack.getType() != Material.ENCHANTED_BOOK) {
+            return false;
+        }
+        ItemMeta meta = stack.getItemMeta();
+        if (!(meta instanceof EnchantmentStorageMeta)) {
+            return false;
+        }
+        Map<org.bukkit.enchantments.Enchantment, Integer> stored = ((EnchantmentStorageMeta) meta).getStoredEnchants();
+        if (stored.isEmpty()) {
+            return false;
+        }
+        if (stored.size() != 1) {
+            return true;
+        }
+        int level = stored.values().iterator().next();
+        return level != 1;
     }
 }
