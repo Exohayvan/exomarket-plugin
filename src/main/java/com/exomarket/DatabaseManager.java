@@ -16,6 +16,11 @@ public class DatabaseManager {
 
     private final ExoMarketPlugin plugin;
     private Connection connection;
+    private long lastDemandCleanup = 0L;
+    private static final long DEMAND_WINDOW_HOUR = 60L * 60L;
+    private static final long DEMAND_WINDOW_DAY = 60L * 60L * 24L;
+    private static final long DEMAND_WINDOW_MONTH = 60L * 60L * 24L * 30L;
+    private static final long DEMAND_WINDOW_YEAR = 60L * 60L * 24L * 365L;
 
     public DatabaseManager(ExoMarketPlugin plugin) {
         this.plugin = plugin;
@@ -35,6 +40,7 @@ public class DatabaseManager {
             ensureQuantityColumnType();
             ensureItemDataColumn();
             populateMissingItemData();
+            ensureDemandTable();
             ensurePlayerTable();
             ensureStatsTable();
             ensureStatsQuantityColumns();
@@ -154,6 +160,21 @@ public class DatabaseManager {
     private void ensureStatsTable() {
         try (PreparedStatement statement = connection.prepareStatement(
                 "CREATE TABLE IF NOT EXISTS market_stats (key TEXT PRIMARY KEY, items_bought TEXT DEFAULT '0', items_sold TEXT DEFAULT '0', money_spent REAL DEFAULT 0, money_earned REAL DEFAULT 0)")) {
+            statement.executeUpdate();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void ensureDemandTable() {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "CREATE TABLE IF NOT EXISTS market_demand (item_data TEXT, quantity TEXT, ts INTEGER)")) {
+            statement.executeUpdate();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        try (PreparedStatement statement = connection.prepareStatement(
+                "CREATE INDEX IF NOT EXISTS idx_market_demand_item_ts ON market_demand(item_data, ts)")) {
             statement.executeUpdate();
         } catch (SQLException e) {
             e.printStackTrace();
@@ -552,6 +573,99 @@ public class DatabaseManager {
         return stats;
     }
 
+    public synchronized void recordDemand(String itemData, BigInteger quantity) {
+        if (itemData == null || itemData.isEmpty()) {
+            return;
+        }
+        if (quantity == null || quantity.signum() <= 0) {
+            return;
+        }
+        long nowSeconds = System.currentTimeMillis() / 1000L;
+        try (PreparedStatement statement = connection.prepareStatement(
+                "INSERT INTO market_demand (item_data, quantity, ts) VALUES (?, ?, ?)")) {
+            statement.setString(1, itemData);
+            statement.setString(2, quantity.toString());
+            statement.setLong(3, nowSeconds);
+            statement.executeUpdate();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        cleanupOldDemand(nowSeconds);
+    }
+
+    public synchronized DemandStats getDemandForItem(String itemData) {
+        DemandStats stats = new DemandStats();
+        if (itemData == null || itemData.isEmpty()) {
+            return stats;
+        }
+        long nowSeconds = System.currentTimeMillis() / 1000L;
+        long earliest = nowSeconds - DEMAND_WINDOW_YEAR;
+        try (PreparedStatement statement = connection.prepareStatement(
+                "SELECT quantity, ts FROM market_demand WHERE item_data = ? AND ts >= ?")) {
+            statement.setString(1, itemData);
+            statement.setLong(2, earliest);
+            try (ResultSet rs = statement.executeQuery()) {
+                accumulateDemand(stats, rs, nowSeconds);
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return stats;
+    }
+
+    public synchronized DemandStats getDemandTotals() {
+        DemandStats stats = new DemandStats();
+        long nowSeconds = System.currentTimeMillis() / 1000L;
+        long earliest = nowSeconds - DEMAND_WINDOW_YEAR;
+        try (PreparedStatement statement = connection.prepareStatement(
+                "SELECT quantity, ts FROM market_demand WHERE ts >= ?")) {
+            statement.setLong(1, earliest);
+            try (ResultSet rs = statement.executeQuery()) {
+                accumulateDemand(stats, rs, nowSeconds);
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return stats;
+    }
+
+    private void accumulateDemand(DemandStats stats, ResultSet rs, long nowSeconds) throws SQLException {
+        while (rs.next()) {
+            BigInteger amount = parseBigInteger(rs.getString("quantity"));
+            if (amount.signum() <= 0) {
+                continue;
+            }
+            long ts = rs.getLong("ts");
+            if (ts >= nowSeconds - DEMAND_WINDOW_HOUR) {
+                stats.hour = stats.hour.add(amount);
+            }
+            if (ts >= nowSeconds - DEMAND_WINDOW_DAY) {
+                stats.day = stats.day.add(amount);
+            }
+            if (ts >= nowSeconds - DEMAND_WINDOW_MONTH) {
+                stats.month = stats.month.add(amount);
+            }
+            if (ts >= nowSeconds - DEMAND_WINDOW_YEAR) {
+                stats.year = stats.year.add(amount);
+            }
+        }
+    }
+
+    private void cleanupOldDemand(long nowSeconds) {
+        if (nowSeconds - lastDemandCleanup < 3600L) {
+            return;
+        }
+        lastDemandCleanup = nowSeconds;
+        long cutoff = nowSeconds - DEMAND_WINDOW_YEAR;
+        try (PreparedStatement statement = connection.prepareStatement(
+                "DELETE FROM market_demand WHERE ts < ?")) {
+            statement.setLong(1, cutoff);
+            statement.executeUpdate();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
     public synchronized BigInteger getTotalItemsInShop() {
         BigInteger total = BigInteger.ZERO;
         try (PreparedStatement statement = connection.prepareStatement("SELECT quantity FROM market_items");
@@ -604,5 +718,12 @@ public class DatabaseManager {
         public BigInteger itemsSold = BigInteger.ZERO;
         public double moneySpent;
         public double moneyEarned;
+    }
+
+    public static class DemandStats {
+        public BigInteger hour = BigInteger.ZERO;
+        public BigInteger day = BigInteger.ZERO;
+        public BigInteger month = BigInteger.ZERO;
+        public BigInteger year = BigInteger.ZERO;
     }
 }

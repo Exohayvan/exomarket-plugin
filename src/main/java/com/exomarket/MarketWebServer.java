@@ -84,7 +84,11 @@ public class MarketWebServer {
                 .append("<p class=\"pill\">Port ").append(port).append("</p>")
                 .append("<table id=\"market-table\"><thead><tr>")
                 .append("<th data-type=\"text\">Item</th>")
-                .append("<th data-type=\"number\">Total Quantity</th>")
+                .append("<th data-type=\"bigint\">Supply</th>")
+                .append("<th data-type=\"bigint\">Demand 1h</th>")
+                .append("<th data-type=\"bigint\">Demand 1d</th>")
+                .append("<th data-type=\"bigint\">Demand 1mo</th>")
+                .append("<th data-type=\"bigint\">Demand 1y</th>")
                 .append("<th data-type=\"number\">Listings</th>")
                 .append("<th data-type=\"number\">Lowest Price</th>")
                 .append("<th data-type=\"text\"></th>")
@@ -97,6 +101,14 @@ public class MarketWebServer {
                     .append(escapeHtml(aggregate.displayName)).append("</td>")
                     .append("<td data-value=\"").append(aggregate.totalQuantity.toString()).append("\">")
                     .append(QuantityFormatter.format(aggregate.totalQuantity)).append("</td>")
+                    .append("<td data-value=\"").append(aggregate.demandHour.toString()).append("\">")
+                    .append(QuantityFormatter.format(aggregate.demandHour)).append("</td>")
+                    .append("<td data-value=\"").append(aggregate.demandDay.toString()).append("\">")
+                    .append(QuantityFormatter.format(aggregate.demandDay)).append("</td>")
+                    .append("<td data-value=\"").append(aggregate.demandMonth.toString()).append("\">")
+                    .append(QuantityFormatter.format(aggregate.demandMonth)).append("</td>")
+                    .append("<td data-value=\"").append(aggregate.demandYear.toString()).append("\">")
+                    .append(QuantityFormatter.format(aggregate.demandYear)).append("</td>")
                     .append("<td data-value=\"").append(aggregate.listingCount).append("\">")
                     .append(aggregate.listingCount).append("</td>")
                     .append("<td data-value=\"").append(aggregate.lowestPrice).append("\">")
@@ -107,7 +119,7 @@ public class MarketWebServer {
         }
 
         if (aggregates.isEmpty()) {
-            body.append("<tr><td colspan=\"5\">No items are listed right now.</td></tr>");
+            body.append("<tr><td colspan=\"9\">No items are listed right now.</td></tr>");
         }
 
         body.append("</tbody></table>")
@@ -117,7 +129,8 @@ public class MarketWebServer {
                 .append("const tbody=table.querySelector('tbody');")
                 .append("let sortIndex=-1,sortDir=1;")
                 .append("function clearSort(){headers.forEach(h=>h.classList.remove('sort-asc','sort-desc'));}")
-                .append("function getValue(cell,type){const raw=cell.getAttribute('data-value')||cell.textContent||'';")
+                .append("function getValue(cell,type){const raw=(cell.getAttribute('data-value')||cell.textContent||'').trim();")
+                .append("if(type==='bigint'){try{return BigInt(raw);}catch(e){return 0n;}}")
                 .append("return type==='number'?parseFloat(raw)||0:raw.toLowerCase();}")
                 .append("headers.forEach((header,idx)=>{")
                 .append("header.addEventListener('click',()=>{")
@@ -167,6 +180,7 @@ public class MarketWebServer {
         BigInteger totalQuantity = listings.stream()
                 .map(MarketItem::getQuantity)
                 .reduce(BigInteger.ZERO, BigInteger::add);
+        DatabaseManager.DemandStats demand = databaseManager.getDemandForItem(itemData);
         StringBuilder body = new StringBuilder();
         body.append("<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">")
                 .append("<title>").append(escapeHtml(itemName)).append(" | ExoMarket</title>")
@@ -180,8 +194,12 @@ public class MarketWebServer {
                 .append("</style></head><body>")
                 .append("<a href=\"/\">&#8592; Back to list</a>")
                 .append("<h1>").append(escapeHtml(itemName)).append("</h1>")
-                .append("<p>Total quantity available: ").append(QuantityFormatter.format(totalQuantity)).append("</p>")
-                .append("<table><thead><tr><th>Seller</th><th>Quantity</th><th>Price (each)</th></tr></thead><tbody>");
+                .append("<p>Total supply available: ").append(QuantityFormatter.format(totalQuantity)).append("</p>")
+                .append("<p>Demand 1h: ").append(QuantityFormatter.format(demand.hour))
+                .append(" | 1d: ").append(QuantityFormatter.format(demand.day))
+                .append(" | 1mo: ").append(QuantityFormatter.format(demand.month))
+                .append(" | 1y: ").append(QuantityFormatter.format(demand.year)).append("</p>")
+                .append("<table><thead><tr><th>Seller</th><th>Supply</th><th>Price (each)</th></tr></thead><tbody>");
 
         for (MarketItem listing : listings) {
             body.append("<tr>")
@@ -201,6 +219,11 @@ public class MarketWebServer {
             Aggregate aggregate = aggregates.get(item.getItemData());
             if (aggregate == null) {
                 aggregate = new Aggregate(item.getItemStack(), item.getItemData());
+                DatabaseManager.DemandStats demand = databaseManager.getDemandForItem(item.getItemData());
+                aggregate.demandHour = demand.hour;
+                aggregate.demandDay = demand.day;
+                aggregate.demandMonth = demand.month;
+                aggregate.demandYear = demand.year;
                 aggregates.put(item.getItemData(), aggregate);
             }
             aggregate.totalQuantity = aggregate.totalQuantity.add(item.getQuantity());
@@ -287,6 +310,10 @@ public class MarketWebServer {
         private final String displayName;
         private final String itemData;
         private BigInteger totalQuantity = BigInteger.ZERO;
+        private BigInteger demandHour = BigInteger.ZERO;
+        private BigInteger demandDay = BigInteger.ZERO;
+        private BigInteger demandMonth = BigInteger.ZERO;
+        private BigInteger demandYear = BigInteger.ZERO;
         private int listingCount = 0;
         private double lowestPrice = Double.MAX_VALUE;
 

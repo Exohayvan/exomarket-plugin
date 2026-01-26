@@ -193,6 +193,8 @@ public class MarketManager {
         itemToGive.setAmount(quantity);
         player.getInventory().addItem(itemToGive);
 
+        databaseManager.recordDemand(itemData, requested);
+
         player.sendMessage(ChatColor.GREEN + "You have successfully bought " + quantity + " " +
                 template.getType().toString() + " for " + CurrencyFormatter.format(totalCost));
 
@@ -264,6 +266,8 @@ public class MarketManager {
 
         ItemStack itemToGive = buildEnchantedBook(template, level, quantity);
         player.getInventory().addItem(itemToGive);
+
+        databaseManager.recordDemand(itemData, requiredUnits);
 
         player.sendMessage(ChatColor.GREEN + "You have successfully bought " + quantity + " " +
                 ItemDisplayNameFormatter.format(itemToGive) + " for " + CurrencyFormatter.format(totalCost));
@@ -377,9 +381,22 @@ public class MarketManager {
 
         double averageQuantity = Math.max(1d, toDoubleCapped(totalItems) / aggregates.size());
         double averageListings = Math.max(1d, (double) totalListings / aggregates.size());
+        BigInteger totalDemand = BigInteger.ZERO;
+        for (Aggregate aggregate : aggregates.values()) {
+            String itemData = aggregate.getItemData();
+            if (itemData != null && !itemData.isEmpty()) {
+                DatabaseManager.DemandStats demand = databaseManager.getDemandForItem(itemData);
+                aggregate.demandMetric = DemandMetric.summarize(demand);
+            } else {
+                aggregate.demandMetric = BigInteger.ZERO;
+            }
+            totalDemand = totalDemand.add(aggregate.demandMetric);
+        }
+        double averageDemand = Math.max(1d, toDoubleCapped(totalDemand) / aggregates.size());
 
         double quantityExponent = 0.65;
         double listingExponent = 0.35;
+        double demandExponent = 0.50;
         double minWeight = 1e-3;
         double maxWeight = 5.0;
 
@@ -387,7 +404,9 @@ public class MarketManager {
             double aggregateQuantity = Math.max(1d, toDoubleCapped(aggregate.totalQuantity));
             double quantityFactor = Math.pow(averageQuantity / aggregateQuantity, quantityExponent);
             double listingFactor = Math.pow(averageListings / Math.max(1d, aggregate.listingCount), listingExponent);
-            double weight = quantityFactor * listingFactor;
+            double demandValue = Math.max(0d, toDoubleCapped(aggregate.demandMetric));
+            double demandFactor = Math.pow((demandValue + 1d) / (averageDemand + 1d), demandExponent);
+            double weight = quantityFactor * listingFactor * demandFactor;
             if (!Double.isFinite(weight) || weight < minWeight) {
                 weight = minWeight;
             } else if (weight > maxWeight) {
@@ -456,7 +475,7 @@ public class MarketManager {
             totalAppliedValue += commodityValue;
             double marketShare = totalMarketValue > 0 ? (commodityValue / totalMarketValue) * 100 : 0;
             plugin.getLogger().info("Updated price for " + aggregate.getCommodityName() + " to " + CurrencyFormatter.format(finalPrice) +
-                    " (quantity: " + aggregate.totalQuantity.toString() + ", market share: " +
+                    " (supply: " + aggregate.totalQuantity.toString() + ", market share: " +
                 String.format("%.2f%%", marketShare) + ")");
         }
 
@@ -474,6 +493,7 @@ public class MarketManager {
         private MarketItem representative;
         private double weight = 1d;
         private double assignedValue = 0d;
+        private BigInteger demandMetric = BigInteger.ZERO;
 
         void addListing(MarketItem item) {
             if (representative == null) {
@@ -489,6 +509,13 @@ public class MarketManager {
                 return "Unknown";
             }
             return representative.getType().toString();
+        }
+
+        String getItemData() {
+            if (representative == null) {
+                return "";
+            }
+            return representative.getItemData();
         }
     }
 

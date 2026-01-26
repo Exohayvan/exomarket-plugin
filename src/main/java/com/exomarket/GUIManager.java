@@ -33,6 +33,7 @@ public class GUIManager implements Listener {
         private final Set<String> sellers = new HashSet<>();
         private BigInteger totalQuantity = BigInteger.ZERO;
         private double pricePerItem;
+        private DatabaseManager.DemandStats demand = new DatabaseManager.DemandStats();
 
         AggregatedListing(String itemData, ItemStack template, double pricePerItem) {
             this.itemData = itemData;
@@ -63,6 +64,10 @@ public class GUIManager implements Listener {
             return pricePerItem;
         }
 
+        void setDemand(DatabaseManager.DemandStats demand) {
+            this.demand = demand == null ? new DatabaseManager.DemandStats() : demand;
+        }
+
         int getSellerCount() {
             return sellers.size();
         }
@@ -86,8 +91,9 @@ public class GUIManager implements Listener {
                 if (!lore.isEmpty()) {
                     lore.add(ChatColor.DARK_GRAY + "" + ChatColor.STRIKETHROUGH + "----------------");
                 }
-                lore.add(ChatColor.GRAY + "Price: " + CurrencyFormatter.format(pricePerItem));
-                lore.add(ChatColor.GRAY + "Quantity: " + QuantityFormatter.format(totalQuantity));
+                lore.add(ChatColor.GRAY + "Price: " + ChatColor.GOLD + CurrencyFormatter.format(pricePerItem));
+                lore.add(ChatColor.GRAY + "Supply: " + QuantityFormatter.format(totalQuantity));
+                lore.add(ChatColor.GRAY + "Demand: " + QuantityFormatter.format(DemandMetric.summarize(demand)));
                 lore.add(ChatColor.GRAY + "Sellers: " + getSellerCount());
                 if (!displayItem.getEnchantments().isEmpty()) {
                     displayItem.getEnchantments().forEach((enchantment, level) ->
@@ -158,7 +164,7 @@ public class GUIManager implements Listener {
         meta.setDisplayName(ChatColor.GOLD + name);
         List<String> lore = new ArrayList<>();
         lore.add(ChatColor.GRAY + "Click to buy " + quantity);
-        lore.add(ChatColor.GRAY + "Total: " + CurrencyFormatter.format(totalCost));
+        lore.add(ChatColor.GRAY + "Total: " + ChatColor.GOLD + CurrencyFormatter.format(totalCost));
         meta.setLore(lore);
         item.setItemMeta(meta);
         return item;
@@ -270,6 +276,7 @@ public class GUIManager implements Listener {
             }
 
             AggregatedListing listing = aggregatedListings.get(listIndex);
+            listing.setDemand(databaseManager.getDemandForItem(listing.getItemData()));
             ItemStack displayItem = listing.createDisplayItem();
             inventory.setItem(slot, displayItem);
             slotsToItems.put(slot, listing);
@@ -378,7 +385,7 @@ public class GUIManager implements Listener {
             List<String> lore = new ArrayList<>();
             lore.add(ChatColor.GRAY + "Level: " + level);
             lore.add(ChatColor.GRAY + "Requires: " + QuantityFormatter.format(required) + " level I book(s)");
-            lore.add(ChatColor.GRAY + "Price: " + CurrencyFormatter.format(pricePerBook));
+            lore.add(ChatColor.GRAY + "Price: " + ChatColor.GOLD + CurrencyFormatter.format(pricePerBook));
             displayMeta.setLore(lore);
             book.setItemMeta(displayMeta);
         }

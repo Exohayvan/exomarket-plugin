@@ -96,12 +96,14 @@ public class MarketItemsGUI implements Listener {
                 if (!meta.hasDisplayName()) {
                     meta.setDisplayName(ChatColor.GOLD + ItemDisplayNameFormatter.format(display));
                 }
+                DatabaseManager.DemandStats demand = databaseManager.getDemandForItem(listing.getItemData());
                 List<String> lore = meta.hasLore() ? new ArrayList<>(meta.getLore()) : new ArrayList<>();
                 if (!lore.isEmpty()) {
                     lore.add(ChatColor.DARK_GRAY + "" + ChatColor.STRIKETHROUGH + "----------------");
                 }
-                lore.add(ChatColor.GRAY + "Quantity: " + QuantityFormatter.format(listing.getQuantity()));
-                lore.add(ChatColor.GRAY + "Price: " + CurrencyFormatter.format(listing.getPrice()));
+                lore.add(ChatColor.GRAY + "Supply: " + QuantityFormatter.format(listing.getQuantity()));
+                lore.add(ChatColor.GRAY + "Demand: " + QuantityFormatter.format(DemandMetric.summarize(demand)));
+                lore.add(ChatColor.GRAY + "Price: " + ChatColor.GOLD + CurrencyFormatter.format(listing.getPrice()));
                 meta.setLore(lore);
                 display.setItemMeta(meta);
             }

@@ -256,10 +256,15 @@ public class ExoMarketPlugin extends JavaPlugin {
         player.sendMessage(ChatColor.GOLD + "Market Totals");
         player.sendMessage(ChatColor.GRAY + "Listings: " + totalListings +
                 " | Unique items: " + uniqueItems.size());
-        player.sendMessage(ChatColor.GRAY + "Quantity listed: " + QuantityFormatter.format(totalQuantity));
+        player.sendMessage(ChatColor.GRAY + "Supply listed: " + QuantityFormatter.format(totalQuantity));
         player.sendMessage(ChatColor.GRAY + "Listed value: " + CurrencyFormatter.format(totalValue));
         player.sendMessage(ChatColor.GRAY + "Items traded: " + QuantityFormatter.format(global.itemsSold) +
                 " | Value traded: " + CurrencyFormatter.format(global.moneyEarned));
+        DatabaseManager.DemandStats demandTotals = databaseManager.getDemandTotals();
+        player.sendMessage(ChatColor.GRAY + "Demand 1h: " + QuantityFormatter.format(demandTotals.hour) +
+                " | 1d: " + QuantityFormatter.format(demandTotals.day) +
+                " | 1mo: " + QuantityFormatter.format(demandTotals.month) +
+                " | 1y: " + QuantityFormatter.format(demandTotals.year));
 
         List<MarketItem> owned = databaseManager.getMarketItemsByOwner(player.getUniqueId().toString());
         int ownedListings = owned.size();
@@ -278,7 +283,7 @@ public class ExoMarketPlugin extends JavaPlugin {
         player.sendMessage(ChatColor.GOLD + "Your Market Stats");
         player.sendMessage(ChatColor.GRAY + "Listings: " + ownedListings +
                 " | Unique items: " + ownedUnique.size());
-        player.sendMessage(ChatColor.GRAY + "Quantity listed: " + QuantityFormatter.format(ownedQuantity));
+        player.sendMessage(ChatColor.GRAY + "Supply listed: " + QuantityFormatter.format(ownedQuantity));
         player.sendMessage(ChatColor.GRAY + "Listed value: " + CurrencyFormatter.format(ownedValue));
         player.sendMessage(ChatColor.GRAY + "Items sold: " + QuantityFormatter.format(personal.itemsSold) +
                 " | Earned: " + CurrencyFormatter.format(personal.moneyEarned));
