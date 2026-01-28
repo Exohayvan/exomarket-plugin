@@ -442,10 +442,12 @@ public class GUIManager implements Listener {
             if (clickedItem != null && !clickedItem.getType().isAir()) {
                 int rawSlot = event.getRawSlot();
                 if (rawSlot == 48 && clickedItem.getType() == Material.ARROW) {
-                    currentPage.put(player, currentPage.get(player) - 1);
+                    int page = currentPage.getOrDefault(player, 1);
+                    currentPage.put(player, Math.max(1, page - 1));
                     openMarketPage(player);
                 } else if (rawSlot == 50 && clickedItem.getType() == Material.ARROW) {
-                    currentPage.put(player, currentPage.get(player) + 1);
+                    int page = currentPage.getOrDefault(player, 1);
+                    currentPage.put(player, page + 1);
                     openMarketPage(player);
                 } else {
                     Map<Integer, AggregatedListing> slots = pageItems.get(player);
