@@ -2,13 +2,13 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>com.exomarket</groupId>
-    <artifactId>ExoMarketPlugin</artifactId>
-    <version>2.3.2</version>
+    <groupId>com.starhavensmpcore</groupId>
+    <artifactId>StarhavenSMPCore</artifactId>
+    <version>3.0.0</version>
     <packaging>jar</packaging>
 
-    <name>ExoMarketPlugin</name>
-    <description>ExoMarketPlugin</description>
+    <name>StarhavenSMPCore</name>
+    <description>StarhavenSMPCore</description>
 
     <properties>
         <maven.compiler.source>11</maven.compiler.source>
