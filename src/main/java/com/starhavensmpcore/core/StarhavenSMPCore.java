@@ -12,6 +12,7 @@ import com.starhavensmpcore.market.gui.MarketItemsGUI;
 import com.starhavensmpcore.market.gui.MarketSellGUI;
 import com.starhavensmpcore.market.placeholders.ExoMarketPlaceholders;
 import com.starhavensmpcore.market.web.MarketWebServer;
+import com.starhavensmpcore.resourcepack.ResourcePackManager;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
@@ -41,6 +42,7 @@ public class StarhavenSMPCore extends JavaPlugin {
     private MarketItemsGUI marketItemsGUI;
     private MarketWebServer marketWebServer;
     private ExoMarketPlaceholders placeholders;
+    private ResourcePackManager resourcePackManager;
     private double marketValueMultiplier;
     private double maxPricePercent;
     private double minPrice;
@@ -79,11 +81,13 @@ public class StarhavenSMPCore extends JavaPlugin {
         marketItemsGUI = new MarketItemsGUI(this, marketManager, databaseManager);
         marketWebServer = new MarketWebServer(this, databaseManager, WEB_PORT);
         placeholders = new ExoMarketPlaceholders(this, databaseManager);
+        resourcePackManager = new ResourcePackManager(this);
 
         getServer().getPluginManager().registerEvents(guiManager, this);
         getServer().getPluginManager().registerEvents(autoSellManager, this);
         getServer().getPluginManager().registerEvents(marketSellGUI, this);
         getServer().getPluginManager().registerEvents(marketItemsGUI, this);
+        getServer().getPluginManager().registerEvents(resourcePackManager, this);
         
         // Register commands and set tab completers
         getCommand("market").setExecutor(this);
@@ -123,6 +127,9 @@ public class StarhavenSMPCore extends JavaPlugin {
         maxPricePercent = config.getDouble("MarketManager.MaxPricePercent") / 100;
         minPrice = config.getDouble("MarketManager.MinPrice");
         CurrencyFormatter.setSymbol(config.getString("CurrencySymbol", "⚚Ɍ"));
+        if (resourcePackManager != null) {
+            resourcePackManager.reload();
+        }
     }
 
     @Override

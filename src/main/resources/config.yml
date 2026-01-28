@@ -4,3 +4,14 @@ MarketManager:
   MinPrice: 0.01
 
 CurrencySymbol: "⚚Ɍ"
+
+ResourcePack:
+  Enabled: false
+  GitHubOwner: ""
+  GitHubRepo: ""
+  AssetPrefix: "StarhavenSMP-ResourcePack-"
+  AssetName: ""
+  Prompt: "This server requires the StarhavenSMP resource pack."
+  Force: true
+  RefreshSeconds: 3600
+  GitHubToken: ""
