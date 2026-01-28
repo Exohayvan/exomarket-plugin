@@ -89,8 +89,11 @@ public class ResourcePackManager implements Listener {
     private void loadConfig() {
         FileConfiguration config = loadConfigFile();
         enabled = config.getBoolean("ResourcePack.Enabled", false);
-        githubOwner = config.getString("ResourcePack.GitHubOwner", "").trim();
-        githubRepo = config.getString("ResourcePack.GitHubRepo", "").trim();
+        String ownerConfig = config.getString("ResourcePack.GitHubOwner", "").trim();
+        String repoConfig = config.getString("ResourcePack.GitHubRepo", "").trim();
+        RepoInfo repoInfo = normalizeRepo(ownerConfig, repoConfig);
+        githubOwner = repoInfo.owner;
+        githubRepo = repoInfo.repo;
         assetPrefix = config.getString("ResourcePack.AssetPrefix", "StarhavenSMP-ResourcePack-").trim();
         assetName = config.getString("ResourcePack.AssetName", "").trim();
         prompt = config.getString("ResourcePack.Prompt", "This server requires the StarhavenSMP resource pack.");
@@ -233,6 +236,53 @@ public class ResourcePackManager implements Listener {
             connection.setRequestProperty("Authorization", "token " + githubToken);
         }
         return connection;
+    }
+
+    private RepoInfo normalizeRepo(String ownerConfig, String repoConfig) {
+        String owner = ownerConfig == null ? "" : ownerConfig.trim();
+        String repo = repoConfig == null ? "" : repoConfig.trim();
+
+        if (!repo.isEmpty()) {
+            String candidate = repo;
+            if (candidate.startsWith("http://") || candidate.startsWith("https://")) {
+                try {
+                    URL url = new URL(candidate);
+                    String path = url.getPath();
+                    if (path != null) {
+                        String trimmed = path.startsWith("/") ? path.substring(1) : path;
+                        String[] parts = trimmed.split("/");
+                        if (parts.length >= 2) {
+                            owner = parts[0];
+                            repo = parts[1];
+                        }
+                    }
+                } catch (IOException ignored) {
+                    // Fall back to other parsing paths.
+                }
+            } else if (candidate.contains("/")) {
+                String[] parts = candidate.split("/");
+                if (parts.length >= 2) {
+                    owner = parts[0];
+                    repo = parts[1];
+                }
+            }
+        }
+
+        if (repo.endsWith(".git")) {
+            repo = repo.substring(0, repo.length() - 4);
+        }
+
+        return new RepoInfo(owner, repo);
+    }
+
+    private static final class RepoInfo {
+        private final String owner;
+        private final String repo;
+
+        private RepoInfo(String owner, String repo) {
+            this.owner = owner == null ? "" : owner;
+            this.repo = repo == null ? "" : repo;
+        }
     }
 
     private static class Release {

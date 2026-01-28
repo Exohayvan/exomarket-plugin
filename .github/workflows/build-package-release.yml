@@ -43,7 +43,7 @@ jobs:
           version="${{ steps.version_info.outputs.version }}"
           resource_pack_name="StarhavenSMP-ResourcePack-${version}.zip"
           mkdir -p target
-          zip -r "target/${resource_pack_name}" "src/main/resources/resourcepack"
+          (cd src/main/resources/resourcepack && zip -r "$GITHUB_WORKSPACE/target/${resource_pack_name}" .)
           echo "resource_pack_name=$resource_pack_name" >> $GITHUB_OUTPUT
 
       - name: Get built JAR file name
