@@ -218,10 +218,28 @@ public class ResourcePackManager implements Listener {
                 }
             }
 
+            deleteOtherPacks(cacheDir, target.getName());
             return digest.digest();
         } catch (IOException | NoSuchAlgorithmException e) {
             plugin.getLogger().warning("Failed to download resource pack asset: " + e.getMessage());
             return null;
+        }
+    }
+
+    private void deleteOtherPacks(File cacheDir, String keepName) {
+        File[] files = cacheDir.listFiles();
+        if (files == null) {
+            return;
+        }
+        for (File file : files) {
+            if (file.isDirectory()) {
+                continue;
+            }
+            if (!file.getName().equals(keepName)) {
+                if (!file.delete()) {
+                    plugin.getLogger().warning("Failed to delete old resource pack " + file.getName());
+                }
+            }
         }
     }
 
