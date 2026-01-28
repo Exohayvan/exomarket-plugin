@@ -42,7 +42,8 @@ jobs:
         run: |
           version="${{ steps.version_info.outputs.version }}"
           resource_pack_name="StarhavenSMP-ResourcePack-${version}.zip"
-          cp src/main/resources/resourcepack.zip "target/${resource_pack_name}"
+          cd src/main/resources/resourcepack
+          zip -r "../../../target/${resource_pack_name}" .
           echo "resource_pack_name=$resource_pack_name" >> $GITHUB_OUTPUT
 
       - name: Get built JAR file name
