@@ -1,0 +1,6 @@
+{
+  "variants": {
+    "instrument=flute,note=12,powered=false": { "model": "minecraft:block/voidstone_ore" },
+    "instrument=flute,note=12,powered=true": { "model": "minecraft:block/voidstone_ore" }
+  }
+}
