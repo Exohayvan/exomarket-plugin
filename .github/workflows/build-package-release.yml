@@ -1,4 +1,4 @@
-name: Build and Release Minecraft Plugin
+name: Build Package Release
 
 on:
   push:
@@ -30,6 +30,20 @@ jobs:
 
       - name: Build with Maven
         run: mvn clean package
+
+      - name: Get project version
+        id: version_info
+        run: |
+          version=$(mvn -q -DforceStdout help:evaluate -Dexpression=project.version)
+          echo "version=$version" >> $GITHUB_OUTPUT
+
+      - name: Prepare resource pack artifact
+        id: resource_pack
+        run: |
+          version="${{ steps.version_info.outputs.version }}"
+          resource_pack_name="StarhavenSMP-ResourcePack-${version}.zip"
+          cp src/main/resources/resourcepack.zip "target/${resource_pack_name}"
+          echo "resource_pack_name=$resource_pack_name" >> $GITHUB_OUTPUT
 
       - name: Get built JAR file name
         id: jar_info
@@ -102,6 +116,17 @@ jobs:
           asset_path: target/${{ steps.jar_info.outputs.jar_file }}
           asset_name: ${{ steps.jar_info.outputs.jar_file }}
           asset_content_type: application/java-archive
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Resource Pack Asset
+        if: steps.check_release.outputs.release_exists == 'false'
+        uses: actions/upload-release-asset@v1
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: target/${{ steps.resource_pack.outputs.resource_pack_name }}
+          asset_name: ${{ steps.resource_pack.outputs.resource_pack_name }}
+          asset_content_type: application/zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
