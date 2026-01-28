@@ -1,5 +1,7 @@
-package com.exomarket;
+package com.starhavensmpcore.market;
 
+import com.starhavensmpcore.core.StarhavenSMPCore;
+import com.starhavensmpcore.market.items.ItemSanitizer;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.entity.Player;
@@ -35,12 +37,12 @@ public class AutoSellManager implements Listener, CommandExecutor {
     private static final int NEXT_SLOT = 50;
     private static final int INFO_SLOT = 49;
 
-    private final ExoMarketPlugin plugin;
+    private final StarhavenSMPCore plugin;
     private final Map<UUID, Inventory> autoSellInventories;
     private final Map<UUID, Integer> currentPage;
     private Connection connection;
 
-    public AutoSellManager(ExoMarketPlugin plugin) {
+    public AutoSellManager(StarhavenSMPCore plugin) {
         this.plugin = plugin;
         this.autoSellInventories = new HashMap<>();
         this.currentPage = new HashMap<>();
@@ -50,7 +52,7 @@ public class AutoSellManager implements Listener, CommandExecutor {
 
     private void setupDatabase() {
         try {
-            connection = DriverManager.getConnection("jdbc:sqlite:plugins/ExoMarketPlugin/autosell.db");
+            connection = DriverManager.getConnection("jdbc:sqlite:plugins/StarhavenSMPCore/autosell.db");
             Statement stmt = connection.createStatement();
             stmt.execute("CREATE TABLE IF NOT EXISTS autosell_items (uuid TEXT, item TEXT)");
             stmt.close();

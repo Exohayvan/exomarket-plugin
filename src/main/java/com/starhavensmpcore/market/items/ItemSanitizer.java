@@ -1,4 +1,4 @@
-package com.exomarket;
+package com.starhavensmpcore.market.items;
 
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;

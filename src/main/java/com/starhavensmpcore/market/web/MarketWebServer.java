@@ -1,5 +1,11 @@
-package com.exomarket;
+package com.starhavensmpcore.market.web;
 
+import com.starhavensmpcore.core.StarhavenSMPCore;
+import com.starhavensmpcore.market.MarketItem;
+import com.starhavensmpcore.market.db.DatabaseManager;
+import com.starhavensmpcore.market.economy.CurrencyFormatter;
+import com.starhavensmpcore.market.economy.QuantityFormatter;
+import com.starhavensmpcore.market.items.ItemDisplayNameFormatter;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import org.bukkit.OfflinePlayer;
@@ -23,12 +29,12 @@ import java.util.concurrent.Executors;
  */
 @SuppressWarnings("restriction")
 public class MarketWebServer {
-    private final ExoMarketPlugin plugin;
+    private final StarhavenSMPCore plugin;
     private final DatabaseManager databaseManager;
     private final int port;
     private HttpServer server;
 
-    public MarketWebServer(ExoMarketPlugin plugin, DatabaseManager databaseManager, int port) {
+    public MarketWebServer(StarhavenSMPCore plugin, DatabaseManager databaseManager, int port) {
         this.plugin = plugin;
         this.databaseManager = databaseManager;
         this.port = port;

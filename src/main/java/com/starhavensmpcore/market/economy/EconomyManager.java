@@ -1,5 +1,6 @@
-package com.exomarket;
+package com.starhavensmpcore.market.economy;
 
+import com.starhavensmpcore.core.StarhavenSMPCore;
 import org.bukkit.entity.Player;
 import net.milkbowl.vault.economy.Economy;
 import org.bukkit.Bukkit;
@@ -10,10 +11,10 @@ import java.io.File;
 
 public class EconomyManager {
 
-    private ExoMarketPlugin plugin;
+    private StarhavenSMPCore plugin;
     private Economy economy;
 
-    public EconomyManager(ExoMarketPlugin plugin) {
+    public EconomyManager(StarhavenSMPCore plugin) {
         this.plugin = plugin;
         this.economy = Bukkit.getServicesManager().getRegistration(Economy.class).getProvider();
     }

@@ -1,5 +1,14 @@
-package com.exomarket;
+package com.starhavensmpcore.market.gui;
 
+import com.starhavensmpcore.core.StarhavenSMPCore;
+import com.starhavensmpcore.market.DemandMetric;
+import com.starhavensmpcore.market.MarketItem;
+import com.starhavensmpcore.market.MarketManager;
+import com.starhavensmpcore.market.db.DatabaseManager;
+import com.starhavensmpcore.market.economy.CurrencyFormatter;
+import com.starhavensmpcore.market.economy.QuantityFormatter;
+import com.starhavensmpcore.market.items.ItemDisplayNameFormatter;
+import com.starhavensmpcore.market.items.ItemSanitizer;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
@@ -26,7 +35,7 @@ public class MarketItemsGUI implements Listener {
     private static final String REMOVE_TITLE = "Remove Amount";
     private static final String REMOVE_LEVEL_TITLE = "Remove Enchant Level";
 
-    private final ExoMarketPlugin plugin;
+    private final StarhavenSMPCore plugin;
     private final MarketManager marketManager;
     private final DatabaseManager databaseManager;
     private final Map<UUID, MarketItem> selectedItem = new HashMap<>();
@@ -35,7 +44,7 @@ public class MarketItemsGUI implements Listener {
     private final Map<UUID, Map<Integer, MarketItem>> pageItems = new HashMap<>();
     private final Map<UUID, String> currentFilter = new HashMap<>();
 
-    public MarketItemsGUI(ExoMarketPlugin plugin, MarketManager marketManager, DatabaseManager databaseManager) {
+    public MarketItemsGUI(StarhavenSMPCore plugin, MarketManager marketManager, DatabaseManager databaseManager) {
         this.plugin = plugin;
         this.marketManager = marketManager;
         this.databaseManager = databaseManager;

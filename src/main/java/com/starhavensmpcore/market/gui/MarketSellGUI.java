@@ -1,5 +1,8 @@
-package com.exomarket;
+package com.starhavensmpcore.market.gui;
 
+import com.starhavensmpcore.core.StarhavenSMPCore;
+import com.starhavensmpcore.market.MarketManager;
+import com.starhavensmpcore.market.items.ItemSanitizer;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
@@ -21,12 +24,12 @@ import java.util.UUID;
 public class MarketSellGUI implements Listener {
 
     private static final String INVENTORY_TITLE = "Market Sell";
-    private final ExoMarketPlugin plugin;
+    private final StarhavenSMPCore plugin;
     private final MarketManager marketManager;
     private final Map<UUID, Inventory> openInventories = new HashMap<>();
     private final ItemStack infoItem;
 
-    public MarketSellGUI(ExoMarketPlugin plugin, MarketManager marketManager) {
+    public MarketSellGUI(StarhavenSMPCore plugin, MarketManager marketManager) {
         this.plugin = plugin;
         this.marketManager = marketManager;
         this.infoItem = createInfoItem();

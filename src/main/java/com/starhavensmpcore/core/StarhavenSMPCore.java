@@ -1,5 +1,17 @@
-package com.exomarket;
+package com.starhavensmpcore.core;
 
+import com.starhavensmpcore.market.AutoSellManager;
+import com.starhavensmpcore.market.MarketItem;
+import com.starhavensmpcore.market.MarketManager;
+import com.starhavensmpcore.market.db.DatabaseManager;
+import com.starhavensmpcore.market.economy.CurrencyFormatter;
+import com.starhavensmpcore.market.economy.EconomyManager;
+import com.starhavensmpcore.market.economy.QuantityFormatter;
+import com.starhavensmpcore.market.gui.GUIManager;
+import com.starhavensmpcore.market.gui.MarketItemsGUI;
+import com.starhavensmpcore.market.gui.MarketSellGUI;
+import com.starhavensmpcore.market.placeholders.ExoMarketPlaceholders;
+import com.starhavensmpcore.market.web.MarketWebServer;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
@@ -13,12 +25,12 @@ import java.math.BigInteger;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import java.util.ArrayList;
-import java.util.List;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
-public class ExoMarketPlugin extends JavaPlugin {
+public class StarhavenSMPCore extends JavaPlugin {
 
     private MarketManager marketManager;
     private GUIManager guiManager;

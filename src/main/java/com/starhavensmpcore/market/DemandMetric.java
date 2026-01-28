@@ -1,5 +1,6 @@
-package com.exomarket;
+package com.starhavensmpcore.market;
 
+import com.starhavensmpcore.market.db.DatabaseManager;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.math.RoundingMode;

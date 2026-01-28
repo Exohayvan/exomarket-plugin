@@ -1,4 +1,4 @@
-package com.exomarket;
+package com.starhavensmpcore.market.economy;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;

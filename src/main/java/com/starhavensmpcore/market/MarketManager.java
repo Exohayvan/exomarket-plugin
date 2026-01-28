@@ -1,9 +1,12 @@
-/**
- * This is the package declaration for the com.exomarket namespace, which contains the classes and interfaces related to the ExoMarket plugin.
- * The selected code includes the necessary imports for the MarketManager class, including Bukkit classes for Materials, Players, and ItemStacks, as well as the ChatColor utility class.
- */
-package com.exomarket;
+package com.starhavensmpcore.market;
 
+import com.starhavensmpcore.core.StarhavenSMPCore;
+import com.starhavensmpcore.market.db.DatabaseManager;
+import com.starhavensmpcore.market.economy.CurrencyFormatter;
+import com.starhavensmpcore.market.economy.EconomyManager;
+import com.starhavensmpcore.market.items.EnchantedBookSplitter;
+import com.starhavensmpcore.market.items.ItemDisplayNameFormatter;
+import com.starhavensmpcore.market.items.ItemSanitizer;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
@@ -22,10 +25,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 import org.bukkit.OfflinePlayer;
 
-
 public class MarketManager {
 
-    private ExoMarketPlugin plugin;
+    private StarhavenSMPCore plugin;
     private DatabaseManager databaseManager;
     private EconomyManager economyManager;
     private double marketValueMultiplier;
@@ -39,7 +41,7 @@ public class MarketManager {
     private final Object recalculationCallbackLock = new Object();
     private final List<RecalculationCallback> recalculationCallbacks = new ArrayList<>();
 
-    public MarketManager(ExoMarketPlugin plugin, DatabaseManager databaseManager, EconomyManager economyManager, double marketValueMultiplier, double maxPricePercent, double minPrice) {
+    public MarketManager(StarhavenSMPCore plugin, DatabaseManager databaseManager, EconomyManager economyManager, double marketValueMultiplier, double maxPricePercent, double minPrice) {
         this.plugin = plugin;
         this.databaseManager = databaseManager;
         this.economyManager = economyManager;

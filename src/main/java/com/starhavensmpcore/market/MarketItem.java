@@ -1,5 +1,7 @@
-package com.exomarket;
+package com.starhavensmpcore.market;
 
+import com.starhavensmpcore.market.items.ItemDisplayNameFormatter;
+import com.starhavensmpcore.market.items.ItemSanitizer;
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 

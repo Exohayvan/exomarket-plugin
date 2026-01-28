@@ -1,5 +1,8 @@
-package com.exomarket;
+package com.starhavensmpcore.market.placeholders;
 
+import com.starhavensmpcore.core.StarhavenSMPCore;
+import com.starhavensmpcore.market.db.DatabaseManager;
+import com.starhavensmpcore.market.economy.CurrencyFormatter;
 import me.clip.placeholderapi.expansion.PlaceholderExpansion;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.plugin.PluginDescriptionFile;
@@ -9,10 +12,10 @@ import org.bukkit.plugin.PluginDescriptionFile;
  */
 public class ExoMarketPlaceholders extends PlaceholderExpansion {
 
-    private final ExoMarketPlugin plugin;
+    private final StarhavenSMPCore plugin;
     private final DatabaseManager databaseManager;
 
-    public ExoMarketPlaceholders(ExoMarketPlugin plugin, DatabaseManager databaseManager) {
+    public ExoMarketPlaceholders(StarhavenSMPCore plugin, DatabaseManager databaseManager) {
         this.plugin = plugin;
         this.databaseManager = databaseManager;
     }

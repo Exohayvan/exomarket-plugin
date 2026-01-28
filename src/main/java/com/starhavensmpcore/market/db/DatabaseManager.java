@@ -1,5 +1,9 @@
-package com.exomarket;
+package com.starhavensmpcore.market.db;
 
+import com.starhavensmpcore.core.StarhavenSMPCore;
+import com.starhavensmpcore.market.MarketItem;
+import com.starhavensmpcore.market.items.EnchantedBookSplitter;
+import com.starhavensmpcore.market.items.ItemSanitizer;
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 
@@ -14,7 +18,7 @@ import java.util.UUID;
 
 public class DatabaseManager {
 
-    private final ExoMarketPlugin plugin;
+    private final StarhavenSMPCore plugin;
     private Connection connection;
     private long lastDemandCleanup = 0L;
     private static final long DEMAND_WINDOW_HOUR = 60L * 60L;
@@ -22,20 +26,20 @@ public class DatabaseManager {
     private static final long DEMAND_WINDOW_MONTH = 60L * 60L * 24L * 30L;
     private static final long DEMAND_WINDOW_YEAR = 60L * 60L * 24L * 365L;
 
-    public DatabaseManager(ExoMarketPlugin plugin) {
+    public DatabaseManager(StarhavenSMPCore plugin) {
         this.plugin = plugin;
         connect();
     }
 
     private void connect() {
-        File pluginDir = new File("plugins/ExoMarketPlugin");
+        File pluginDir = new File("plugins/StarhavenSMPCore");
         if (!pluginDir.exists()) {
             pluginDir.mkdirs();
         }
 
         try {
             Class.forName("org.sqlite.JDBC");
-            connection = DriverManager.getConnection("jdbc:sqlite:plugins/ExoMarketPlugin/database.db");
+            connection = DriverManager.getConnection("jdbc:sqlite:plugins/StarhavenSMPCore/database.db");
             createTable();
             ensureQuantityColumnType();
             ensureItemDataColumn();

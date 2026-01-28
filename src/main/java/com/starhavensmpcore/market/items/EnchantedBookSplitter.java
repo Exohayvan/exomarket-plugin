@@ -1,4 +1,4 @@
-package com.exomarket;
+package com.starhavensmpcore.market.items;
 
 import org.bukkit.Material;
 import org.bukkit.enchantments.Enchantment;

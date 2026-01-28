@@ -1,5 +1,13 @@
-package com.exomarket;
+package com.starhavensmpcore.market.gui;
 
+import com.starhavensmpcore.core.StarhavenSMPCore;
+import com.starhavensmpcore.market.DemandMetric;
+import com.starhavensmpcore.market.MarketItem;
+import com.starhavensmpcore.market.db.DatabaseManager;
+import com.starhavensmpcore.market.economy.CurrencyFormatter;
+import com.starhavensmpcore.market.economy.QuantityFormatter;
+import com.starhavensmpcore.market.items.ItemDisplayNameFormatter;
+import com.starhavensmpcore.market.items.ItemSanitizer;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
@@ -20,7 +28,7 @@ import java.util.*;
 
 public class GUIManager implements Listener {
 
-    private ExoMarketPlugin plugin;
+    private StarhavenSMPCore plugin;
     private Map<Player, Integer> currentPage = new HashMap<>();
     private Map<Player, AggregatedListing> selectedMarketItem = new HashMap<>();
     private Map<Player, Map<Integer, AggregatedListing>> pageItems = new HashMap<>();
@@ -111,7 +119,7 @@ public class GUIManager implements Listener {
             return displayItem;
         }
     }
-    public GUIManager(ExoMarketPlugin plugin) {
+    public GUIManager(StarhavenSMPCore plugin) {
         this.plugin = plugin;
     }
 
