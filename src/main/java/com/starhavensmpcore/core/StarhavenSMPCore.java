@@ -14,6 +14,7 @@ import com.starhavensmpcore.market.placeholders.ExoMarketPlaceholders;
 import com.starhavensmpcore.market.web.MarketWebServer;
 import com.starhavensmpcore.items.CustomBlockRegistry;
 import com.starhavensmpcore.items.CustomItemManager;
+import com.starhavensmpcore.oregeneration.OreGenerationManager;
 import com.starhavensmpcore.resourcepack.NoteBlockGuard;
 import com.starhavensmpcore.resourcepack.ResourcePackManager;
 import org.bukkit.command.Command;
@@ -49,6 +50,7 @@ public class StarhavenSMPCore extends JavaPlugin {
     private CustomItemManager customItemManager;
     private NoteBlockGuard noteBlockGuard;
     private CustomBlockRegistry customBlockRegistry;
+    private OreGenerationManager oreGenerationManager;
     private double marketValueMultiplier;
     private double maxPricePercent;
     private double minPrice;
@@ -91,6 +93,7 @@ public class StarhavenSMPCore extends JavaPlugin {
         customBlockRegistry = new CustomBlockRegistry();
         customItemManager = new CustomItemManager(this, customBlockRegistry);
         noteBlockGuard = new NoteBlockGuard(this, customBlockRegistry, customItemManager);
+        oreGenerationManager = new OreGenerationManager(this);
 
         getServer().getPluginManager().registerEvents(guiManager, this);
         getServer().getPluginManager().registerEvents(autoSellManager, this);
@@ -99,6 +102,7 @@ public class StarhavenSMPCore extends JavaPlugin {
         getServer().getPluginManager().registerEvents(resourcePackManager, this);
         getServer().getPluginManager().registerEvents(customItemManager, this);
         getServer().getPluginManager().registerEvents(noteBlockGuard, this);
+        getServer().getPluginManager().registerEvents(oreGenerationManager, this);
         
         // Register commands and set tab completers
         getCommand("market").setExecutor(this);
@@ -125,6 +129,9 @@ public class StarhavenSMPCore extends JavaPlugin {
     public void onDisable() {
         if (marketWebServer != null) {
             marketWebServer.stop();
+        }
+        if (oreGenerationManager != null) {
+            oreGenerationManager.shutdown();
         }
     }
 
