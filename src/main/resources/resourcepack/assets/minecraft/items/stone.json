@@ -9,6 +9,13 @@
           "type": "minecraft:model",
           "model": "minecraft:block/voidstone_ore"
         }
+      },
+      {
+        "threshold": 69003,
+        "model": {
+          "type": "minecraft:model",
+          "model": "minecraft:block/void_block"
+        }
       }
     ],
     "fallback": {
@@ -17,3 +24,4 @@
     }
   }
 }
+
