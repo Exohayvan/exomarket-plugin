@@ -7,7 +7,7 @@ import java.util.Locale;
 import java.util.Map;
 
 public enum CustomItemType {
-    ECHO_SHARD("echo_shard", Material.ECHO_SHARD, 69001, "Void Shard", null),
+    ECHO_SHARD("void_shard", Material.ECHO_SHARD, 69001, "Void Shard", null),
     VOIDSTONE_ORE("voidstone_ore", Material.STONE, 69002, "Voidstone Ore",
             "minecraft:note_block[instrument=flute,note=12,powered=true]"),
     VOID_BLOCK("void_block", Material.STONE, 69003, "Block of Void",
