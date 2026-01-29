@@ -12,6 +12,9 @@ import com.starhavensmpcore.market.gui.MarketItemsGUI;
 import com.starhavensmpcore.market.gui.MarketSellGUI;
 import com.starhavensmpcore.market.placeholders.ExoMarketPlaceholders;
 import com.starhavensmpcore.market.web.MarketWebServer;
+import com.starhavensmpcore.items.CustomBlockRegistry;
+import com.starhavensmpcore.items.CustomItemManager;
+import com.starhavensmpcore.resourcepack.NoteBlockGuard;
 import com.starhavensmpcore.resourcepack.ResourcePackManager;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
@@ -43,6 +46,9 @@ public class StarhavenSMPCore extends JavaPlugin {
     private MarketWebServer marketWebServer;
     private ExoMarketPlaceholders placeholders;
     private ResourcePackManager resourcePackManager;
+    private CustomItemManager customItemManager;
+    private NoteBlockGuard noteBlockGuard;
+    private CustomBlockRegistry customBlockRegistry;
     private double marketValueMultiplier;
     private double maxPricePercent;
     private double minPrice;
@@ -82,12 +88,17 @@ public class StarhavenSMPCore extends JavaPlugin {
         marketWebServer = new MarketWebServer(this, databaseManager, WEB_PORT);
         placeholders = new ExoMarketPlaceholders(this, databaseManager);
         resourcePackManager = new ResourcePackManager(this);
+        customBlockRegistry = new CustomBlockRegistry();
+        customItemManager = new CustomItemManager(this, customBlockRegistry);
+        noteBlockGuard = new NoteBlockGuard(this, customBlockRegistry, customItemManager);
 
         getServer().getPluginManager().registerEvents(guiManager, this);
         getServer().getPluginManager().registerEvents(autoSellManager, this);
         getServer().getPluginManager().registerEvents(marketSellGUI, this);
         getServer().getPluginManager().registerEvents(marketItemsGUI, this);
         getServer().getPluginManager().registerEvents(resourcePackManager, this);
+        getServer().getPluginManager().registerEvents(customItemManager, this);
+        getServer().getPluginManager().registerEvents(noteBlockGuard, this);
         
         // Register commands and set tab completers
         getCommand("market").setExecutor(this);
@@ -98,6 +109,7 @@ public class StarhavenSMPCore extends JavaPlugin {
         getCommand("marketreload").setTabCompleter(this);
         getCommand("autosell").setExecutor(autoSellManager);
         getCommand("autosell").setTabCompleter(this);
+        getCommand("starhavengive").setExecutor(customItemManager);
 
         marketWebServer.start();
 
