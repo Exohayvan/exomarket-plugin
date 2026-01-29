@@ -1,96 +1,136 @@
-# ExoMarketPlugin
+# StarhavenSMPCore
 
-**ExoMarketPlugin** is a dynamic, data-driven market system made for [StarHaven SMP](http://starhavensmp.mcserver.us:8000).
-Prices automatically shift based on global supply, demand, and player activity. Creating a living economy that evolves with your server.
+StarhavenSMPCore is the main SMP plugin for Starhaven. It includes the dynamic market system, auto-sell, web analytics, resource pack delivery, custom items/blocks, and custom ore generation.
 
-## 🌟 Features
+## Features
 
-- **Market GUI** – Clean and intuitive interface for buying and selling items.
-- **Dynamic Pricing Engine** – Prices adjust automatically based on market supply, demand, and total circulating economy.
-- **Economy Integration** – Currently integrates with **Essentials**; **Vault support** coming in a future update for wider compatibility.
-- **Web Dashboard (New!)** – A live market analytics dashboard available at YOUIP:6969
-  Example **http://starhavensmp.mcserver.us:6969**
-- **PlaceholderAPI Support (New!)** – Global and player-specific economic statistics.
+- Market GUI with dynamic pricing based on supply/demand and economy activity
+- Auto-sell GUI tied to a per-player list
+- Web dashboard (port 6969) for market listings and sellers
+- PlaceholderAPI support for global and player stats
+- Resource pack auto-delivery from GitHub releases (SHA1 enforced)
+- Custom items + custom blocks using note_block states
 
-## 🧩 PlaceholderAPI Placeholders
-
-### **Global Market Stats**
-| Placeholder | Description |
-|------------|-------------|
-| `%exomarket_total_items_bought%` | Total items bought globally. |
-| `%exomarket_total_items_sold%` | Total items sold globally. |
-| `%exomarket_total_money_spent%` | Total money players have spent. |
-| `%exomarket_total_money_earned%` | Total money players have earned. |
-| `%exomarket_total_listed_items%` | Total items currently listed on the market. |
-
-### **Per-Player Stats**
-| Placeholder | Description |
-|------------|-------------|
-| `%exomarket_player_items_bought%` | Items bought by the player. |
-| `%exomarket_player_items_sold%` | Items sold by the player. |
-| `%exomarket_player_money_spent%` | Total money the player has spent. |
-| `%exomarket_player_money_earned%` | Total money the player has earned. |
-| `%exomarket_player_listed_items%` | Items the player currently has listed. |
-
-## 🖥️ Web UI (Port 6969)
-
-ExoMarketPlugin includes a built-in lightweight web server that provides:
-
-- Still in early dev, shows items and players selling.
-
-**URL:** `http://<server-ip>:6969`
-
-## 📦 Installation
-
-1. Download the latest `ExoMarketPlugin.jar` from the **Releases** page.
-2. Place it into your server’s `plugins/` folder.
-3. Restart the server.
-4. Configure settings in `plugins/ExoMarketPlugin/config.yml` and optionally enable/secure the Web UI.
-
-## 📝 Commands
+## Commands
 
 | Command | Description |
-|--------|-------------|
-| `/market` | Opens the market GUI. |
-| `/market sell <amount>` | Sells the specified amount of the held item. |
+|---|---|
+| `/market` | Open the market GUI. |
+| `/market buy <filter>` | Open buy listings with optional filter. |
+| `/market sell` | Open sell GUI. |
+| `/market items <filter>` | Open your listings with optional filter. |
+| `/market info` | Show market summary. |
+| `/sellhand` | Sell the item in your main hand. |
+| `/marketreload` | Reload config + resource pack settings. |
+| `/autosell` | Open the auto-sell GUI. |
+| `/starhavengive <player> <starhaven:item> [amount]` | Give custom items. |
 
-## ⚙️ Configuration
+## Permissions
 
-- **Database:**  
-  Automatically uses SQLite (`ExoMarket.db`) stored in the plugin directory.
-- **Economy:**  
-  Currently supports **Essentials**.  
-  **Vault** integration will be required for future versions to support other economy plugins.
-- **Web UI:**  
-  Can be enabled/disabled and configured in `config.yml`.
+| Permission | Description |
+|---|---|
+| `starhaven.items.give` | Allows `/starhavengive` and `/give <player> starhaven:item`. |
 
-## 🔧 Dependencies
+## Custom Items / Blocks
 
-- **Essentials** – Used for handling economy transactions.  
-- **Vault** – *(Required for expanded economy support in future updates)*  
-- **PlaceholderAPI** – For all server-wide and player-specific placeholders.
+Registered custom items:
+- `starhaven:void_shard`
+- `starhaven:voidstone_ore`
+- `starhaven:void_block`
 
-## 🤝 Contributing
+Behavior highlights:
+- **Void Block** drops itself.
+- **Voidstone Ore** requires **iron+ pickaxe** to drop.
+- **Voidstone Ore** drops **Void Shard** with low fortune bonus.
+- **Silk Touch** drops the ore block and **no XP**.
+- **XP**: 12–19 per ore when not silk-touch.
+- Custom blocks are note_block-backed and protected from burn/ignite.
 
-1. Fork the repository.  
-2. Create a feature branch:  
-   `git checkout -b feature-name`  
-3. Commit changes:  
-   `git commit -m "Description of change"`  
-4. Push the branch:  
-   `git push origin feature-name`  
-5. Open a Pull Request.
+## Ore Generation
 
-## 🐛 Reporting Issues
+The ore generation system runs when players load chunks that were not previously processed.
 
-If you discover bugs or want to request features, please open an issue on the **Issues** page and include as much detail as possible.
+Voidstone Ore rules:
+- Only spawns in **The End**
+- 1 vein per chunk
+- 1–2 blocks per vein
+- Only replaces **endstone**
+- 5% chance to spawn on top-facing endstone; otherwise buried
 
-## 📜 License
+Database: `plugins/StarhavenSMPCore/ore_generation.db`
 
-This project is licensed under the **MIT License**.  
-See the [LICENSE](LICENSE) file for full details.
+## PlaceholderAPI Placeholders
 
-## 👑 Credits
+### Global stats
+| Placeholder | Description |
+|---|---|
+| `%exomarket_total_items_bought%` | Total items bought globally |
+| `%exomarket_total_items_sold%` | Total items sold globally |
+| `%exomarket_total_money_spent%` | Total money spent globally |
+| `%exomarket_total_money_earned%` | Total money earned globally |
+| `%exomarket_total_listed_items%` | Total items currently listed |
 
-- **ExoHayvan** — Creator and maintainer of ExoMarketPlugin.  
-- **Community Contributors** — For improvements, suggestions, and reporting issues.
+### Player stats
+| Placeholder | Description |
+|---|---|
+| `%exomarket_player_items_bought%` | Items bought by player |
+| `%exomarket_player_items_sold%` | Items sold by player |
+| `%exomarket_player_money_spent%` | Money spent by player |
+| `%exomarket_player_money_earned%` | Money earned by player |
+| `%exomarket_player_listed_items%` | Player’s listed items |
+
+## Resource Pack Delivery
+
+Configurable GitHub release downloader that:
+- polls the latest release
+- selects a ZIP asset by prefix/name
+- serves a SHA1 hash to clients
+
+Relevant config keys are under `ResourcePack` in `config.yml`.
+
+## Configuration (config.yml)
+
+```yaml
+MarketManager:
+  MarketValueMultipier: 6
+  MaxPricePercent: 5
+  MinPrice: 0.01
+
+CurrencySymbol: "⚚Ɍ"
+
+ResourcePack:
+  Enabled: false
+  GitHubOwner: ""
+  GitHubRepo: ""
+  AssetPrefix: "StarhavenSMP-ResourcePack-"
+  AssetName: ""
+  Prompt: "This server requires the StarhavenSMP resource pack."
+  Force: true
+  RefreshSeconds: 3600
+  GitHubToken: ""
+```
+
+## Databases
+
+Stored in `plugins/StarhavenSMPCore/`:
+- `database.db` — market listings + stats
+- `autosell.db` — per-player auto-sell items
+- `ore_generation.db` — chunk generation markers
+
+## Build
+
+```bash
+mvn clean package
+```
+
+## Dependencies
+
+- Spigot API 1.21
+- EssentialsX
+- PlaceholderAPI
+- Vault
+
+## Notes
+
+- Web UI runs on port **6969**.
+- Custom blocks are note_block-backed and rely on the resource pack mappings.
