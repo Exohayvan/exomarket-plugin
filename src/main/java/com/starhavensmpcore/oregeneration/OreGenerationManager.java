@@ -26,7 +26,8 @@ import java.util.UUID;
 public class OreGenerationManager implements Listener {
     private static final String DB_NAME = "ore_generation.db";
     private static final String VOIDSTONE_TABLE = "voidstone_ore_chunks";
-    private static final double SURFACE_CHANCE = 0.05;
+    private static final double SURFACE_CHANCE = 0.01;
+    private static final double TWO_VEIN_CHANCE = 0.20;
 
     private final StarhavenSMPCore plugin;
     private final Random random = new Random();
@@ -125,7 +126,7 @@ public class OreGenerationManager implements Listener {
         if (!chunk.isLoaded()) {
             return;
         }
-        int veinSize = 1 + random.nextInt(2);
+        int veinSize = random.nextDouble() < TWO_VEIN_CHANCE ? 2 : 1;
         boolean surfacePlacement = random.nextDouble() < SURFACE_CHANCE;
 
         if (surfacePlacement) {
