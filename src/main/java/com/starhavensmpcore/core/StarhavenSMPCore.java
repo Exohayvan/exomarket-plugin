@@ -17,6 +17,9 @@ import com.starhavensmpcore.items.CustomItemManager;
 import com.starhavensmpcore.oregeneration.OreGenerationManager;
 import com.starhavensmpcore.resourcepack.NoteBlockGuard;
 import com.starhavensmpcore.resourcepack.ResourcePackManager;
+import com.starhavensmpcore.items.CustomItemType;
+import org.bukkit.inventory.ShapedRecipe;
+import org.bukkit.NamespacedKey;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
@@ -117,12 +120,22 @@ public class StarhavenSMPCore extends JavaPlugin {
 
         marketWebServer.start();
 
+        registerRecipes();
+
         if (getServer().getPluginManager().getPlugin("PlaceholderAPI") != null) {
             placeholders.register();
             getLogger().info("PlaceholderAPI found. Registered ExoMarket placeholders.");
         } else {
             getLogger().info("PlaceholderAPI not found. Skipping placeholder registration.");
         }
+    }
+
+    private void registerRecipes() {
+        NamespacedKey key = new NamespacedKey(this, "void_block");
+        ShapedRecipe recipe = new ShapedRecipe(key, customItemManager.createItem(CustomItemType.VOID_BLOCK, 1));
+        recipe.shape("VVV", "VVV", "VVV");
+        recipe.setIngredient('V', Material.ECHO_SHARD);
+        getServer().addRecipe(recipe);
     }
 
     @Override
