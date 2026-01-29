@@ -17,12 +17,14 @@ import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.event.server.ServerCommandEvent;
 import org.bukkit.enchantments.Enchantment;
+import org.bukkit.event.entity.EntityPickupItemEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.GameMode;
+import org.bukkit.NamespacedKey;
 import org.bukkit.Location;
 import org.bukkit.util.Vector;
 
@@ -113,6 +115,26 @@ public class CustomItemManager implements Listener, CommandExecutor {
             return;
         }
         customBlockRegistry.unmark(block);
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onEntityPickupItem(EntityPickupItemEvent event) {
+        if (!(event.getEntity() instanceof Player)) {
+            return;
+        }
+        Player player = (Player) event.getEntity();
+        ItemStack stack = event.getItem().getItemStack();
+        CustomItemType type = getCustomItemType(stack);
+        if (type != CustomItemType.ECHO_SHARD) {
+            return;
+        }
+        NamespacedKey recipeKey = plugin.getVoidBlockRecipeKey();
+        if (recipeKey == null) {
+            return;
+        }
+        if (!player.hasDiscoveredRecipe(recipeKey)) {
+            player.discoverRecipe(recipeKey);
+        }
     }
 
     private boolean handleCustomBlockBreak(org.bukkit.event.block.BlockBreakEvent event, CustomItemType type) {

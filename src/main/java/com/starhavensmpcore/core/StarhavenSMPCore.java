@@ -54,6 +54,7 @@ public class StarhavenSMPCore extends JavaPlugin {
     private NoteBlockGuard noteBlockGuard;
     private CustomBlockRegistry customBlockRegistry;
     private OreGenerationManager oreGenerationManager;
+    private NamespacedKey voidBlockRecipeKey;
     private double marketValueMultiplier;
     private double maxPricePercent;
     private double minPrice;
@@ -136,6 +137,11 @@ public class StarhavenSMPCore extends JavaPlugin {
         recipe.shape("VVV", "VVV", "VVV");
         recipe.setIngredient('V', Material.ECHO_SHARD);
         getServer().addRecipe(recipe);
+        voidBlockRecipeKey = key;
+    }
+
+    public NamespacedKey getVoidBlockRecipeKey() {
+        return voidBlockRecipeKey;
     }
 
     @Override
