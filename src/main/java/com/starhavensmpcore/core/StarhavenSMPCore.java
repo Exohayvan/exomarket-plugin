@@ -17,11 +17,7 @@ import com.starhavensmpcore.items.CustomItemManager;
 import com.starhavensmpcore.oregeneration.OreGenerationManager;
 import com.starhavensmpcore.resourcepack.NoteBlockGuard;
 import com.starhavensmpcore.resourcepack.ResourcePackManager;
-import com.starhavensmpcore.items.CustomItemType;
-import org.bukkit.inventory.ShapedRecipe;
 import org.bukkit.NamespacedKey;
-import org.bukkit.inventory.RecipeChoice;
-import org.bukkit.inventory.ShapelessRecipe;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
@@ -56,8 +52,6 @@ public class StarhavenSMPCore extends JavaPlugin {
     private NoteBlockGuard noteBlockGuard;
     private CustomBlockRegistry customBlockRegistry;
     private OreGenerationManager oreGenerationManager;
-    private NamespacedKey voidBlockRecipeKey;
-    private NamespacedKey voidShardRecipeKey;
     private double marketValueMultiplier;
     private double maxPricePercent;
     private double minPrice;
@@ -135,26 +129,11 @@ public class StarhavenSMPCore extends JavaPlugin {
     }
 
     private void registerRecipes() {
-        NamespacedKey key = new NamespacedKey(this, "void_block");
-        ShapedRecipe recipe = new ShapedRecipe(key, customItemManager.createItem(CustomItemType.VOID_BLOCK, 1));
-        recipe.shape("VVV", "VVV", "VVV");
-        recipe.setIngredient('V', new RecipeChoice.ExactChoice(customItemManager.createItem(CustomItemType.ECHO_SHARD, 1)));
-        getServer().addRecipe(recipe);
-        voidBlockRecipeKey = key;
-
-        NamespacedKey shardKey = new NamespacedKey(this, "void_shards");
-        ShapelessRecipe shardRecipe = new ShapelessRecipe(shardKey, customItemManager.createItem(CustomItemType.ECHO_SHARD, 9));
-        shardRecipe.addIngredient(new RecipeChoice.ExactChoice(customItemManager.createItem(CustomItemType.VOID_BLOCK, 1)));
-        getServer().addRecipe(shardRecipe);
-        voidShardRecipeKey = shardKey;
-    }
-
-    public NamespacedKey getVoidBlockRecipeKey() {
-        return voidBlockRecipeKey;
+        // No custom recipes yet.
     }
 
     public NamespacedKey getVoidShardRecipeKey() {
-        return voidShardRecipeKey;
+        return null;
     }
 
     @Override

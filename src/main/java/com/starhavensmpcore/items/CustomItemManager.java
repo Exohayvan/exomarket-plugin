@@ -17,17 +17,12 @@ import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.event.server.ServerCommandEvent;
 import org.bukkit.enchantments.Enchantment;
-import org.bukkit.event.entity.EntityPickupItemEvent;
-import org.bukkit.event.inventory.PrepareItemCraftEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.GameMode;
-import org.bukkit.NamespacedKey;
-import org.bukkit.inventory.Recipe;
-import org.bukkit.Keyed;
 import org.bukkit.Location;
 import org.bukkit.util.Vector;
 
@@ -120,92 +115,8 @@ public class CustomItemManager implements Listener, CommandExecutor {
         customBlockRegistry.unmark(block);
     }
 
-    @EventHandler(ignoreCancelled = true)
-    public void onEntityPickupItem(EntityPickupItemEvent event) {
-        if (!(event.getEntity() instanceof Player)) {
-            return;
-        }
-        Player player = (Player) event.getEntity();
-        ItemStack stack = event.getItem().getItemStack();
-        CustomItemType type = getCustomItemType(stack);
-        if (type != CustomItemType.ECHO_SHARD && type != CustomItemType.VOID_BLOCK) {
-            return;
-        }
-        NamespacedKey recipeKey = type == CustomItemType.ECHO_SHARD
-                ? plugin.getVoidBlockRecipeKey()
-                : plugin.getVoidShardRecipeKey();
-        if (recipeKey == null) {
-            return;
-        }
-        if (!player.hasDiscoveredRecipe(recipeKey)) {
-            player.discoverRecipe(recipeKey);
-        }
-    }
+    // Crafting recipes for custom items are currently disabled.
 
-    @EventHandler(ignoreCancelled = true)
-    public void onPrepareItemCraft(PrepareItemCraftEvent event) {
-        Recipe recipe = event.getRecipe();
-        if (!(recipe instanceof Keyed)) {
-            return;
-        }
-        NamespacedKey recipeKey = plugin.getVoidBlockRecipeKey();
-        NamespacedKey shardKey = plugin.getVoidShardRecipeKey();
-        if (recipeKey == null || shardKey == null) {
-            return;
-        }
-        NamespacedKey activeKey = ((Keyed) recipe).getKey();
-        ItemStack[] matrix = event.getInventory().getMatrix();
-        if (recipeKey.equals(activeKey)) {
-            if (!isAllCustomVoidShards(matrix)) {
-                event.getInventory().setResult(new ItemStack(Material.AIR));
-                return;
-            }
-            event.getInventory().setResult(createItem(CustomItemType.VOID_BLOCK, 1));
-        } else if (shardKey.equals(activeKey)) {
-            if (!isAllCustomVoidBlocks(matrix)) {
-                event.getInventory().setResult(new ItemStack(Material.AIR));
-                return;
-            }
-            event.getInventory().setResult(createItem(CustomItemType.ECHO_SHARD, 9));
-        }
-    }
-
-    private boolean isAllCustomVoidShards(ItemStack[] matrix) {
-        if (matrix == null || matrix.length != 9) {
-            return false;
-        }
-        for (ItemStack stack : matrix) {
-            if (stack == null || stack.getType() == Material.AIR) {
-                return false;
-            }
-            CustomItemType type = getCustomItemType(stack);
-            if (type != CustomItemType.ECHO_SHARD) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    private boolean isAllCustomVoidBlocks(ItemStack[] matrix) {
-        if (matrix == null || matrix.length != 9) {
-            return false;
-        }
-        boolean found = false;
-        for (ItemStack stack : matrix) {
-            if (stack == null || stack.getType() == Material.AIR) {
-                continue;
-            }
-            CustomItemType type = getCustomItemType(stack);
-            if (type != CustomItemType.VOID_BLOCK) {
-                return false;
-            }
-            if (found) {
-                return false;
-            }
-            found = true;
-        }
-        return found;
-    }
 
     private boolean handleCustomBlockBreak(org.bukkit.event.block.BlockBreakEvent event, CustomItemType type) {
         Player player = event.getPlayer();
