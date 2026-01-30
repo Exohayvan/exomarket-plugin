@@ -16,6 +16,104 @@
           "type": "minecraft:model",
           "model": "minecraft:block/void_block"
         }
+      },
+      {
+        "threshold": 69004,
+        "model": {
+          "type": "minecraft:model",
+          "model": "minecraft:block/aluminum_ore"
+        }
+      },
+      {
+        "threshold": 69005,
+        "model": {
+          "type": "minecraft:model",
+          "model": "minecraft:block/chromium_ore"
+        }
+      },
+      {
+        "threshold": 69006,
+        "model": {
+          "type": "minecraft:model",
+          "model": "minecraft:block/cobalt_ore"
+        }
+      },
+      {
+        "threshold": 69007,
+        "model": {
+          "type": "minecraft:model",
+          "model": "minecraft:block/iridium_ore"
+        }
+      },
+      {
+        "threshold": 69008,
+        "model": {
+          "type": "minecraft:model",
+          "model": "minecraft:block/nether_cobalt_ore"
+        }
+      },
+      {
+        "threshold": 69009,
+        "model": {
+          "type": "minecraft:model",
+          "model": "minecraft:block/nether_obsidan_ore"
+        }
+      },
+      {
+        "threshold": 69010,
+        "model": {
+          "type": "minecraft:model",
+          "model": "minecraft:block/nickle_ore"
+        }
+      },
+      {
+        "threshold": 69011,
+        "model": {
+          "type": "minecraft:model",
+          "model": "minecraft:block/osmium_ore"
+        }
+      },
+      {
+        "threshold": 69012,
+        "model": {
+          "type": "minecraft:model",
+          "model": "minecraft:block/platinum_ore"
+        }
+      },
+      {
+        "threshold": 69013,
+        "model": {
+          "type": "minecraft:model",
+          "model": "minecraft:block/tin_ore"
+        }
+      },
+      {
+        "threshold": 69014,
+        "model": {
+          "type": "minecraft:model",
+          "model": "minecraft:block/titanium_ore"
+        }
+      },
+      {
+        "threshold": 69015,
+        "model": {
+          "type": "minecraft:model",
+          "model": "minecraft:block/tungsten_ore"
+        }
+      },
+      {
+        "threshold": 69016,
+        "model": {
+          "type": "minecraft:model",
+          "model": "minecraft:block/vanadium_ore"
+        }
+      },
+      {
+        "threshold": 69017,
+        "model": {
+          "type": "minecraft:model",
+          "model": "minecraft:block/zinc_ore"
+        }
       }
     ],
     "fallback": {
@@ -24,4 +122,3 @@
     }
   }
 }
-

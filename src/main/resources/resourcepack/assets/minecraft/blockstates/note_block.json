@@ -1,6 +1,20 @@
 {
   "variants": {
+    "instrument=flute,note=0,powered=true": { "model": "minecraft:block/aluminum_ore" },
+    "instrument=flute,note=1,powered=true": { "model": "minecraft:block/chromium_ore" },
+    "instrument=flute,note=2,powered=true": { "model": "minecraft:block/cobalt_ore" },
+    "instrument=flute,note=3,powered=true": { "model": "minecraft:block/iridium_ore" },
+    "instrument=flute,note=4,powered=true": { "model": "minecraft:block/nether_cobalt_ore" },
+    "instrument=flute,note=5,powered=true": { "model": "minecraft:block/nether_obsidan_ore" },
+    "instrument=flute,note=6,powered=true": { "model": "minecraft:block/nickle_ore" },
+    "instrument=flute,note=7,powered=true": { "model": "minecraft:block/osmium_ore" },
+    "instrument=flute,note=8,powered=true": { "model": "minecraft:block/platinum_ore" },
+    "instrument=flute,note=9,powered=true": { "model": "minecraft:block/tin_ore" },
+    "instrument=flute,note=10,powered=true": { "model": "minecraft:block/titanium_ore" },
+    "instrument=flute,note=11,powered=true": { "model": "minecraft:block/tungsten_ore" },
     "instrument=flute,note=12,powered=true": { "model": "minecraft:block/voidstone_ore" },
-    "instrument=flute,note=13,powered=true": { "model": "minecraft:block/void_block" }
+    "instrument=flute,note=13,powered=true": { "model": "minecraft:block/vanadium_ore" },
+    "instrument=flute,note=14,powered=true": { "model": "minecraft:block/zinc_ore" },
+    "instrument=bit,note=12,powered=true": { "model": "minecraft:block/void_block" }
   }
 }
