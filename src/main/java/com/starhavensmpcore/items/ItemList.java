@@ -83,6 +83,48 @@ public final class ItemList {
         ));
 
         register(all, customBlocks, generationBlocks, byId, new BlockDefinition(
+                "iridium_ore",
+                Material.STONE,
+                69007,
+                "Iridium Ore",
+                "minecraft:note_block[instrument=flute,note=3,powered=true]",
+                ToolRequirement.IRON_PICKAXE_OR_BETTER,
+                new DropTable("iridium_ore", 1, 1, 0.0, 0, 0),
+                null,
+                0,
+                0,
+                null
+        ));
+
+        register(all, customBlocks, generationBlocks, byId, new BlockDefinition(
+                "nether_cobalt_ore",
+                Material.STONE,
+                69008,
+                "Nether Cobalt Ore",
+                "minecraft:note_block[instrument=flute,note=4,powered=true]",
+                ToolRequirement.IRON_PICKAXE_OR_BETTER,
+                new DropTable("nether_cobalt_ore", 1, 1, 0.0, 0, 0),
+                null,
+                0,
+                0,
+                null
+        ));
+
+        register(all, customBlocks, generationBlocks, byId, new BlockDefinition(
+                "nether_obsidan_ore",
+                Material.STONE,
+                69009,
+                "Nether Obsidan Ore",
+                "minecraft:note_block[instrument=flute,note=4,powered=true]",
+                ToolRequirement.IRON_PICKAXE_OR_BETTER,
+                new DropTable("nether_obsidan_ore", 1, 1, 0.0, 0, 0),
+                null,
+                0,
+                0,
+                null
+        ));
+
+        register(all, customBlocks, generationBlocks, byId, new BlockDefinition(
                 "voidstone_ore",
                 Material.STONE,
                 69002,
