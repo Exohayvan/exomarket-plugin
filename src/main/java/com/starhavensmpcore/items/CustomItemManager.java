@@ -82,6 +82,7 @@ public class CustomItemManager implements Listener, CommandExecutor {
         if (definition == null) {
             return;
         }
+        debug("Block place captured for " + definition.getId() + " by " + event.getPlayer().getName());
         String noteState = definition.getNoteBlockState();
         if (noteState == null || noteState.isEmpty()) {
             return;
@@ -126,6 +127,7 @@ public class CustomItemManager implements Listener, CommandExecutor {
         if (player == null) {
             return false;
         }
+        debug("Block break captured for " + definition.getId() + " by " + player.getName());
         if (player.getGameMode() == GameMode.CREATIVE) {
             return true;
         }
@@ -272,6 +274,7 @@ public class CustomItemManager implements Listener, CommandExecutor {
             giveItem(target, type, amount);
             sender.sendMessage(ChatColor.GREEN + "Gave " + amount + "x " + type.getId()
                     + " to " + target.getName());
+            debug("Give command: " + sender.getName() + " -> " + target.getName() + " " + amount + "x " + type.getId());
         }
     }
 
@@ -322,6 +325,12 @@ public class CustomItemManager implements Listener, CommandExecutor {
                 leftover.values().forEach(item -> player.getWorld().dropItemNaturally(player.getLocation(), item));
             }
             remaining -= stackAmount;
+        }
+    }
+
+    private void debug(String message) {
+        if (plugin.isDebugCustomBlocks()) {
+            plugin.getLogger().info("[CustomBlocks] " + message);
         }
     }
 }

@@ -5,6 +5,11 @@ MarketManager:
 
 CurrencySymbol: "⚚Ɍ"
 
+Debug:
+  Market: false
+  CustomBlocks: false
+  OreGeneration: false
+
 ResourcePack:
   Enabled: false
   GitHubOwner: ""

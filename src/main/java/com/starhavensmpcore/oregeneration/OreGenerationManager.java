@@ -78,10 +78,10 @@ public class OreGenerationManager implements Listener {
                 if (!shouldGenerate) {
                     continue;
                 }
-                Bukkit.getScheduler().runTask(plugin, () -> generateOre(chunk, definition));
-            }
-        });
-    }
+            Bukkit.getScheduler().runTask(plugin, () -> generateOre(chunk, definition));
+        }
+    });
+}
 
     private void initDatabase() {
         File dataDir = plugin.getDataFolder();
@@ -187,6 +187,7 @@ public class OreGenerationManager implements Listener {
             return;
         }
         if (random.nextDouble() > rules.getChunkChance()) {
+            debug("Skip " + definition.getId() + " in chunk " + chunk.getX() + "," + chunk.getZ() + " (chance)");
             return;
         }
         boolean surfacePlacement = random.nextDouble() < rules.getSurfaceChance();
@@ -194,14 +195,18 @@ public class OreGenerationManager implements Listener {
         if (surfacePlacement) {
             Block surface = findSurfaceBlock(chunk, rules);
             if (surface != null) {
-                placeVein(surface, definition, rules);
+                int placed = placeVein(surface, definition, rules);
+                debug("Placed " + placed + " " + definition.getId() + " at surface " + locationString(surface));
                 return;
             }
         }
 
         Block buried = findBuriedBlock(chunk, rules);
         if (buried != null) {
-            placeVein(buried, definition, rules);
+            int placed = placeVein(buried, definition, rules);
+            debug("Placed " + placed + " " + definition.getId() + " buried at " + locationString(buried));
+        } else {
+            debug("No valid spawn for " + definition.getId() + " in chunk " + chunk.getX() + "," + chunk.getZ());
         }
     }
 
@@ -257,14 +262,14 @@ public class OreGenerationManager implements Listener {
         return null;
     }
 
-    private void placeVein(Block start, BlockDefinition definition, GenerationRules rules) {
+    private int placeVein(Block start, BlockDefinition definition, GenerationRules rules) {
         if (!rules.getReplaceableBlocks().contains(start.getType())) {
-            return;
+            return 0;
         }
         placeBlock(start, definition);
         int maxVeinSize = rules.getMaxVeinSize();
         if (maxVeinSize <= 1) {
-            return;
+            return 1;
         }
         List<Block> candidates = new ArrayList<>();
         Set<BlockPos> seen = new HashSet<>();
@@ -282,6 +287,7 @@ public class OreGenerationManager implements Listener {
             placed++;
             addCandidates(next, rules, candidates, seen);
         }
+        return placed;
     }
 
     private void addCandidates(Block origin, GenerationRules rules, List<Block> candidates, Set<BlockPos> seen) {
@@ -356,5 +362,15 @@ public class OreGenerationManager implements Listener {
             result = 31 * result + z;
             return result;
         }
+    }
+
+    private void debug(String message) {
+        if (plugin.isDebugOreGeneration()) {
+            plugin.getLogger().info("[OreGen] " + message);
+        }
+    }
+
+    private static String locationString(Block block) {
+        return block.getWorld().getName() + "@" + block.getX() + "," + block.getY() + "," + block.getZ();
     }
 }

@@ -476,9 +476,11 @@ public class MarketManager {
             double commodityValue = finalPrice * quantity;
             totalAppliedValue += commodityValue;
             double marketShare = totalMarketValue > 0 ? (commodityValue / totalMarketValue) * 100 : 0;
-            plugin.getLogger().info("Updated price for " + aggregate.getCommodityName() + " to " + CurrencyFormatter.format(finalPrice) +
-                    " (supply: " + aggregate.totalQuantity.toString() + ", market share: " +
-                String.format("%.2f%%", marketShare) + ")");
+            if (plugin.isDebugMarket()) {
+                plugin.getLogger().info("Updated price for " + aggregate.getCommodityName() + " to " + CurrencyFormatter.format(finalPrice) +
+                        " (supply: " + aggregate.totalQuantity.toString() + ", market share: " +
+                    String.format("%.2f%%", marketShare) + ")");
+            }
         }
 
         if (totalAppliedValue > 0 && Math.abs(totalAppliedValue - totalMarketValue) / totalMarketValue > 0.25) {
