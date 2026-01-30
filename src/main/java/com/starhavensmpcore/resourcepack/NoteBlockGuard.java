@@ -317,11 +317,6 @@ public class NoteBlockGuard implements Listener {
         }
     }
 
-    private void setPowered(Block block, NoteBlock noteBlock, boolean powered) {
-        noteBlock.setPowered(powered);
-        block.setBlockData(noteBlock, false);
-    }
-
     private void ensureUnpowered(Block block) {
         if (block == null || block.getType() != Material.NOTE_BLOCK) {
             return;
