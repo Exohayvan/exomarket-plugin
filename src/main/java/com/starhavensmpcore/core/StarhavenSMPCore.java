@@ -29,7 +29,6 @@ import java.io.File;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import org.bukkit.configuration.file.FileConfiguration;
-import org.bukkit.configuration.file.YamlConfiguration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -67,19 +66,13 @@ public class StarhavenSMPCore extends JavaPlugin {
 
     private File configFile;
     private FileConfiguration config;
+    private boolean debugMarket;
+    private boolean debugCustomBlocks;
+    private boolean debugOreGeneration;
 
     @Override
     public void onEnable() {
-        configFile = new File(getDataFolder(), "config.yml");
-        if (!configFile.exists()) {
-            configFile.getParentFile().mkdirs();
-            saveDefaultConfig();
-        }
-        config = YamlConfiguration.loadConfiguration(configFile);
-        marketValueMultiplier = config.getDouble("MarketManager.MarketValueMultipier");
-        maxPricePercent = config.getDouble("MarketManager.MaxPricePercent") / 100;
-        minPrice = config.getDouble("MarketManager.MinPrice");
-        CurrencyFormatter.setSymbol(config.getString("CurrencySymbol", "⚚Ɍ"));
+        loadConfigValues();
         
         databaseManager = new DatabaseManager(this);
         economyManager = new EconomyManager(this);
@@ -147,19 +140,38 @@ public class StarhavenSMPCore extends JavaPlugin {
     }
 
     public void reloadConfig() {
+        loadConfigValues();
+        if (resourcePackManager != null) {
+            resourcePackManager.reload();
+        }
+    }
+
+    private void loadConfigValues() {
         configFile = new File(getDataFolder(), "config.yml");
         if (!configFile.exists()) {
             configFile.getParentFile().mkdirs();
             saveDefaultConfig();
         }
-        config = YamlConfiguration.loadConfiguration(configFile);
-        marketValueMultiplier = config.getDouble("MarketManager.MarketValueMultipier");
-        maxPricePercent = config.getDouble("MarketManager.MaxPricePercent") / 100;
-        minPrice = config.getDouble("MarketManager.MinPrice");
+        config = ConfigHandler.loadAndUpdate(this, configFile);
+        marketValueMultiplier = config.getDouble("MarketManager.MarketValueMultipier", 6);
+        maxPricePercent = config.getDouble("MarketManager.MaxPricePercent", 5) / 100;
+        minPrice = config.getDouble("MarketManager.MinPrice", 0.01);
         CurrencyFormatter.setSymbol(config.getString("CurrencySymbol", "⚚Ɍ"));
-        if (resourcePackManager != null) {
-            resourcePackManager.reload();
-        }
+        debugMarket = config.getBoolean("Debug.Market", false);
+        debugCustomBlocks = config.getBoolean("Debug.CustomBlocks", false);
+        debugOreGeneration = config.getBoolean("Debug.OreGeneration", false);
+    }
+
+    public boolean isDebugMarket() {
+        return debugMarket;
+    }
+
+    public boolean isDebugCustomBlocks() {
+        return debugCustomBlocks;
+    }
+
+    public boolean isDebugOreGeneration() {
+        return debugOreGeneration;
     }
 
     @Override
