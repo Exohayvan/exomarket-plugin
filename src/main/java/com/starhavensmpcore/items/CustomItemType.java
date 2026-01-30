@@ -11,7 +11,7 @@ public enum CustomItemType {
     VOIDSTONE_ORE("voidstone_ore", Material.STONE, 69002, "Voidstone Ore",
             "minecraft:note_block[instrument=flute,note=12,powered=true]"),
     VOID_BLOCK("void_block", Material.STONE, 69003, "Block of Void",
-            "minecraft:note_block[instrument=flute,note=13,powered=true]");
+            "minecraft:note_block[instrument=bit,note=0,powered=true]");
 
     private static final String NAMESPACE = "starhaven";
     private static final Map<String, CustomItemType> BY_ID = new HashMap<>();

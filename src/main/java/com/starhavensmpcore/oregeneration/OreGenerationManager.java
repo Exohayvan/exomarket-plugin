@@ -1,6 +1,8 @@
 package com.starhavensmpcore.oregeneration;
 
 import com.starhavensmpcore.core.StarhavenSMPCore;
+import com.starhavensmpcore.items.CustomItemType;
+import com.starhavensmpcore.items.ItemList;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.World;
@@ -126,20 +128,24 @@ public class OreGenerationManager implements Listener {
         if (!chunk.isLoaded()) {
             return;
         }
+        CustomItemType oreType = pickGeneratedOre();
+        if (oreType == null) {
+            return;
+        }
         int veinSize = random.nextDouble() < TWO_VEIN_CHANCE ? 2 : 1;
         boolean surfacePlacement = random.nextDouble() < SURFACE_CHANCE;
 
         if (surfacePlacement) {
             Block surface = findSurfaceEndstone(chunk);
             if (surface != null) {
-                placeVein(surface, veinSize);
+                placeVein(surface, veinSize, oreType);
                 return;
             }
         }
 
         Block buried = findBuriedEndstone(chunk, 24);
         if (buried != null) {
-            placeVein(buried, veinSize);
+            placeVein(buried, veinSize, oreType);
         }
     }
 
@@ -180,12 +186,12 @@ public class OreGenerationManager implements Listener {
         return null;
     }
 
-    private void placeVein(Block start, int veinSize) {
+    private void placeVein(Block start, int veinSize, CustomItemType oreType) {
         if (start.getType() != Material.END_STONE) {
             return;
         }
         start.setType(Material.NOTE_BLOCK, false);
-        applyVoidstoneState(start);
+        applyCustomState(start, oreType);
         if (veinSize <= 1) {
             return;
         }
@@ -201,14 +207,27 @@ public class OreGenerationManager implements Listener {
         }
         Block second = candidates.get(random.nextInt(candidates.size()));
         second.setType(Material.NOTE_BLOCK, false);
-        applyVoidstoneState(second);
+        applyCustomState(second, oreType);
     }
 
-    private void applyVoidstoneState(Block block) {
+    private CustomItemType pickGeneratedOre() {
+        List<CustomItemType> ores = ItemList.generationOres();
+        if (ores.isEmpty()) {
+            return null;
+        }
+        return ores.get(random.nextInt(ores.size()));
+    }
+
+    private void applyCustomState(Block block, CustomItemType type) {
+        String noteBlockState = type.getNoteBlockState();
+        if (noteBlockState == null || noteBlockState.isEmpty()) {
+            plugin.getLogger().warning("Missing note block state for " + type.getId());
+            return;
+        }
         try {
-            block.setBlockData(Bukkit.createBlockData("minecraft:note_block[instrument=flute,note=12,powered=true]"), false);
+            block.setBlockData(Bukkit.createBlockData(noteBlockState), false);
         } catch (IllegalArgumentException ex) {
-            plugin.getLogger().warning("Invalid voidstone ore note block state: " + ex.getMessage());
+            plugin.getLogger().warning("Invalid note block state for " + type.getId() + ": " + ex.getMessage());
         }
     }
 }

@@ -72,7 +72,7 @@ public class CustomItemManager implements Listener, CommandExecutor {
         }
         PersistentDataContainer container = meta.getPersistentDataContainer();
         String id = container.get(itemKey, PersistentDataType.STRING);
-        return CustomItemType.fromArgument(id);
+        return ItemList.fromArgument(id);
     }
 
     @EventHandler
@@ -210,7 +210,7 @@ public class CustomItemManager implements Listener, CommandExecutor {
         if (!command.equals("give") && !command.equals("minecraft:give")) {
             return;
         }
-        CustomItemType type = CustomItemType.fromArgument(parts[2]);
+        CustomItemType type = ItemList.fromArgument(parts[2]);
         if (type == null) {
             return;
         }
@@ -232,7 +232,7 @@ public class CustomItemManager implements Listener, CommandExecutor {
         if (!command.equals("give") && !command.equals("minecraft:give")) {
             return;
         }
-        CustomItemType type = CustomItemType.fromArgument(parts[2]);
+        CustomItemType type = ItemList.fromArgument(parts[2]);
         if (type == null) {
             return;
         }
@@ -269,7 +269,7 @@ public class CustomItemManager implements Listener, CommandExecutor {
             sender.sendMessage(ChatColor.RED + "Usage: /give <player> <starhaven:item> [amount]");
             return;
         }
-        CustomItemType type = CustomItemType.fromArgument(parts[2]);
+        CustomItemType type = ItemList.fromArgument(parts[2]);
         if (type == null) {
             sender.sendMessage(ChatColor.RED + "Unknown custom item: " + parts[2]);
             return;

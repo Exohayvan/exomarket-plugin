@@ -4,6 +4,7 @@ import com.starhavensmpcore.core.StarhavenSMPCore;
 import com.starhavensmpcore.items.CustomBlockRegistry;
 import com.starhavensmpcore.items.CustomItemManager;
 import com.starhavensmpcore.items.CustomItemType;
+import com.starhavensmpcore.items.ItemList;
 import org.bukkit.Bukkit;
 import org.bukkit.Instrument;
 import org.bukkit.Material;
@@ -48,7 +49,7 @@ public class NoteBlockGuard implements Listener {
     }
 
     private void loadReservedNotes() {
-        for (CustomItemType type : CustomItemType.values()) {
+        for (CustomItemType type : ItemList.customBlocks()) {
             String noteBlockState = type.getNoteBlockState();
             if (noteBlockState == null || noteBlockState.isEmpty()) {
                 continue;
