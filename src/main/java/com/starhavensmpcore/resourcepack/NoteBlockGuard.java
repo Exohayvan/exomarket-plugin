@@ -1,9 +1,9 @@
 package com.starhavensmpcore.resourcepack;
 
 import com.starhavensmpcore.core.StarhavenSMPCore;
+import com.starhavensmpcore.items.BlockDefinition;
 import com.starhavensmpcore.items.CustomBlockRegistry;
 import com.starhavensmpcore.items.CustomItemManager;
-import com.starhavensmpcore.items.CustomItemType;
 import com.starhavensmpcore.items.ItemList;
 import org.bukkit.Bukkit;
 import org.bukkit.Instrument;
@@ -36,7 +36,7 @@ public class NoteBlockGuard implements Listener {
     private final StarhavenSMPCore plugin;
     private final CustomBlockRegistry customBlockRegistry;
     private final CustomItemManager customItemManager;
-    private final Map<NoteKey, CustomItemType> reservedNotes;
+    private final Map<NoteKey, BlockDefinition> reservedNotes;
     private final Set<BlockKey> redstoneTriggered;
 
     public NoteBlockGuard(StarhavenSMPCore plugin, CustomBlockRegistry customBlockRegistry, CustomItemManager customItemManager) {
@@ -49,8 +49,9 @@ public class NoteBlockGuard implements Listener {
     }
 
     private void loadReservedNotes() {
-        for (CustomItemType type : ItemList.customBlocks()) {
-            String noteBlockState = type.getNoteBlockState();
+        for (BlockDefinition definition : ItemList.customBlocks()) {
+            String noteBlockState = definition.getNoteBlockState();
+            BlockDefinition type = definition;
             if (noteBlockState == null || noteBlockState.isEmpty()) {
                 continue;
             }
@@ -77,9 +78,12 @@ public class NoteBlockGuard implements Listener {
             return;
         }
         NoteBlock noteBlock = (NoteBlock) data;
-        boolean isCustom = isCustomBlock(block, noteBlock);
-
-        if (isCustom) {
+        BlockKey key = BlockKey.from(block);
+        if (event.getNewCurrent() > 0) {
+            redstoneTriggered.add(key);
+            Bukkit.getScheduler().runTask(plugin, () -> redstoneTriggered.remove(key));
+        }
+        if (customBlockRegistry.isCustom(block)) {
             event.setNewCurrent(0);
             applyCustomState(block, noteBlock);
             return;
@@ -87,12 +91,8 @@ public class NoteBlockGuard implements Listener {
 
         if (event.getNewCurrent() > 0) {
             event.setNewCurrent(0);
-            BlockKey key = BlockKey.from(block);
-            redstoneTriggered.add(key);
-            Bukkit.getScheduler().runTask(plugin, () -> redstoneTriggered.remove(key));
-            if (noteBlock.isPowered()) {
-                setPowered(block, noteBlock, false);
-            }
+            Bukkit.getScheduler().runTask(plugin, () -> ensureUnpowered(block));
+            ensureUnpowered(block);
             block.getWorld().playNote(block.getLocation(), noteBlock.getInstrument(), noteBlock.getNote());
         }
     }
@@ -108,7 +108,8 @@ public class NoteBlockGuard implements Listener {
             return;
         }
         NoteBlock noteBlock = (NoteBlock) data;
-        if (!isCustomBlock(block, noteBlock)) {
+        if (!customBlockRegistry.isCustom(block)) {
+            ensureUnpowered(block);
             return;
         }
         event.setCancelled(true);
@@ -126,7 +127,7 @@ public class NoteBlockGuard implements Listener {
             return;
         }
         NoteBlock noteBlock = (NoteBlock) data;
-        if (isCustomBlock(block, noteBlock)) {
+        if (customBlockRegistry.isCustom(block) || isCustomBlock(block, noteBlock)) {
             event.setCancelled(true);
             return;
         }
@@ -151,8 +152,8 @@ public class NoteBlockGuard implements Listener {
         }
         NoteBlock noteBlock = (NoteBlock) data;
         boolean isCustom = customBlockRegistry.isCustom(block);
-        if (!isCustom && isReserved(noteBlock)) {
-            CustomItemType type = getReservedType(noteBlock);
+        if (!isCustom && isReserved(block, noteBlock)) {
+            BlockDefinition type = getReservedType(noteBlock);
             if (type != null) {
                 customBlockRegistry.mark(block, type, noteBlock);
                 isCustom = true;
@@ -164,22 +165,22 @@ public class NoteBlockGuard implements Listener {
 
         Player player = event.getPlayer();
         ItemStack held = event.getItem();
-        CustomItemType heldCustomType = customItemManager.getCustomItemType(held);
+        BlockDefinition heldDefinition = customItemManager.getCustomItemDefinition(held);
 
-        if (heldCustomType != null && heldCustomType.getNoteBlockState() != null) {
+        if (heldDefinition != null && heldDefinition.getNoteBlockState() != null) {
             Block target = block.getRelative(event.getBlockFace());
             if (canReplace(target)) {
                 event.setCancelled(true);
                 target.setType(Material.NOTE_BLOCK, false);
                 try {
-                    BlockData customData = Bukkit.createBlockData(heldCustomType.getNoteBlockState());
+                    BlockData customData = Bukkit.createBlockData(heldDefinition.getNoteBlockState());
                     target.setBlockData(customData, false);
                     if (customData instanceof NoteBlock) {
-                        customBlockRegistry.mark(target, heldCustomType, (NoteBlock) customData);
+                        customBlockRegistry.mark(target, heldDefinition, (NoteBlock) customData);
                     }
                 } catch (IllegalArgumentException ex) {
-                    plugin.getLogger().warning("Invalid note block state for " + heldCustomType.getId()
-                            + ": " + heldCustomType.getNoteBlockState());
+                    plugin.getLogger().warning("Invalid note block state for " + heldDefinition.getId()
+                            + ": " + heldDefinition.getNoteBlockState());
                 }
                 if (player.getGameMode() != GameMode.CREATIVE) {
                     consumeItem(getHandStack(player, event.getHand()));
@@ -263,11 +264,20 @@ public class NoteBlockGuard implements Listener {
         return player.getInventory().getItemInMainHand();
     }
 
-    private boolean isReserved(NoteBlock noteBlock) {
+    private boolean isReserved(Block block, NoteBlock noteBlock) {
+        if (!noteBlock.isPowered()) {
+            return false;
+        }
+        if (block != null && block.getBlockPower() > 0) {
+            return false;
+        }
+        if (block != null && redstoneTriggered.contains(BlockKey.from(block))) {
+            return false;
+        }
         return reservedNotes.containsKey(new NoteKey(noteBlock.getInstrument(), noteBlock.getNote()));
     }
 
-    private CustomItemType getReservedType(NoteBlock noteBlock) {
+    private BlockDefinition getReservedType(NoteBlock noteBlock) {
         return reservedNotes.get(new NoteKey(noteBlock.getInstrument(), noteBlock.getNote()));
     }
 
@@ -275,8 +285,8 @@ public class NoteBlockGuard implements Listener {
         if (customBlockRegistry.isCustom(block)) {
             return true;
         }
-        if (isReserved(noteBlock)) {
-            CustomItemType type = getReservedType(noteBlock);
+        if (isReserved(block, noteBlock)) {
+            BlockDefinition type = getReservedType(noteBlock);
             if (type != null) {
                 customBlockRegistry.mark(block, type, noteBlock);
             }
@@ -310,6 +320,21 @@ public class NoteBlockGuard implements Listener {
     private void setPowered(Block block, NoteBlock noteBlock, boolean powered) {
         noteBlock.setPowered(powered);
         block.setBlockData(noteBlock, false);
+    }
+
+    private void ensureUnpowered(Block block) {
+        if (block == null || block.getType() != Material.NOTE_BLOCK) {
+            return;
+        }
+        BlockData data = block.getBlockData();
+        if (!(data instanceof NoteBlock)) {
+            return;
+        }
+        NoteBlock noteBlock = (NoteBlock) data;
+        if (noteBlock.isPowered()) {
+            noteBlock.setPowered(false);
+            block.setBlockData(noteBlock, false);
+        }
     }
 
     private static final class NoteKey {

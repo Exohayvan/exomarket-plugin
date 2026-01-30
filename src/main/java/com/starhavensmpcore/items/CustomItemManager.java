@@ -45,24 +45,24 @@ public class CustomItemManager implements Listener, CommandExecutor {
         this.itemKey = new NamespacedKey(plugin, "custom_item");
     }
 
-    public ItemStack createItem(CustomItemType type, int amount) {
-        ItemStack item = new ItemStack(type.getBaseMaterial());
+    public ItemStack createItem(BlockDefinition definition, int amount) {
+        ItemStack item = new ItemStack(definition.getBaseMaterial());
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.setDisplayName(ChatColor.RESET + type.getDisplayName());
+            meta.setDisplayName(ChatColor.RESET + definition.getDisplayName());
             try {
-                meta.setCustomModelData(type.getCustomModelData());
+                meta.setCustomModelData(definition.getCustomModelData());
             } catch (NoSuchMethodError ignored) {
                 // Older API versions won't have custom model data support.
             }
-            meta.getPersistentDataContainer().set(itemKey, PersistentDataType.STRING, type.getId());
+            meta.getPersistentDataContainer().set(itemKey, PersistentDataType.STRING, definition.getId());
             item.setItemMeta(meta);
         }
         item.setAmount(Math.max(1, amount));
         return item;
     }
 
-    public CustomItemType getCustomItemType(ItemStack item) {
+    public BlockDefinition getCustomItemDefinition(ItemStack item) {
         if (item == null || item.getType() == Material.AIR) {
             return null;
         }
@@ -78,11 +78,11 @@ public class CustomItemManager implements Listener, CommandExecutor {
     @EventHandler
     public void onBlockPlace(BlockPlaceEvent event) {
         ItemStack item = event.getItemInHand();
-        CustomItemType type = getCustomItemType(item);
-        if (type == null) {
+        BlockDefinition definition = getCustomItemDefinition(item);
+        if (definition == null) {
             return;
         }
-        String noteState = type.getNoteBlockState();
+        String noteState = definition.getNoteBlockState();
         if (noteState == null || noteState.isEmpty()) {
             return;
         }
@@ -92,10 +92,10 @@ public class CustomItemManager implements Listener, CommandExecutor {
             BlockData data = Bukkit.createBlockData(noteState);
             block.setBlockData(data, false);
             if (data instanceof org.bukkit.block.data.type.NoteBlock) {
-                customBlockRegistry.mark(block, type, (org.bukkit.block.data.type.NoteBlock) data);
+                customBlockRegistry.mark(block, definition, (org.bukkit.block.data.type.NoteBlock) data);
             }
         } catch (IllegalArgumentException ex) {
-            plugin.getLogger().warning("Invalid note block state for " + type.getId() + ": " + noteState);
+            plugin.getLogger().warning("Invalid note block state for " + definition.getId() + ": " + noteState);
         }
     }
 
@@ -109,7 +109,7 @@ public class CustomItemManager implements Listener, CommandExecutor {
         if (blockData == null) {
             return;
         }
-        if (!handleCustomBlockBreak(event, blockData.getType())) {
+        if (!handleCustomBlockBreak(event, blockData.getDefinition())) {
             return;
         }
         customBlockRegistry.unmark(block);
@@ -118,7 +118,10 @@ public class CustomItemManager implements Listener, CommandExecutor {
     // Crafting recipes for custom items are currently disabled.
 
 
-    private boolean handleCustomBlockBreak(org.bukkit.event.block.BlockBreakEvent event, CustomItemType type) {
+    private boolean handleCustomBlockBreak(org.bukkit.event.block.BlockBreakEvent event, BlockDefinition definition) {
+        if (definition == null) {
+            return true;
+        }
         Player player = event.getPlayer();
         if (player == null) {
             return false;
@@ -127,9 +130,13 @@ public class CustomItemManager implements Listener, CommandExecutor {
             return true;
         }
         ItemStack tool = player.getInventory().getItemInMainHand();
-        boolean validTool = isValidTool(tool);
+        ToolRequirement toolRequirement = definition.getToolRequirement();
+        boolean validTool = toolRequirement == null || toolRequirement.isSatisfied(tool);
         if (!validTool) {
-            player.sendMessage(ChatColor.RED + "You need at least an iron pickaxe to get drops from this.");
+            String failureMessage = toolRequirement == null ? null : toolRequirement.getFailureMessage();
+            if (failureMessage != null && !failureMessage.isEmpty()) {
+                player.sendMessage(ChatColor.RED + failureMessage);
+            }
         }
 
         event.setDropItems(false);
@@ -139,27 +146,30 @@ public class CustomItemManager implements Listener, CommandExecutor {
             return true;
         }
 
-        if (type == CustomItemType.VOID_BLOCK) {
-            dropCustomItemAt(event.getBlock().getLocation(), CustomItemType.VOID_BLOCK, 1);
-            return true;
-        }
-
-        if (type == CustomItemType.VOIDSTONE_ORE) {
-            if (tool.hasItemMeta() && tool.getItemMeta().hasEnchant(Enchantment.SILK_TOUCH)) {
-                dropCustomItemAt(event.getBlock().getLocation(), CustomItemType.VOIDSTONE_ORE, 1);
-                return true;
+        boolean silkTouch = tool != null
+                && tool.hasItemMeta()
+                && tool.getItemMeta().hasEnchant(Enchantment.SILK_TOUCH);
+        DropTable drops = definition.getDropsForTool(silkTouch);
+        if (drops != null && drops.getDropItemId() != null) {
+            int fortune = tool == null ? 0 : tool.getEnchantmentLevel(Enchantment.FORTUNE);
+            int amount = drops.rollAmount(ThreadLocalRandom.current(), silkTouch ? 0 : fortune);
+            if (amount > 0) {
+                BlockDefinition dropDefinition = ItemList.getBlockDefinition(drops.getDropItemId());
+                if (dropDefinition != null) {
+                    dropCustomItemAt(event.getBlock().getLocation(), dropDefinition, amount);
+                }
             }
-            event.setExpToDrop(ThreadLocalRandom.current().nextInt(12, 20));
-            int fortune = tool.getEnchantmentLevel(Enchantment.FORTUNE);
-            int amount = 1 + getLowFortuneBonus(fortune);
-            dropCustomItemAt(event.getBlock().getLocation(), CustomItemType.ECHO_SHARD, amount);
-            return true;
         }
-
+        if (!silkTouch && definition.getXpMax() > 0) {
+            int xpMin = definition.getXpMin();
+            int xpMax = definition.getXpMax();
+            int xp = xpMin == xpMax ? xpMin : ThreadLocalRandom.current().nextInt(xpMin, xpMax + 1);
+            event.setExpToDrop(xp);
+        }
         return true;
     }
 
-    private void dropCustomItemAt(Location location, CustomItemType type, int amount) {
+    private void dropCustomItemAt(Location location, BlockDefinition type, int amount) {
         int remaining = Math.max(1, amount);
         int maxStack = type.getBaseMaterial().getMaxStackSize();
         while (remaining > 0) {
@@ -173,28 +183,6 @@ public class CustomItemManager implements Listener, CommandExecutor {
         }
     }
 
-    private boolean isValidTool(ItemStack tool) {
-        if (tool == null) {
-            return false;
-        }
-        Material material = tool.getType();
-        switch (material) {
-            case IRON_PICKAXE:
-            case DIAMOND_PICKAXE:
-            case NETHERITE_PICKAXE:
-                return true;
-            default:
-                return false;
-        }
-    }
-
-    private int getLowFortuneBonus(int fortuneLevel) {
-        if (fortuneLevel <= 0) {
-            return 0;
-        }
-        double chance = 0.15 * fortuneLevel;
-        return ThreadLocalRandom.current().nextDouble() < chance ? 1 : 0;
-    }
 
     @EventHandler
     public void onPlayerCommand(PlayerCommandPreprocessEvent event) {
@@ -210,7 +198,7 @@ public class CustomItemManager implements Listener, CommandExecutor {
         if (!command.equals("give") && !command.equals("minecraft:give")) {
             return;
         }
-        CustomItemType type = ItemList.fromArgument(parts[2]);
+        BlockDefinition type = ItemList.fromArgument(parts[2]);
         if (type == null) {
             return;
         }
@@ -232,7 +220,7 @@ public class CustomItemManager implements Listener, CommandExecutor {
         if (!command.equals("give") && !command.equals("minecraft:give")) {
             return;
         }
-        CustomItemType type = ItemList.fromArgument(parts[2]);
+        BlockDefinition type = ItemList.fromArgument(parts[2]);
         if (type == null) {
             return;
         }
@@ -269,7 +257,7 @@ public class CustomItemManager implements Listener, CommandExecutor {
             sender.sendMessage(ChatColor.RED + "Usage: /give <player> <starhaven:item> [amount]");
             return;
         }
-        CustomItemType type = ItemList.fromArgument(parts[2]);
+        BlockDefinition type = ItemList.fromArgument(parts[2]);
         if (type == null) {
             sender.sendMessage(ChatColor.RED + "Unknown custom item: " + parts[2]);
             return;
@@ -323,7 +311,7 @@ public class CustomItemManager implements Listener, CommandExecutor {
         return players;
     }
 
-    private void giveItem(Player player, CustomItemType type, int amount) {
+    private void giveItem(Player player, BlockDefinition type, int amount) {
         int remaining = amount;
         int maxStack = type.getBaseMaterial().getMaxStackSize();
         while (remaining > 0) {

@@ -13,11 +13,11 @@ import java.util.UUID;
 public class CustomBlockRegistry {
     private final Map<BlockKey, CustomBlockData> customBlocks = new ConcurrentHashMap<>();
 
-    public void mark(Block block, CustomItemType type, NoteBlock noteBlock) {
-        if (block == null || noteBlock == null || type == null) {
+    public void mark(Block block, BlockDefinition definition, NoteBlock noteBlock) {
+        if (block == null || noteBlock == null || definition == null) {
             return;
         }
-        customBlocks.put(BlockKey.from(block), new CustomBlockData(type, noteBlock.getInstrument(), noteBlock.getNote()));
+        customBlocks.put(BlockKey.from(block), new CustomBlockData(definition, noteBlock.getInstrument(), noteBlock.getNote()));
     }
 
     public void unmark(Block block) {
@@ -69,18 +69,18 @@ public class CustomBlockRegistry {
     }
 
     public static final class CustomBlockData {
-        private final CustomItemType type;
+        private final BlockDefinition definition;
         private final Instrument instrument;
         private final Note note;
 
-        public CustomBlockData(CustomItemType type, Instrument instrument, Note note) {
-            this.type = type;
+        public CustomBlockData(BlockDefinition definition, Instrument instrument, Note note) {
+            this.definition = definition;
             this.instrument = instrument;
             this.note = note;
         }
 
-        public CustomItemType getType() {
-            return type;
+        public BlockDefinition getDefinition() {
+            return definition;
         }
 
         public Instrument getInstrument() {
