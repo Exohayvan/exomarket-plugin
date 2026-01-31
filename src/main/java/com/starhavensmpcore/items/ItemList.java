@@ -27,6 +27,19 @@ public final class ItemList {
         Map<String, BlockDefinition> byId = new HashMap<>();
 
         register(all, customBlocks, generationBlocks, byId, new BlockDefinition(
+                "raw_tin",
+                Material.RAW_IRON,
+                69100,
+                "Raw Tin",
+                null,
+                null,
+                null,
+                null,
+                0,
+                0,
+                null
+        ));
+        register(all, customBlocks, generationBlocks, byId, new BlockDefinition(
                 "void_shard",
                 Material.ECHO_SHARD,
                 69001,
@@ -173,7 +186,35 @@ public final class ItemList {
                 "Tin Ore",
                 "minecraft:note_block[instrument=flute,note=9,powered=true]",
                 ToolRequirement.IRON_PICKAXE_OR_BETTER,
+                new DropTable("raw_tin", 2, 5, 1.0, 2, 2),
                 new DropTable("tin_ore", 1, 1, 0.0, 0, 0),
+                0,
+                0,
+                null
+        ));
+
+        register(all, customBlocks, generationBlocks, byId, new BlockDefinition(
+                "tin_block",
+                Material.STONE,
+                69018,
+                "Tin Block",
+                "minecraft:note_block[instrument=bit,note=1,powered=true]",
+                ToolRequirement.IRON_PICKAXE_OR_BETTER,
+                new DropTable("tin_block", 1, 1, 0.0, 0, 0),
+                null,
+                0,
+                0,
+                null
+        ));
+
+        register(all, customBlocks, generationBlocks, byId, new BlockDefinition(
+                "raw_tin_block",
+                Material.STONE,
+                69019,
+                "Raw Tin Block",
+                "minecraft:note_block[instrument=bit,note=2,powered=true]",
+                ToolRequirement.IRON_PICKAXE_OR_BETTER,
+                new DropTable("raw_tin_block", 1, 1, 0.0, 0, 0),
                 null,
                 0,
                 0,
