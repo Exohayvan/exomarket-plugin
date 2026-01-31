@@ -39,6 +39,20 @@ public final class ItemList {
                 0,
                 null
         ));
+
+        register(all, customBlocks, generationBlocks, byId, new BlockDefinition(
+                "tin_ingot",
+                Material.IRON_INGOT,
+                69101,
+                "Tin Ingot",
+                null,
+                null,
+                null,
+                null,
+                0,
+                0,
+                null
+        ));
         register(all, customBlocks, generationBlocks, byId, new BlockDefinition(
                 "void_shard",
                 Material.ECHO_SHARD,
@@ -190,7 +204,18 @@ public final class ItemList {
                 new DropTable("tin_ore", 1, 1, 0.0, 0, 0),
                 0,
                 0,
-                null
+                new GenerationRules(
+                        environments(World.Environment.NORMAL),
+                        -16,
+                        112,
+                        1.0,
+                        0.15,
+                        12,
+                        32,
+                        10,
+                        0.45,
+                        materials(Material.STONE)
+                )
         ));
 
         register(all, customBlocks, generationBlocks, byId, new BlockDefinition(
