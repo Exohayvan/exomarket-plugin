@@ -115,9 +115,121 @@ public final class ItemList {
                 Material.STONE,
                 69009,
                 "Nether Obsidan Ore",
-                "minecraft:note_block[instrument=flute,note=4,powered=true]",
+                "minecraft:note_block[instrument=flute,note=5,powered=true]",
                 ToolRequirement.IRON_PICKAXE_OR_BETTER,
                 new DropTable("nether_obsidan_ore", 1, 1, 0.0, 0, 0),
+                null,
+                0,
+                0,
+                null
+        ));
+
+        register(all, customBlocks, generationBlocks, byId, new BlockDefinition(
+                "nickle_ore",
+                Material.STONE,
+                69010,
+                "Nickle Ore",
+                "minecraft:note_block[instrument=flute,note=6,powered=true]",
+                ToolRequirement.IRON_PICKAXE_OR_BETTER,
+                new DropTable("nickle_ore", 1, 1, 0.0, 0, 0),
+                null,
+                0,
+                0,
+                null
+        ));
+
+        register(all, customBlocks, generationBlocks, byId, new BlockDefinition(
+                "osmium_ore",
+                Material.STONE,
+                69011,
+                "Osmium Ore",
+                "minecraft:note_block[instrument=flute,note=7,powered=true]",
+                ToolRequirement.IRON_PICKAXE_OR_BETTER,
+                new DropTable("osmium_ore", 1, 1, 0.0, 0, 0),
+                null,
+                0,
+                0,
+                null
+        ));
+
+        register(all, customBlocks, generationBlocks, byId, new BlockDefinition(
+                "platinum_ore",
+                Material.STONE,
+                69012,
+                "Platinum Ore",
+                "minecraft:note_block[instrument=flute,note=8,powered=true]",
+                ToolRequirement.IRON_PICKAXE_OR_BETTER,
+                new DropTable("platinum_ore", 1, 1, 0.0, 0, 0),
+                null,
+                0,
+                0,
+                null
+        ));
+
+        register(all, customBlocks, generationBlocks, byId, new BlockDefinition(
+                "tin_ore",
+                Material.STONE,
+                69013,
+                "Tin Ore",
+                "minecraft:note_block[instrument=flute,note=9,powered=true]",
+                ToolRequirement.IRON_PICKAXE_OR_BETTER,
+                new DropTable("tin_ore", 1, 1, 0.0, 0, 0),
+                null,
+                0,
+                0,
+                null
+        ));
+
+        register(all, customBlocks, generationBlocks, byId, new BlockDefinition(
+                "titanium_ore",
+                Material.STONE,
+                69014,
+                "Titanium Ore",
+                "minecraft:note_block[instrument=flute,note=10,powered=true]",
+                ToolRequirement.IRON_PICKAXE_OR_BETTER,
+                new DropTable("titanium_ore", 1, 1, 0.0, 0, 0),
+                null,
+                0,
+                0,
+                null
+        ));
+
+        register(all, customBlocks, generationBlocks, byId, new BlockDefinition(
+                "tungsten_ore",
+                Material.STONE,
+                69015,
+                "Tungsten Ore",
+                "minecraft:note_block[instrument=flute,note=11,powered=true]",
+                ToolRequirement.IRON_PICKAXE_OR_BETTER,
+                new DropTable("tungsten_ore", 1, 1, 0.0, 0, 0),
+                null,
+                0,
+                0,
+                null
+        ));
+
+        register(all, customBlocks, generationBlocks, byId, new BlockDefinition(
+                "vanadium_ore",
+                Material.STONE,
+                69016,
+                "Vanadium Ore",
+                "minecraft:note_block[instrument=flute,note=13,powered=true]",
+                ToolRequirement.IRON_PICKAXE_OR_BETTER,
+                new DropTable("vanadium_ore", 1, 1, 0.0, 0, 0),
+                null,
+                0,
+                0,
+                null
+        ));
+
+        register(all, customBlocks, generationBlocks, byId, new BlockDefinition(
+                "zinc_ore",
+                Material.STONE,
+                69017,
+                "Zinc Ore",
+                "minecraft:note_block[instrument=flute,note=14,powered=true]",
+                ToolRequirement.IRON_PICKAXE_OR_BETTER,
+                new DropTable("zinc_ore", 1, 1, 0.0, 0, 0),
                 null,
                 0,
                 0,
