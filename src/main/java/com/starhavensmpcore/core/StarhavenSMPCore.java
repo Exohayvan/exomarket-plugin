@@ -14,6 +14,8 @@ import com.starhavensmpcore.market.placeholders.ExoMarketPlaceholders;
 import com.starhavensmpcore.market.web.MarketWebServer;
 import com.starhavensmpcore.items.CustomBlockRegistry;
 import com.starhavensmpcore.items.CustomItemManager;
+import com.starhavensmpcore.items.CraftingList;
+import com.starhavensmpcore.items.SmeltingList;
 import com.starhavensmpcore.oregeneration.OreGenerationManager;
 import com.starhavensmpcore.resourcepack.NoteBlockGuard;
 import com.starhavensmpcore.resourcepack.ResourcePackManager;
@@ -122,7 +124,10 @@ public class StarhavenSMPCore extends JavaPlugin {
     }
 
     private void registerRecipes() {
-        // No custom recipes yet.
+        CraftingList craftingList = new CraftingList(this, customItemManager);
+        craftingList.registerAll();
+        getServer().getPluginManager().registerEvents(craftingList, this);
+        SmeltingList.registerAll(this, customItemManager);
     }
 
     public NamespacedKey getVoidShardRecipeKey() {
