@@ -4,7 +4,7 @@
     "property": "minecraft:custom_model_data",
     "entries": [
       {
-        "threshold": 69001,
+        "threshold": 69100,
         "model": {
           "type": "minecraft:model",
           "model": "minecraft:item/raw_iron"
