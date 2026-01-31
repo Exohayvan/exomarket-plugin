@@ -2,6 +2,7 @@ package com.starhavensmpcore.oregeneration;
 
 import com.starhavensmpcore.core.StarhavenSMPCore;
 import com.starhavensmpcore.items.BlockDefinition;
+import com.starhavensmpcore.items.CustomBlockRegistry;
 import com.starhavensmpcore.items.GenerationRules;
 import com.starhavensmpcore.items.ItemList;
 import org.bukkit.Bukkit;
@@ -42,11 +43,13 @@ public class OreGenerationManager implements Listener {
     };
 
     private final StarhavenSMPCore plugin;
+    private final CustomBlockRegistry customBlockRegistry;
     private final Random random = new Random();
     private Connection connection;
 
-    public OreGenerationManager(StarhavenSMPCore plugin) {
+    public OreGenerationManager(StarhavenSMPCore plugin, CustomBlockRegistry customBlockRegistry) {
         this.plugin = plugin;
+        this.customBlockRegistry = customBlockRegistry;
         initDatabase();
     }
 
@@ -318,7 +321,11 @@ public class OreGenerationManager implements Listener {
             return;
         }
         try {
-            block.setBlockData(Bukkit.createBlockData(noteBlockState), false);
+            org.bukkit.block.data.BlockData data = Bukkit.createBlockData(noteBlockState);
+            block.setBlockData(data, false);
+            if (data instanceof org.bukkit.block.data.type.NoteBlock) {
+                customBlockRegistry.mark(block, definition, (org.bukkit.block.data.type.NoteBlock) data);
+            }
         } catch (IllegalArgumentException ex) {
             plugin.getLogger().warning("Invalid note block state for " + definition.getId() + ": " + ex.getMessage());
         }

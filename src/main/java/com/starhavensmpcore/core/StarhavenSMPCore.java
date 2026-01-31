@@ -89,7 +89,7 @@ public class StarhavenSMPCore extends JavaPlugin {
         customBlockRegistry = new CustomBlockRegistry();
         customItemManager = new CustomItemManager(this, customBlockRegistry);
         noteBlockGuard = new NoteBlockGuard(this, customBlockRegistry, customItemManager);
-        oreGenerationManager = new OreGenerationManager(this);
+        oreGenerationManager = new OreGenerationManager(this, customBlockRegistry);
 
         getServer().getPluginManager().registerEvents(guiManager, this);
         getServer().getPluginManager().registerEvents(autoSellManager, this);
