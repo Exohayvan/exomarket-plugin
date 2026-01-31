@@ -15,6 +15,8 @@
     "instrument=flute,note=12,powered=true": { "model": "minecraft:block/voidstone_ore" },
     "instrument=flute,note=13,powered=true": { "model": "minecraft:block/vanadium_ore" },
     "instrument=flute,note=14,powered=true": { "model": "minecraft:block/zinc_ore" },
-    "instrument=bit,note=0,powered=true": { "model": "minecraft:block/void_block" }
+    "instrument=bit,note=0,powered=true": { "model": "minecraft:block/void_block" },
+    "instrument=bit,note=1,powered=true": { "model": "minecraft:block/tin_block" },
+    "instrument=bit,note=2,powered=true": { "model": "minecraft:block/raw_tin_block" }
   }
 }

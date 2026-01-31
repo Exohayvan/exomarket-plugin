@@ -114,6 +114,20 @@
           "type": "minecraft:model",
           "model": "minecraft:block/zinc_ore"
         }
+      },
+      {
+        "threshold": 69018,
+        "model": {
+          "type": "minecraft:model",
+          "model": "minecraft:block/tin_block"
+        }
+      },
+      {
+        "threshold": 69019,
+        "model": {
+          "type": "minecraft:model",
+          "model": "minecraft:block/raw_tin_block"
+        }
       }
     ],
     "fallback": {
