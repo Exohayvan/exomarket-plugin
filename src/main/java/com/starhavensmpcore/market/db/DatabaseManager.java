@@ -4,6 +4,7 @@ import com.starhavensmpcore.core.StarhavenSMPCore;
 import com.starhavensmpcore.market.MarketItem;
 import com.starhavensmpcore.market.items.EnchantedBookSplitter;
 import com.starhavensmpcore.market.items.ItemSanitizer;
+import com.starhavensmpcore.market.items.OreBreakdown;
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 
@@ -350,18 +351,21 @@ public class DatabaseManager {
         toSplit.setAmount(quantity);
         List<EnchantedBookSplitter.SplitEntry> entries = EnchantedBookSplitter.splitWithEnchantmentBooks(toSplit, BigInteger.valueOf(quantity));
         for (EnchantedBookSplitter.SplitEntry entry : entries) {
-            BigInteger amount = entry.getQuantity();
-            if (amount.signum() <= 0) {
-                continue;
-            }
-            ItemStack template = ItemSanitizer.sanitize(entry.getItemStack());
-            MarketItem existingItem = getMarketItem(template, sellerId);
-            if (existingItem == null) {
-                MarketItem newItem = new MarketItem(template, amount, 0, sellerId);
-                addMarketItem(newItem);
-            } else {
-                existingItem.addQuantity(amount);
-                updateMarketItem(existingItem);
+            List<OreBreakdown.SplitEntry> oreEntries = OreBreakdown.split(entry.getItemStack(), entry.getQuantity());
+            for (OreBreakdown.SplitEntry oreEntry : oreEntries) {
+                BigInteger amount = oreEntry.getQuantity();
+                if (amount.signum() <= 0) {
+                    continue;
+                }
+                ItemStack template = ItemSanitizer.sanitize(oreEntry.getItemStack());
+                MarketItem existingItem = getMarketItem(template, sellerId);
+                if (existingItem == null) {
+                    MarketItem newItem = new MarketItem(template, amount, 0, sellerId);
+                    addMarketItem(newItem);
+                } else {
+                    existingItem.addQuantity(amount);
+                    updateMarketItem(existingItem);
+                }
             }
         }
     }

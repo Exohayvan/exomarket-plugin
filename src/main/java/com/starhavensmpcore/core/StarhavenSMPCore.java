@@ -11,6 +11,7 @@ import com.starhavensmpcore.market.gui.GUIManager;
 import com.starhavensmpcore.market.gui.MarketItemsGUI;
 import com.starhavensmpcore.market.gui.MarketSellGUI;
 import com.starhavensmpcore.market.items.ItemSanitizer;
+import com.starhavensmpcore.market.items.OreBreakdown;
 import com.starhavensmpcore.placeholderapi.Placeholders;
 import com.starhavensmpcore.placeholderapi.PlaceholdersSh;
 import com.starhavensmpcore.market.web.MarketWebServer;
@@ -315,6 +316,11 @@ public class StarhavenSMPCore extends JavaPlugin {
     private List<String> getMarketItemSuggestions(String prefix) {
         List<String> suggestions = new ArrayList<>();
         for (MarketItem item : databaseManager.getMarketItems()) {
+            if (item.getType() == Material.IRON_NUGGET
+                    || OreBreakdown.isCopperNugget(item.getType())
+                    || item.getType() == Material.GOLD_NUGGET) {
+                continue;
+            }
             String name = item.getType().toString().toLowerCase();
             if (name.startsWith(prefix) && !suggestions.contains(name)) {
                 suggestions.add(name);
@@ -348,11 +354,17 @@ public class StarhavenSMPCore extends JavaPlugin {
 
     private void sendMarketInfo(Player player) {
         List<MarketItem> items = databaseManager.getMarketItems();
-        int totalListings = items.size();
+        int totalListings = 0;
         BigInteger totalQuantity = BigInteger.ZERO;
         double totalValue = 0d;
         Set<String> uniqueItems = new HashSet<>();
         for (MarketItem item : items) {
+            if (item.getType() == Material.IRON_NUGGET
+                    || OreBreakdown.isCopperNugget(item.getType())
+                    || item.getType() == Material.GOLD_NUGGET) {
+                continue;
+            }
+            totalListings++;
             BigInteger qty = item.getQuantity().max(BigInteger.ZERO);
             totalQuantity = totalQuantity.add(qty);
             totalValue += item.getPrice() * toDoubleCapped(qty);
@@ -375,11 +387,17 @@ public class StarhavenSMPCore extends JavaPlugin {
                 " | 1y: " + QuantityFormatter.format(demandTotals.year));
 
         List<MarketItem> owned = databaseManager.getMarketItemsByOwner(player.getUniqueId().toString());
-        int ownedListings = owned.size();
+        int ownedListings = 0;
         BigInteger ownedQuantity = BigInteger.ZERO;
         double ownedValue = 0d;
         Set<String> ownedUnique = new HashSet<>();
         for (MarketItem item : owned) {
+            if (item.getType() == Material.IRON_NUGGET
+                    || OreBreakdown.isCopperNugget(item.getType())
+                    || item.getType() == Material.GOLD_NUGGET) {
+                continue;
+            }
+            ownedListings++;
             BigInteger qty = item.getQuantity().max(BigInteger.ZERO);
             ownedQuantity = ownedQuantity.add(qty);
             ownedValue += item.getPrice() * toDoubleCapped(qty);

@@ -44,6 +44,15 @@ public final class ItemDisplayNameFormatter {
         if (materialName == null || materialName.isEmpty()) {
             return "UNKNOWN";
         }
+        if ("IRON_INGOT".equals(materialName)) {
+            return "IRON";
+        }
+        if ("GOLD_INGOT".equals(materialName)) {
+            return "GOLD";
+        }
+        if ("COPPER_INGOT".equals(materialName)) {
+            return "COPPER";
+        }
         return materialName.replace('_', ' ').toUpperCase(Locale.ROOT);
     }
 

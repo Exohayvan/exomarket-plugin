@@ -7,6 +7,7 @@ import com.starhavensmpcore.market.economy.EconomyManager;
 import com.starhavensmpcore.market.items.EnchantedBookSplitter;
 import com.starhavensmpcore.market.items.ItemDisplayNameFormatter;
 import com.starhavensmpcore.market.items.ItemSanitizer;
+import com.starhavensmpcore.market.items.OreBreakdown;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
@@ -105,24 +106,27 @@ public class MarketManager {
 
         boolean listedAny = false;
         for (EnchantedBookSplitter.SplitEntry entry : entries) {
-            BigInteger amount = entry.getQuantity();
-            if (amount.signum() <= 0) {
-                continue;
-            }
+            List<OreBreakdown.SplitEntry> oreEntries = OreBreakdown.split(entry.getItemStack(), entry.getQuantity());
+            for (OreBreakdown.SplitEntry oreEntry : oreEntries) {
+                BigInteger amount = oreEntry.getQuantity();
+                if (amount.signum() <= 0) {
+                    continue;
+                }
 
-            ItemStack template = ItemSanitizer.sanitize(entry.getItemStack());
-            MarketItem existingItem = databaseManager.getMarketItem(template, player.getUniqueId().toString());
+                ItemStack template = ItemSanitizer.sanitize(oreEntry.getItemStack());
+                MarketItem existingItem = databaseManager.getMarketItem(template, player.getUniqueId().toString());
 
-            if (existingItem == null) {
-                MarketItem newItem = new MarketItem(template, amount, 0, player.getUniqueId().toString());
-                databaseManager.addMarketItem(newItem);
-                player.sendMessage(ChatColor.GREEN + "Added " + amount.toString() + " " + template.getType().toString() + " to the market.");
-            } else {
-                existingItem.addQuantity(amount);
-                databaseManager.updateMarketItem(existingItem);
-                player.sendMessage(ChatColor.GREEN + "Added " + amount.toString() + " " + template.getType().toString() + " to existing market listing.");
+                if (existingItem == null) {
+                    MarketItem newItem = new MarketItem(template, amount, 0, player.getUniqueId().toString());
+                    databaseManager.addMarketItem(newItem);
+                    player.sendMessage(ChatColor.GREEN + "Added " + amount.toString() + " " + template.getType().toString() + " to the market.");
+                } else {
+                    existingItem.addQuantity(amount);
+                    databaseManager.updateMarketItem(existingItem);
+                    player.sendMessage(ChatColor.GREEN + "Added " + amount.toString() + " " + template.getType().toString() + " to existing market listing.");
+                }
+                listedAny = true;
             }
-            listedAny = true;
         }
 
         if (broadcast && listedAny) {
@@ -199,6 +203,79 @@ public class MarketManager {
 
         player.sendMessage(ChatColor.GREEN + "You have successfully bought " + quantity + " " +
                 template.getType().toString() + " for " + CurrencyFormatter.format(totalCost));
+
+        recalculatePrices();
+    }
+
+    public void buyConvertedItem(Player player, String baseItemData, ItemStack baseTemplate, ItemStack outputTemplate, int unitSize, int outputMultiplier, int quantity) {
+        if (unitSize <= 0 || outputMultiplier <= 0 || quantity <= 0) {
+            player.sendMessage(ChatColor.RED + "Invalid purchase amount.");
+            return;
+        }
+
+        BigInteger requestedUnits = BigInteger.valueOf(quantity).multiply(BigInteger.valueOf(unitSize));
+        List<MarketItem> listings = databaseManager.getMarketItemsByItemData(baseItemData);
+        if (listings.isEmpty()) {
+            player.sendMessage(ChatColor.RED + "That listing is no longer available.");
+            return;
+        }
+
+        BigInteger totalAvailable = listings.stream()
+                .map(MarketItem::getQuantity)
+                .reduce(BigInteger.ZERO, BigInteger::add);
+        if (totalAvailable.compareTo(requestedUnits) < 0) {
+            player.sendMessage(ChatColor.RED + "There are not enough items in stock to fulfill your request.");
+            return;
+        }
+
+        List<ListingAllocation> allocations = buildProportionalAllocations(listings, requestedUnits, totalAvailable);
+
+        double totalCost = allocations.stream()
+                .mapToDouble(a -> toDoubleCapped(a.allocated) * a.listing.getPrice())
+                .sum();
+
+        if (!economyManager.hasEnoughMoney(player, totalCost)) {
+            player.sendMessage(ChatColor.RED + "You do not have enough money to buy " + quantity + " " +
+                    ItemDisplayNameFormatter.format(outputTemplate));
+            return;
+        }
+
+        economyManager.withdrawMoney(player, totalCost);
+        databaseManager.recordPlayerName(player.getUniqueId(), player.getName());
+
+        for (ListingAllocation allocation : allocations) {
+            if (allocation.allocated.signum() <= 0) {
+                continue;
+            }
+
+            MarketItem listing = allocation.listing;
+            BigInteger take = allocation.allocated;
+            listing.setQuantity(listing.getQuantity().subtract(take));
+            double payout = listing.getPrice() * toDoubleCapped(take);
+            economyManager.addMoney(listing.getSellerUUID(), payout);
+            databaseManager.recordSale(listing.getSellerUUID(), player.getUniqueId().toString(), take, payout);
+            recordSellerName(listing.getSellerUUID());
+
+            if (listing.getQuantity().signum() == 0) {
+                databaseManager.removeMarketItem(listing);
+            } else {
+                databaseManager.updateMarketItem(listing);
+            }
+
+            plugin.getLogger().info("Player " + player.getName() + " bought " + take.toString() + " " +
+                    baseTemplate.getType().toString() + " for " + CurrencyFormatter.format(payout) +
+                    " from seller " + listing.getSellerUUID());
+        }
+
+        int outputAmount = Math.max(0, outputMultiplier * quantity);
+        ItemStack itemToGive = ItemSanitizer.sanitize(outputTemplate);
+        itemToGive.setAmount(outputAmount);
+        player.getInventory().addItem(itemToGive);
+
+        databaseManager.recordDemand(baseItemData, requestedUnits);
+
+        player.sendMessage(ChatColor.GREEN + "You have successfully bought " + outputAmount + " " +
+                ItemDisplayNameFormatter.format(itemToGive) + " for " + CurrencyFormatter.format(totalCost));
 
         recalculatePrices();
     }
@@ -286,7 +363,7 @@ public class MarketManager {
     }
 
     public boolean recalculatePricesIfNeeded(Runnable onSuccess, Runnable onFailure) {
-        BigInteger currentItemCount = databaseManager.getTotalItemsInShop();
+        BigInteger currentItemCount = getVisibleItemCount();
         if (currentItemCount.equals(lastRecalculationItemCount) && !recalculationRunning.get() && !hasDirtyListingData()) {
             if (onSuccess != null) {
                 plugin.getServer().getScheduler().runTask(plugin, onSuccess);
@@ -308,15 +385,51 @@ public class MarketManager {
         return true;
     }
 
+    private BigInteger getVisibleItemCount() {
+        BigInteger total = BigInteger.ZERO;
+        List<MarketItem> items = databaseManager.getMarketItems();
+        for (MarketItem item : items) {
+            if (item.getType() == Material.IRON_NUGGET
+                    || OreBreakdown.isCopperNugget(item.getType())
+                    || item.getType() == Material.GOLD_NUGGET) {
+                continue;
+            }
+            total = total.add(item.getQuantity().max(BigInteger.ZERO));
+        }
+        return total;
+    }
+
     private boolean hasDirtyListingData() {
         List<MarketItem> items = databaseManager.getMarketItems();
+        Map<String, BigInteger> nuggetTotals = new HashMap<>();
+        Map<String, Material> nuggetTypes = new HashMap<>();
         for (MarketItem listing : items) {
             if (listing.getType() != Material.ENCHANTED_BOOK && !listing.getItemStack().getEnchantments().isEmpty()) {
                 return true;
             }
+            if (listing.getType() == Material.DIAMOND_BLOCK
+                    || listing.getType() == Material.IRON_BLOCK
+                    || listing.getType() == Material.COPPER_BLOCK
+                    || listing.getType() == Material.GOLD_BLOCK) {
+                return true;
+            }
+            if (listing.getType() == Material.IRON_NUGGET
+                    || OreBreakdown.isCopperNugget(listing.getType())
+                    || listing.getType() == Material.GOLD_NUGGET) {
+                String key = listing.getSellerUUID() + "|" + listing.getType().toString();
+                nuggetTotals.merge(key, listing.getQuantity().max(BigInteger.ZERO), BigInteger::add);
+                nuggetTypes.put(key, listing.getType());
+            }
             ItemStack normalizedStack = ItemSanitizer.sanitizeForMarket(listing.getItemStack());
             String normalized = ItemSanitizer.serializeToString(normalizedStack);
             if (!normalized.equals(listing.getItemData())) {
+                return true;
+            }
+        }
+        for (Map.Entry<String, BigInteger> entry : nuggetTotals.entrySet()) {
+            Material nuggetType = nuggetTypes.get(entry.getKey());
+            BigInteger ratio = OreBreakdown.getNuggetRatio(nuggetType);
+            if (ratio != null && entry.getValue().compareTo(ratio) >= 0) {
                 return true;
             }
         }
@@ -354,9 +467,12 @@ public class MarketManager {
 
     private void performPriceRecalculation() {
         List<MarketItem> marketItems = databaseManager.getMarketItems();
+        marketItems = normalizeOreListings(marketItems);
+        marketItems = normalizeNuggetListings(marketItems);
         marketItems = normalizeEnchantedItemListings(marketItems);
         marketItems = normalizeEnchantedBookListings(marketItems);
         marketItems = normalizeListingItemData(marketItems);
+        marketItems = filterHiddenListings(marketItems);
         if (marketItems.isEmpty()) {
             lastRecalculationItemCount = BigInteger.ZERO;
             return;
@@ -706,6 +822,199 @@ public class MarketManager {
             return databaseManager.getMarketItems();
         }
         return marketItems;
+    }
+
+    private List<MarketItem> normalizeOreListings(List<MarketItem> marketItems) {
+        boolean changed = false;
+        for (MarketItem listing : marketItems) {
+            if (listing.getType() == Material.DIAMOND_BLOCK) {
+                changed = true;
+                BigInteger quantity = listing.getQuantity();
+                if (quantity.signum() <= 0) {
+                    databaseManager.removeMarketItem(listing);
+                    continue;
+                }
+
+                BigInteger diamonds = quantity.multiply(OreBreakdown.DIAMOND_BLOCK_RATIO);
+                String sellerUuid = listing.getSellerUUID();
+                ItemStack diamondStack = new ItemStack(Material.DIAMOND);
+                MarketItem existing = databaseManager.getMarketItem(diamondStack, sellerUuid);
+                double pricePerDiamond = listing.getPrice() / OreBreakdown.DIAMOND_BLOCK_RATIO.doubleValue();
+                if (existing == null) {
+                    MarketItem newItem = new MarketItem(diamondStack, diamonds, pricePerDiamond, sellerUuid);
+                    databaseManager.addMarketItem(newItem);
+                } else {
+                    existing.addQuantity(diamonds);
+                    databaseManager.updateMarketItem(existing);
+                }
+
+                databaseManager.removeMarketItem(listing);
+                continue;
+            }
+
+            if (listing.getType() == Material.IRON_BLOCK) {
+                changed = true;
+                BigInteger quantity = listing.getQuantity();
+                if (quantity.signum() <= 0) {
+                    databaseManager.removeMarketItem(listing);
+                    continue;
+                }
+
+                BigInteger ingots = quantity.multiply(OreBreakdown.IRON_BLOCK_RATIO);
+                String sellerUuid = listing.getSellerUUID();
+                ItemStack ingotStack = new ItemStack(Material.IRON_INGOT);
+                MarketItem existing = databaseManager.getMarketItem(ingotStack, sellerUuid);
+                double pricePerIngot = listing.getPrice() / OreBreakdown.IRON_BLOCK_RATIO.doubleValue();
+                if (existing == null) {
+                    MarketItem newItem = new MarketItem(ingotStack, ingots, pricePerIngot, sellerUuid);
+                    databaseManager.addMarketItem(newItem);
+                } else {
+                    existing.addQuantity(ingots);
+                    databaseManager.updateMarketItem(existing);
+                }
+
+                databaseManager.removeMarketItem(listing);
+                continue;
+            }
+
+            if (listing.getType() == Material.COPPER_BLOCK) {
+                changed = true;
+                BigInteger quantity = listing.getQuantity();
+                if (quantity.signum() <= 0) {
+                    databaseManager.removeMarketItem(listing);
+                    continue;
+                }
+
+                BigInteger ingots = quantity.multiply(OreBreakdown.COPPER_BLOCK_RATIO);
+                String sellerUuid = listing.getSellerUUID();
+                ItemStack ingotStack = new ItemStack(Material.COPPER_INGOT);
+                MarketItem existing = databaseManager.getMarketItem(ingotStack, sellerUuid);
+                double pricePerIngot = listing.getPrice() / OreBreakdown.COPPER_BLOCK_RATIO.doubleValue();
+                if (existing == null) {
+                    MarketItem newItem = new MarketItem(ingotStack, ingots, pricePerIngot, sellerUuid);
+                    databaseManager.addMarketItem(newItem);
+                } else {
+                    existing.addQuantity(ingots);
+                    databaseManager.updateMarketItem(existing);
+                }
+
+                databaseManager.removeMarketItem(listing);
+                continue;
+            }
+
+            if (listing.getType() == Material.GOLD_BLOCK) {
+                changed = true;
+                BigInteger quantity = listing.getQuantity();
+                if (quantity.signum() <= 0) {
+                    databaseManager.removeMarketItem(listing);
+                    continue;
+                }
+
+                BigInteger ingots = quantity.multiply(OreBreakdown.GOLD_BLOCK_RATIO);
+                String sellerUuid = listing.getSellerUUID();
+                ItemStack ingotStack = new ItemStack(Material.GOLD_INGOT);
+                MarketItem existing = databaseManager.getMarketItem(ingotStack, sellerUuid);
+                double pricePerIngot = listing.getPrice() / OreBreakdown.GOLD_BLOCK_RATIO.doubleValue();
+                if (existing == null) {
+                    MarketItem newItem = new MarketItem(ingotStack, ingots, pricePerIngot, sellerUuid);
+                    databaseManager.addMarketItem(newItem);
+                } else {
+                    existing.addQuantity(ingots);
+                    databaseManager.updateMarketItem(existing);
+                }
+
+                databaseManager.removeMarketItem(listing);
+            }
+        }
+
+        if (changed) {
+            return databaseManager.getMarketItems();
+        }
+        return marketItems;
+    }
+
+    private List<MarketItem> normalizeNuggetListings(List<MarketItem> marketItems) {
+        boolean changed = false;
+        changed |= normalizeNuggetListingsFor(marketItems, Material.IRON_NUGGET, Material.IRON_INGOT, OreBreakdown.IRON_NUGGET_RATIO);
+        Material copperNugget = OreBreakdown.getCopperNuggetMaterial();
+        if (copperNugget != null) {
+            changed |= normalizeNuggetListingsFor(marketItems, copperNugget, Material.COPPER_INGOT, OreBreakdown.COPPER_NUGGET_RATIO);
+        }
+        changed |= normalizeNuggetListingsFor(marketItems, Material.GOLD_NUGGET, Material.GOLD_INGOT, OreBreakdown.GOLD_NUGGET_RATIO);
+
+        if (changed) {
+            return databaseManager.getMarketItems();
+        }
+        return marketItems;
+    }
+
+    private boolean normalizeNuggetListingsFor(List<MarketItem> marketItems, Material nuggetType, Material ingotType, BigInteger ratio) {
+        Map<String, List<MarketItem>> bySeller = new HashMap<>();
+        for (MarketItem listing : marketItems) {
+            if (listing.getType() != nuggetType) {
+                continue;
+            }
+            bySeller.computeIfAbsent(listing.getSellerUUID(), ignored -> new ArrayList<>()).add(listing);
+        }
+
+        if (bySeller.isEmpty()) {
+            return false;
+        }
+
+        boolean changed = false;
+        for (Map.Entry<String, List<MarketItem>> entry : bySeller.entrySet()) {
+            String sellerUuid = entry.getKey();
+            List<MarketItem> nuggets = entry.getValue();
+            BigInteger totalNuggets = BigInteger.ZERO;
+            for (MarketItem listing : nuggets) {
+                totalNuggets = totalNuggets.add(listing.getQuantity().max(BigInteger.ZERO));
+            }
+
+            BigInteger ingots = totalNuggets.divide(ratio);
+            BigInteger remainder = totalNuggets.remainder(ratio);
+
+            if (ingots.signum() <= 0 && remainder.equals(totalNuggets)) {
+                continue;
+            }
+
+            changed = true;
+            for (MarketItem listing : nuggets) {
+                databaseManager.removeMarketItem(listing);
+            }
+
+            if (remainder.signum() > 0) {
+                ItemStack nuggetStack = new ItemStack(nuggetType);
+                MarketItem remainderItem = new MarketItem(nuggetStack, remainder, 0, sellerUuid);
+                databaseManager.addMarketItem(remainderItem);
+            }
+
+            if (ingots.signum() > 0) {
+                ItemStack ingotStack = new ItemStack(ingotType);
+                MarketItem existing = databaseManager.getMarketItem(ingotStack, sellerUuid);
+                if (existing == null) {
+                    MarketItem newItem = new MarketItem(ingotStack, ingots, 0, sellerUuid);
+                    databaseManager.addMarketItem(newItem);
+                } else {
+                    existing.addQuantity(ingots);
+                    databaseManager.updateMarketItem(existing);
+                }
+            }
+        }
+
+        return changed;
+    }
+
+    private List<MarketItem> filterHiddenListings(List<MarketItem> marketItems) {
+        List<MarketItem> visible = new ArrayList<>();
+        for (MarketItem listing : marketItems) {
+            if (listing.getType() == Material.IRON_NUGGET
+                    || OreBreakdown.isCopperNugget(listing.getType())
+                    || listing.getType() == Material.GOLD_NUGGET) {
+                continue;
+            }
+            visible.add(listing);
+        }
+        return visible;
     }
 
     private List<MarketItem> normalizeEnchantedItemListings(List<MarketItem> marketItems) {

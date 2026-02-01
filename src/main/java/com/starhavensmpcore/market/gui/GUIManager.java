@@ -8,6 +8,7 @@ import com.starhavensmpcore.market.economy.CurrencyFormatter;
 import com.starhavensmpcore.market.economy.QuantityFormatter;
 import com.starhavensmpcore.market.items.ItemDisplayNameFormatter;
 import com.starhavensmpcore.market.items.ItemSanitizer;
+import com.starhavensmpcore.market.items.OreBreakdown;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
@@ -34,6 +35,9 @@ public class GUIManager implements Listener {
     private Map<Player, Map<Integer, AggregatedListing>> pageItems = new HashMap<>();
     private Map<Player, String> currentFilter = new HashMap<>();
     private Map<Player, Integer> selectedEnchantLevel = new HashMap<>();
+    private Map<Player, Integer> selectedOreUnitSize = new HashMap<>();
+    private Map<Player, Integer> selectedOreOutputMultiplier = new HashMap<>();
+    private Map<Player, ItemStack> selectedOreTemplate = new HashMap<>();
 
     private static class AggregatedListing {
         private final String itemData;
@@ -136,6 +140,9 @@ public class GUIManager implements Listener {
             currentFilter.put(player, normalized);
         }
         selectedEnchantLevel.remove(player);
+        selectedOreUnitSize.remove(player);
+        selectedOreOutputMultiplier.remove(player);
+        selectedOreTemplate.remove(player);
         openMarketPage(player);
     }
 
@@ -144,28 +151,218 @@ public class GUIManager implements Listener {
             openEnchantLevelMenu(player, listing);
             return;
         }
+        if (isDiamondListing(listing) || isIronIngotListing(listing)) {
+            openOreUnitMenu(player, listing);
+            return;
+        }
+        if (isCopperIngotListing(listing) || isGoldIngotListing(listing)) {
+            openOreUnitMenu(player, listing);
+            return;
+        }
 
+        openQuantityMenu(player, listing, listing.getTemplate(), BigInteger.ONE, 1);
+    }
+
+    private void openQuantityMenu(Player player, AggregatedListing listing, ItemStack unitTemplate, BigInteger unitSize, int outputMultiplier) {
         BigInteger availableQuantity = listing.getTotalQuantity();
+        BigInteger availableUnits = availableQuantity.divide(unitSize);
+        if (availableUnits.signum() <= 0) {
+            player.sendMessage(ChatColor.RED + "There are not enough items in stock to fulfill your request.");
+            return;
+        }
+
         int inventorySize = 9;
         List<Integer> quantities = new ArrayList<>(Arrays.asList(1, 2, 4, 8, 16, 32, 64, 128, 256));
 
-        // Filter out quantities that exceed the available stock
-        quantities.removeIf(q -> availableQuantity.compareTo(BigInteger.valueOf(q)) < 0);
+        quantities.removeIf(q -> availableUnits.compareTo(BigInteger.valueOf(q)) < 0);
 
         Inventory inventory = Bukkit.createInventory(null, inventorySize, "Select Quantity");
-
+        double unitPrice = listing.getPricePerItem() * unitSize.doubleValue();
         for (int i = 0; i < quantities.size(); i++) {
             int quantity = quantities.get(i);
-            double totalCost = listing.getPricePerItem() * quantity;
-            ItemStack quantityItem = createQuantityItem(Material.PAPER, quantity, "Buy " + quantity + "x", totalCost);
+            double totalCost = unitPrice * quantity;
+            int displayQuantity = quantity * outputMultiplier;
+            ItemStack quantityItem = createQuantityItem(Material.PAPER, displayQuantity, "Buy " + displayQuantity + "x", totalCost);
             inventory.setItem(getSlot(i, inventorySize), quantityItem);
         }
 
         selectedMarketItem.put(player, listing);
         selectedEnchantLevel.remove(player);
+        selectedOreUnitSize.remove(player);
+        selectedOreOutputMultiplier.remove(player);
+        selectedOreTemplate.remove(player);
+        if (unitSize.compareTo(BigInteger.ONE) > 0 || outputMultiplier != 1 || unitTemplate.getType() != listing.getTemplate().getType()) {
+            selectedOreUnitSize.put(player, unitSize.intValue());
+            selectedOreOutputMultiplier.put(player, outputMultiplier);
+            ItemStack template = unitTemplate.clone();
+            template.setAmount(1);
+            selectedOreTemplate.put(player, template);
+        }
         player.openInventory(inventory);
     }
 
+    private void openOreUnitMenu(Player player, AggregatedListing listing) {
+        Inventory inventory = Bukkit.createInventory(null, 9, "Select Unit");
+
+        if (isDiamondListing(listing)) {
+            BigInteger availableDiamonds = listing.getTotalQuantity();
+            ItemStack diamondOption = createOreUnitItem(
+                    Material.DIAMOND,
+                    "Buy Diamonds",
+                    availableDiamonds,
+                    listing.getPricePerItem());
+            inventory.setItem(3, diamondOption);
+
+            if (availableDiamonds.compareTo(OreBreakdown.DIAMOND_BLOCK_RATIO) >= 0) {
+                BigInteger availableBlocks = availableDiamonds.divide(OreBreakdown.DIAMOND_BLOCK_RATIO);
+                ItemStack blockOption = createOreUnitItem(
+                        Material.DIAMOND_BLOCK,
+                        "Buy Diamond Blocks",
+                        availableBlocks,
+                        listing.getPricePerItem() * OreBreakdown.DIAMOND_BLOCK_RATIO.doubleValue());
+                inventory.setItem(5, blockOption);
+            }
+        } else if (isIronIngotListing(listing)) {
+            populateIngotUnitMenu(
+                    inventory,
+                    player,
+                    listing,
+                    Material.IRON_NUGGET,
+                    Material.IRON_INGOT,
+                    Material.IRON_BLOCK,
+                    OreBreakdown.IRON_NUGGET_RATIO,
+                    OreBreakdown.IRON_BLOCK_RATIO,
+                    "Iron");
+        } else if (isCopperIngotListing(listing)) {
+            populateIngotUnitMenu(
+                    inventory,
+                    player,
+                    listing,
+                    OreBreakdown.getCopperNuggetMaterial(),
+                    Material.COPPER_INGOT,
+                    Material.COPPER_BLOCK,
+                    OreBreakdown.COPPER_NUGGET_RATIO,
+                    OreBreakdown.COPPER_BLOCK_RATIO,
+                    "Copper");
+        } else if (isGoldIngotListing(listing)) {
+            populateIngotUnitMenu(
+                    inventory,
+                    player,
+                    listing,
+                    Material.GOLD_NUGGET,
+                    Material.GOLD_INGOT,
+                    Material.GOLD_BLOCK,
+                    OreBreakdown.GOLD_NUGGET_RATIO,
+                    OreBreakdown.GOLD_BLOCK_RATIO,
+                    "Gold");
+        }
+
+        selectedMarketItem.put(player, listing);
+        selectedEnchantLevel.remove(player);
+        selectedOreUnitSize.remove(player);
+        selectedOreOutputMultiplier.remove(player);
+        selectedOreTemplate.remove(player);
+        player.openInventory(inventory);
+    }
+
+    private void populateIngotUnitMenu(Inventory inventory,
+                                       Player player,
+                                       AggregatedListing listing,
+                                       Material nuggetType,
+                                       Material ingotType,
+                                       Material blockType,
+                                       BigInteger nuggetRatio,
+                                       BigInteger blockRatio,
+                                       String label) {
+        BigInteger availableIngots = listing.getTotalQuantity();
+        ItemStack nuggetInfo = createNuggetInfoItem(player, nuggetType, nuggetRatio, label);
+        inventory.setItem(2, nuggetInfo);
+
+        ItemStack ingotOption = createOreUnitItem(
+                ingotType,
+                "Buy " + label + " Ingots",
+                availableIngots,
+                listing.getPricePerItem());
+        inventory.setItem(4, ingotOption);
+
+        if (availableIngots.compareTo(blockRatio) >= 0) {
+            BigInteger availableBlocks = availableIngots.divide(blockRatio);
+            ItemStack blockOption = createOreUnitItem(
+                    blockType,
+                    "Buy " + label + " Blocks",
+                    availableBlocks,
+                    listing.getPricePerItem() * blockRatio.doubleValue());
+            inventory.setItem(6, blockOption);
+        }
+    }
+
+    private ItemStack createNuggetInfoItem(Player player, Material nuggetType, BigInteger ratio, String label) {
+        if (nuggetType == null) {
+            ItemStack fallback = new ItemStack(Material.PAPER);
+            ItemMeta meta = fallback.getItemMeta();
+            if (meta != null) {
+                meta.setDisplayName(ChatColor.YELLOW + "Queued " + label + " Nuggets");
+                List<String> lore = new ArrayList<>();
+                lore.add(ChatColor.GRAY + "This server API does not");
+                lore.add(ChatColor.GRAY + "expose " + label.toLowerCase() + " nuggets.");
+                lore.add(ChatColor.DARK_GRAY + "Not for sale");
+                meta.setLore(lore);
+                fallback.setItemMeta(meta);
+            }
+            return fallback;
+        }
+
+        ItemStack item = new ItemStack(nuggetType);
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            BigInteger queued = getQueuedNuggets(player, nuggetType);
+            BigInteger remainder = queued.remainder(ratio);
+            BigInteger needed = remainder.signum() == 0 ? BigInteger.ZERO : ratio.subtract(remainder);
+            meta.setDisplayName(ChatColor.YELLOW + "Queued " + label + " Nuggets");
+            List<String> lore = new ArrayList<>();
+            lore.add(ChatColor.GRAY + "Queued: " + QuantityFormatter.format(queued));
+            if (queued.signum() == 0) {
+                lore.add(ChatColor.GRAY + "Need: " + ratio + " to convert 1 ingot");
+            } else if (needed.signum() == 0) {
+                lore.add(ChatColor.GREEN + "Ready to convert on next recalculation");
+            } else {
+                lore.add(ChatColor.GRAY + "Need: " + QuantityFormatter.format(needed) + " more to convert 1 ingot");
+            }
+            lore.add(ChatColor.DARK_GRAY + "Not for sale");
+            meta.setLore(lore);
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
+
+    private BigInteger getQueuedNuggets(Player player, Material nuggetType) {
+        if (player == null) {
+            return BigInteger.ZERO;
+        }
+        List<MarketItem> listings = plugin.getDatabaseManager()
+                .getMarketItemsByOwner(player.getUniqueId().toString());
+        BigInteger total = BigInteger.ZERO;
+        for (MarketItem listing : listings) {
+            if (listing.getType() == nuggetType) {
+                total = total.add(listing.getQuantity().max(BigInteger.ZERO));
+            }
+        }
+        return total;
+    }
+
+    private ItemStack createOreUnitItem(Material material, String name, BigInteger available, double unitPrice) {
+        ItemStack item = new ItemStack(material);
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.setDisplayName(ChatColor.GOLD + name);
+            List<String> lore = new ArrayList<>();
+            lore.add(ChatColor.GRAY + "Available: " + QuantityFormatter.format(available));
+            lore.add(ChatColor.GRAY + "Price: " + ChatColor.GOLD + CurrencyFormatter.format(unitPrice));
+            meta.setLore(lore);
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
     private ItemStack createQuantityItem(Material material, int quantity, String name, double totalCost) {
         ItemStack item = new ItemStack(material);
         ItemMeta meta = item.getItemMeta();
@@ -246,8 +443,12 @@ public class GUIManager implements Listener {
     public void openMarketPage(Player player) {
         selectedMarketItem.remove(player);
         selectedEnchantLevel.remove(player);
+        selectedOreUnitSize.remove(player);
+        selectedOreOutputMultiplier.remove(player);
+        selectedOreTemplate.remove(player);
         DatabaseManager databaseManager = plugin.getDatabaseManager();
         List<MarketItem> marketItems = databaseManager.getMarketItems();
+        marketItems.removeIf(this::shouldHideFromMarket);
         Map<String, AggregatedListing> aggregatedMap = new LinkedHashMap<>();
         for (MarketItem marketItem : marketItems) {
             AggregatedListing listing = aggregatedMap.computeIfAbsent(
@@ -354,8 +555,30 @@ public class GUIManager implements Listener {
         return false;
     }
 
+    private boolean shouldHideFromMarket(MarketItem listing) {
+        return listing != null && (listing.getType() == Material.IRON_NUGGET
+                || OreBreakdown.isCopperNugget(listing.getType())
+                || listing.getType() == Material.GOLD_NUGGET);
+    }
+
     private boolean isEnchantedBookListing(AggregatedListing listing) {
         return listing != null && listing.getTemplate().getType() == Material.ENCHANTED_BOOK;
+    }
+
+    private boolean isDiamondListing(AggregatedListing listing) {
+        return listing != null && OreBreakdown.isDiamondListing(listing.getTemplate());
+    }
+
+    private boolean isIronIngotListing(AggregatedListing listing) {
+        return listing != null && OreBreakdown.isIronIngotListing(listing.getTemplate());
+    }
+
+    private boolean isCopperIngotListing(AggregatedListing listing) {
+        return listing != null && OreBreakdown.isCopperIngotListing(listing.getTemplate());
+    }
+
+    private boolean isGoldIngotListing(AggregatedListing listing) {
+        return listing != null && OreBreakdown.isGoldIngotListing(listing.getTemplate());
     }
 
     private BigInteger countForLevel(int level) {
@@ -471,6 +694,39 @@ public class GUIManager implements Listener {
                     openEnchantQuantityMenu(player, selected, level);
                 }
             }
+        } else if (title.startsWith("Select Unit")) {
+            event.setCancelled(true);
+            Player player = (Player) event.getWhoClicked();
+            ItemStack clickedItem = event.getCurrentItem();
+            if (clickedItem != null && !clickedItem.getType().isAir()) {
+                AggregatedListing selected = selectedMarketItem.get(player);
+                if (selected == null) {
+                    return;
+                }
+                if (clickedItem.getType() == Material.DIAMOND) {
+                    openQuantityMenu(player, selected, selected.getTemplate(), BigInteger.ONE, 1);
+                } else if (clickedItem.getType() == Material.DIAMOND_BLOCK) {
+                    openQuantityMenu(player, selected, new ItemStack(Material.DIAMOND_BLOCK), OreBreakdown.DIAMOND_BLOCK_RATIO, 1);
+                } else if (clickedItem.getType() == Material.IRON_NUGGET) {
+                    player.sendMessage(ChatColor.GRAY + "Iron nuggets are queued and not for sale.");
+                } else if (clickedItem.getType() == Material.IRON_INGOT) {
+                    openQuantityMenu(player, selected, new ItemStack(Material.IRON_INGOT), BigInteger.ONE, 1);
+                } else if (clickedItem.getType() == Material.IRON_BLOCK) {
+                    openQuantityMenu(player, selected, new ItemStack(Material.IRON_BLOCK), OreBreakdown.IRON_BLOCK_RATIO, 1);
+                } else if (OreBreakdown.isCopperNugget(clickedItem.getType())) {
+                    player.sendMessage(ChatColor.GRAY + "Copper nuggets are queued and not for sale.");
+                } else if (clickedItem.getType() == Material.COPPER_INGOT) {
+                    openQuantityMenu(player, selected, new ItemStack(Material.COPPER_INGOT), BigInteger.ONE, 1);
+                } else if (clickedItem.getType() == Material.COPPER_BLOCK) {
+                    openQuantityMenu(player, selected, new ItemStack(Material.COPPER_BLOCK), OreBreakdown.COPPER_BLOCK_RATIO, 1);
+                } else if (clickedItem.getType() == Material.GOLD_NUGGET) {
+                    player.sendMessage(ChatColor.GRAY + "Gold nuggets are queued and not for sale.");
+                } else if (clickedItem.getType() == Material.GOLD_INGOT) {
+                    openQuantityMenu(player, selected, new ItemStack(Material.GOLD_INGOT), BigInteger.ONE, 1);
+                } else if (clickedItem.getType() == Material.GOLD_BLOCK) {
+                    openQuantityMenu(player, selected, new ItemStack(Material.GOLD_BLOCK), OreBreakdown.GOLD_BLOCK_RATIO, 1);
+                }
+            }
         } else if (title.startsWith("Select Quantity")) {
             event.setCancelled(true);
             Player player = (Player) event.getWhoClicked();
@@ -485,7 +741,19 @@ public class GUIManager implements Listener {
                     if (enchantLevel != null && isEnchantedBookListing(selected)) {
                         plugin.getMarketManager().buyEnchantedBookLevel(player, selected.getItemData(), selected.getTemplate(), enchantLevel, quantity);
                     } else {
-                        plugin.getMarketManager().buyStackedItem(player, selected.getItemData(), selected.getTemplate(), quantity);
+                        Integer unitSize = selectedOreUnitSize.remove(player);
+                        Integer outputMultiplier = selectedOreOutputMultiplier.remove(player);
+                        ItemStack unitTemplate = selectedOreTemplate.remove(player);
+                        if (unitSize != null && outputMultiplier != null && unitTemplate != null) {
+                            int baseQuantity = outputMultiplier == 0 ? quantity : quantity / outputMultiplier;
+                            if (baseQuantity <= 0) {
+                                player.sendMessage(ChatColor.RED + "Invalid purchase amount.");
+                            } else {
+                                plugin.getMarketManager().buyConvertedItem(player, selected.getItemData(), selected.getTemplate(), unitTemplate, unitSize, outputMultiplier, baseQuantity);
+                            }
+                        } else {
+                            plugin.getMarketManager().buyStackedItem(player, selected.getItemData(), selected.getTemplate(), quantity);
+                        }
                     }
                     Bukkit.getScheduler().runTask(plugin, () -> openMarketPage(player));
                     selectedMarketItem.remove(player);
@@ -498,7 +766,7 @@ public class GUIManager implements Listener {
     public void onInventoryDrag(InventoryDragEvent event) {
         InventoryView view = event.getView();
         String title = view.getTitle();
-        if (title.startsWith("Market Page") || title.equals("Select Quantity") || title.equals("Select Enchant Level")) {
+        if (title.startsWith("Market Page") || title.equals("Select Quantity") || title.equals("Select Enchant Level") || title.equals("Select Unit")) {
             event.setCancelled(true);
         }
     }
