@@ -10,6 +10,7 @@ import com.starhavensmpcore.market.economy.QuantityFormatter;
 import com.starhavensmpcore.market.gui.GUIManager;
 import com.starhavensmpcore.market.gui.MarketItemsGUI;
 import com.starhavensmpcore.market.gui.MarketSellGUI;
+import com.starhavensmpcore.market.items.ItemSanitizer;
 import com.starhavensmpcore.placeholderapi.Placeholders;
 import com.starhavensmpcore.placeholderapi.PlaceholdersSh;
 import com.starhavensmpcore.market.web.MarketWebServer;
@@ -35,6 +36,7 @@ import org.bukkit.configuration.file.FileConfiguration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -210,6 +212,28 @@ public class StarhavenSMPCore extends JavaPlugin {
             } else if (args[0].equalsIgnoreCase("info")) {
                 sendMarketInfo(player);
                 return true;
+            } else if (args[0].equalsIgnoreCase("debug")) {
+                if (args.length >= 2 && args[1].equalsIgnoreCase("item")) {
+                    boolean full = args.length >= 3 && args[2].equalsIgnoreCase("full");
+                    sendMarketDebugItem(player, full);
+                    return true;
+                }
+
+                if (args.length >= 2) {
+                    boolean full = args.length >= 3 && args[args.length - 1].equalsIgnoreCase("full");
+                    int endIndex = full ? args.length - 1 : args.length;
+                    String materialName = joinArgs(args, 1, endIndex);
+                    Material material = resolveMaterial(materialName);
+                    if (material == null) {
+                        player.sendMessage(ChatColor.RED + "Unknown material: " + materialName);
+                        return true;
+                    }
+                    sendMarketDebugListings(player, material, full);
+                    return true;
+                }
+
+                player.sendMessage(ChatColor.RED + "Usage: /market debug item [full] or /market debug <material> [full]");
+                return true;
             }
             openMarketWithRecalculation(player, null);
             return true;
@@ -244,7 +268,7 @@ public class StarhavenSMPCore extends JavaPlugin {
         if (command.getName().equalsIgnoreCase("market")) {
             if (args.length == 1) {
                 String prefix = args[0].toLowerCase();
-                for (String option : Arrays.asList("buy", "sell", "items", "info")) {
+                for (String option : Arrays.asList("buy", "sell", "items", "info", "debug")) {
                     if (option.startsWith(prefix)) {
                         completions.add(option);
                     }
@@ -252,7 +276,21 @@ public class StarhavenSMPCore extends JavaPlugin {
             } else if (args.length >= 2) {
                 String subcommand = args[0].toLowerCase();
                 String prefix = args[args.length - 1].toLowerCase();
-                if (subcommand.equals("buy")) {
+                if (subcommand.equals("debug") && args.length == 2) {
+                    if ("item".startsWith(prefix)) {
+                        completions.add("item");
+                    }
+                    for (Material material : Material.values()) {
+                        String name = material.name().toLowerCase();
+                        if (name.startsWith(prefix)) {
+                            completions.add(name);
+                        }
+                    }
+                } else if (subcommand.equals("debug") && args.length >= 3) {
+                    if ("full".startsWith(prefix)) {
+                        completions.add("full");
+                    }
+                } else if (subcommand.equals("buy")) {
                     for (String suggestion : getMarketItemSuggestions(prefix)) {
                         completions.add(suggestion);
                     }
@@ -361,6 +399,89 @@ public class StarhavenSMPCore extends JavaPlugin {
                 " | Spent: " + CurrencyFormatter.format(personal.moneySpent));
     }
 
+    private void sendMarketDebugItem(Player player, boolean full) {
+        ItemStack itemInHand = player.getInventory().getItemInMainHand();
+        if (itemInHand == null || itemInHand.getType() == Material.AIR) {
+            player.sendMessage(ChatColor.RED + "You must be holding an item to debug.");
+            return;
+        }
+
+        String defaultKey = ItemSanitizer.serializeToString(itemInHand);
+        String marketKey = ItemSanitizer.serializeToString(ItemSanitizer.sanitizeForMarket(itemInHand));
+        Set<String> keys = new LinkedHashSet<>();
+        keys.add(defaultKey);
+        keys.add(marketKey);
+
+        player.sendMessage(ChatColor.GOLD + "Market Debug - Item");
+        player.sendMessage(ChatColor.GRAY + "Type: " + itemInHand.getType());
+        player.sendMessage(ChatColor.GRAY + "Key (default) len: " + defaultKey.length());
+        if (!marketKey.equals(defaultKey)) {
+            player.sendMessage(ChatColor.GRAY + "Key (market) len: " + marketKey.length());
+        }
+
+        int index = 0;
+        for (String key : keys) {
+            String label = index == 0 ? "default" : "market";
+            List<MarketItem> listings = databaseManager.getMarketItemsByItemData(key);
+            player.sendMessage(ChatColor.YELLOW + "Matches (" + label + "): " + listings.size());
+            String preview = full ? key : previewItemData(key, 120);
+            player.sendMessage(ChatColor.DARK_GRAY + "item_data: " + preview);
+            if (!full && key.length() > preview.length()) {
+                player.sendMessage(ChatColor.DARK_GRAY + "item_data truncated (use /market debug item full).");
+            }
+            for (MarketItem listing : listings) {
+                player.sendMessage(ChatColor.GRAY + "seller=" + listing.getSellerUUID() +
+                        " qty=" + listing.getQuantity().toString() +
+                        " price=" + CurrencyFormatter.format(listing.getPrice()));
+            }
+            index++;
+        }
+    }
+
+    private void sendMarketDebugListings(Player player, Material material, boolean full) {
+        List<MarketItem> listings = databaseManager.getMarketItemsBySeller(material);
+        player.sendMessage(ChatColor.GOLD + "Market Debug - " + material.toString().toLowerCase());
+        player.sendMessage(ChatColor.GRAY + "Listings: " + listings.size());
+
+        int index = 1;
+        for (MarketItem listing : listings) {
+            String data = listing.getItemData();
+            String preview = full ? data : previewItemData(data, 120);
+            player.sendMessage(ChatColor.YELLOW + "#" + index +
+                    " seller=" + listing.getSellerUUID() +
+                    " qty=" + listing.getQuantity().toString() +
+                    " price=" + CurrencyFormatter.format(listing.getPrice()));
+            player.sendMessage(ChatColor.DARK_GRAY + "item_data: " + preview);
+            if (!full && data != null && data.length() > 120) {
+                player.sendMessage(ChatColor.DARK_GRAY + "item_data truncated (use /market debug " +
+                        material.toString().toLowerCase() + " full).");
+            }
+            index++;
+        }
+    }
+
+    private Material resolveMaterial(String name) {
+        if (name == null || name.trim().isEmpty()) {
+            return null;
+        }
+        String normalized = name.trim().toUpperCase().replace(' ', '_');
+        Material match = Material.matchMaterial(normalized);
+        if (match != null) {
+            return match;
+        }
+        return Material.matchMaterial(name.trim());
+    }
+
+    private String previewItemData(String data, int maxLen) {
+        if (data == null) {
+            return "";
+        }
+        if (maxLen <= 0 || data.length() <= maxLen) {
+            return data;
+        }
+        return data.substring(0, maxLen) + "...";
+    }
+
     private double toDoubleCapped(BigInteger value) {
         if (value == null) {
             return 0d;
@@ -378,6 +499,27 @@ public class StarhavenSMPCore extends JavaPlugin {
         }
         StringBuilder builder = new StringBuilder();
         for (int i = startIndex; i < args.length; i++) {
+            if (args[i] == null || args[i].isEmpty()) {
+                continue;
+            }
+            if (builder.length() > 0) {
+                builder.append(' ');
+            }
+            builder.append(args[i]);
+        }
+        if (builder.length() == 0) {
+            return null;
+        }
+        return builder.toString();
+    }
+
+    private String joinArgs(String[] args, int startIndex, int endExclusive) {
+        if (args == null || startIndex >= args.length || endExclusive <= startIndex) {
+            return null;
+        }
+        int end = Math.min(endExclusive, args.length);
+        StringBuilder builder = new StringBuilder();
+        for (int i = startIndex; i < end; i++) {
             if (args[i] == null || args[i].isEmpty()) {
                 continue;
             }
