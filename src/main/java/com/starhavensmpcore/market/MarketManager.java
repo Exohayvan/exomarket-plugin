@@ -314,7 +314,8 @@ public class MarketManager {
             if (listing.getType() != Material.ENCHANTED_BOOK && !listing.getItemStack().getEnchantments().isEmpty()) {
                 return true;
             }
-            String normalized = ItemSanitizer.serializeToString(listing.getItemStack());
+            ItemStack normalizedStack = ItemSanitizer.sanitizeForMarket(listing.getItemStack());
+            String normalized = ItemSanitizer.serializeToString(normalizedStack);
             if (!normalized.equals(listing.getItemData())) {
                 return true;
             }
@@ -765,17 +766,17 @@ public class MarketManager {
                 continue;
             }
 
-            String normalizedData = ItemSanitizer.serializeToString(listing.getItemStack());
+            ItemStack normalizedStack = ItemSanitizer.sanitizeForMarket(listing.getItemStack());
+            String normalizedData = ItemSanitizer.serializeToString(normalizedStack);
             if (normalizedData.equals(listing.getItemData())) {
                 continue;
             }
 
             changed = true;
             String sellerUuid = listing.getSellerUUID();
-            ItemStack template = ItemSanitizer.sanitize(listing.getItemStack());
-            MarketItem existing = databaseManager.getMarketItem(template, sellerUuid);
+            MarketItem existing = databaseManager.getMarketItem(normalizedStack, sellerUuid);
             if (existing == null) {
-                MarketItem newItem = new MarketItem(template, normalizedData, quantity, listing.getPrice(), sellerUuid);
+                MarketItem newItem = new MarketItem(normalizedStack, normalizedData, quantity, listing.getPrice(), sellerUuid);
                 databaseManager.addMarketItem(newItem);
             } else {
                 existing.addQuantity(quantity);

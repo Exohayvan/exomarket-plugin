@@ -45,6 +45,25 @@ public final class ItemSanitizer {
         return stripZeroDamageComponent(sanitized);
     }
 
+    public static ItemStack sanitizeForMarket(ItemStack original) {
+        if (original == null || original.getType() == Material.AIR) {
+            return new ItemStack(Material.AIR);
+        }
+
+        ItemStack adjusted = original.clone();
+        adjusted.setAmount(1);
+        ItemMeta meta = adjusted.getItemMeta();
+        if (meta instanceof Repairable) {
+            Repairable repairable = (Repairable) meta;
+            if (repairable.getRepairCost() != 0) {
+                repairable.setRepairCost(0);
+            }
+            adjusted.setItemMeta(meta);
+        }
+
+        return sanitize(adjusted);
+    }
+
     private static ItemStack stripZeroDamageComponent(ItemStack stack) {
         ItemMeta meta = stack.getItemMeta();
         if (meta instanceof Damageable && ((Damageable) meta).getDamage() > 0) {
