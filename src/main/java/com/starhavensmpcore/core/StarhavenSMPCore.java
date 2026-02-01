@@ -10,7 +10,8 @@ import com.starhavensmpcore.market.economy.QuantityFormatter;
 import com.starhavensmpcore.market.gui.GUIManager;
 import com.starhavensmpcore.market.gui.MarketItemsGUI;
 import com.starhavensmpcore.market.gui.MarketSellGUI;
-import com.starhavensmpcore.market.placeholders.ExoMarketPlaceholders;
+import com.starhavensmpcore.placeholderapi.MarketPlaceholder;
+import com.starhavensmpcore.placeholderapi.MarketPlaceholderSh;
 import com.starhavensmpcore.market.web.MarketWebServer;
 import com.starhavensmpcore.items.CustomBlockRegistry;
 import com.starhavensmpcore.items.CustomItemManager;
@@ -47,7 +48,8 @@ public class StarhavenSMPCore extends JavaPlugin {
     private MarketSellGUI marketSellGUI;
     private MarketItemsGUI marketItemsGUI;
     private MarketWebServer marketWebServer;
-    private ExoMarketPlaceholders placeholders;
+    private MarketPlaceholder placeholders;
+    private MarketPlaceholderSh placeholdersSh;
     private ResourcePackManager resourcePackManager;
     private CustomItemManager customItemManager;
     private NoteBlockGuard noteBlockGuard;
@@ -84,7 +86,8 @@ public class StarhavenSMPCore extends JavaPlugin {
         marketSellGUI = new MarketSellGUI(this, marketManager);
         marketItemsGUI = new MarketItemsGUI(this, marketManager, databaseManager);
         marketWebServer = new MarketWebServer(this, databaseManager, WEB_PORT);
-        placeholders = new ExoMarketPlaceholders(this, databaseManager);
+        placeholders = new MarketPlaceholder(this, databaseManager);
+        placeholdersSh = new MarketPlaceholderSh(this, databaseManager);
         resourcePackManager = new ResourcePackManager(this);
         customBlockRegistry = new CustomBlockRegistry();
         customItemManager = new CustomItemManager(this, customBlockRegistry);
@@ -117,7 +120,8 @@ public class StarhavenSMPCore extends JavaPlugin {
 
         if (getServer().getPluginManager().getPlugin("PlaceholderAPI") != null) {
             placeholders.register();
-            getLogger().info("PlaceholderAPI found. Registered ExoMarket placeholders.");
+            placeholdersSh.register();
+            getLogger().info("PlaceholderAPI found. Registered Market placeholders.");
         } else {
             getLogger().info("PlaceholderAPI not found. Skipping placeholder registration.");
         }
