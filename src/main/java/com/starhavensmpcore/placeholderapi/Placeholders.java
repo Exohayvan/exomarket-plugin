@@ -3,6 +3,7 @@ package com.starhavensmpcore.placeholderapi;
 import com.starhavensmpcore.core.StarhavenSMPCore;
 import com.starhavensmpcore.market.db.DatabaseManager;
 import com.starhavensmpcore.market.economy.CurrencyFormatter;
+import com.starhavensmpcore.seasons.SeasonUtil;
 import me.clip.placeholderapi.expansion.PlaceholderExpansion;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.plugin.PluginDescriptionFile;
@@ -10,12 +11,12 @@ import org.bukkit.plugin.PluginDescriptionFile;
 /**
  * PlaceholderAPI expansion exposing basic market stats.
  */
-public class MarketPlaceholder extends PlaceholderExpansion {
+public class Placeholders extends PlaceholderExpansion {
 
     private final StarhavenSMPCore plugin;
     private final DatabaseManager databaseManager;
 
-    public MarketPlaceholder(StarhavenSMPCore plugin, DatabaseManager databaseManager) {
+    public Placeholders(StarhavenSMPCore plugin, DatabaseManager databaseManager) {
         this.plugin = plugin;
         this.databaseManager = databaseManager;
     }
@@ -57,6 +58,13 @@ public class MarketPlaceholder extends PlaceholderExpansion {
         DatabaseManager.Stats playerStats = databaseManager.getStats(playerKey(player));
 
         switch (lower) {
+            case "season":
+            case "season_formatted":
+                return SeasonUtil.getCurrentSeasonFormatted();
+            case "season_lower":
+                return SeasonUtil.getCurrentSeasonLower();
+            case "season_caps":
+                return SeasonUtil.getCurrentSeasonCaps();
             case "total_items_bought":
                 return String.valueOf(global.itemsBought);
             case "total_items_sold":

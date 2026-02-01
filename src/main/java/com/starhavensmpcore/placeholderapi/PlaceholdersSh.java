@@ -3,9 +3,9 @@ package com.starhavensmpcore.placeholderapi;
 import com.starhavensmpcore.core.StarhavenSMPCore;
 import com.starhavensmpcore.market.db.DatabaseManager;
 
-public class MarketPlaceholderSh extends MarketPlaceholder {
+public class PlaceholdersSh extends Placeholders {
 
-    public MarketPlaceholderSh(StarhavenSMPCore plugin, DatabaseManager databaseManager) {
+    public PlaceholdersSh(StarhavenSMPCore plugin, DatabaseManager databaseManager) {
         super(plugin, databaseManager);
     }
 
