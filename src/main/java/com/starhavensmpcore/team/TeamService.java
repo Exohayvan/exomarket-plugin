@@ -454,6 +454,7 @@ public class TeamService {
         }
     }
 
+    @SuppressWarnings("deprecation")
     private OfflinePlayer getOfflinePlayerIfCached(String name) {
         if (name == null || name.isEmpty()) {
             return null;
