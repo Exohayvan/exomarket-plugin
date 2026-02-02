@@ -7,6 +7,7 @@ import com.starhavensmpcore.market.economy.EconomyManager;
 import com.starhavensmpcore.market.items.OreBreakdown;
 import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
+import org.bukkit.Server;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 
@@ -400,7 +401,7 @@ public class TeamService {
         }
         String name = nameFromMethod(entry);
         if (name != null) {
-            OfflinePlayer byName = plugin.getServer().getOfflinePlayerIfCached(name);
+            OfflinePlayer byName = getOfflinePlayerIfCached(name);
             if (byName != null) {
                 return byName;
             }
@@ -449,8 +450,25 @@ public class TeamService {
             UUID uuid = UUID.fromString(value);
             return plugin.getServer().getOfflinePlayer(uuid);
         } catch (IllegalArgumentException ignored) {
-            return plugin.getServer().getOfflinePlayerIfCached(value);
+            return getOfflinePlayerIfCached(value);
         }
+    }
+
+    private OfflinePlayer getOfflinePlayerIfCached(String name) {
+        if (name == null || name.isEmpty()) {
+            return null;
+        }
+        Server server = plugin.getServer();
+        try {
+            Method method = server.getClass().getMethod("getOfflinePlayerIfCached", String.class);
+            Object result = method.invoke(server, name);
+            if (result instanceof OfflinePlayer) {
+                return (OfflinePlayer) result;
+            }
+        } catch (Exception ignored) {
+            // Method not available.
+        }
+        return server.getOfflinePlayer(name);
     }
 
     private Object invokeNoArg(Object target, String methodName) {
