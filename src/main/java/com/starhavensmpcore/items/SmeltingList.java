@@ -6,6 +6,7 @@ import org.bukkit.NamespacedKey;
 import org.bukkit.inventory.FurnaceRecipe;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.RecipeChoice;
+import org.bukkit.inventory.Recipe;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -44,10 +45,17 @@ public final class SmeltingList {
                 continue;
             }
             ItemStack result = customItemManager.createItem(resultDefinition, 1);
-            FurnaceRecipe recipe = new FurnaceRecipe(new NamespacedKey(plugin, definition.getKey()),
+            NamespacedKey furnaceKey = new NamespacedKey(plugin, definition.getKey());
+            FurnaceRecipe recipe = new FurnaceRecipe(furnaceKey,
                     result, inputChoice, definition.getExperience(), definition.getCookTime());
             Bukkit.addRecipe(recipe);
             debug(plugin, "Registered smelting recipe " + definition.getKey());
+
+            Recipe blastRecipe = buildBlastingRecipe(plugin, definition, result, inputChoice);
+            if (blastRecipe != null) {
+                Bukkit.addRecipe(blastRecipe);
+                debug(plugin, "Registered blast recipe " + definition.getKey());
+            }
         }
     }
 
@@ -55,6 +63,24 @@ public final class SmeltingList {
         if (plugin.isDebugCustomBlocks()) {
             plugin.getLogger().info("[CustomSmelting] " + message);
         }
+    }
+
+    private static Recipe buildBlastingRecipe(StarhavenSMPCore plugin,
+                                              SmeltingRecipeDefinition definition,
+                                              ItemStack result,
+                                              RecipeChoice inputChoice) {
+        try {
+            Class<?> blastingClass = Class.forName("org.bukkit.inventory.BlastingRecipe");
+            NamespacedKey key = new NamespacedKey(plugin, definition.getKey() + "_blast");
+            Object recipe = blastingClass.getConstructor(NamespacedKey.class, ItemStack.class, RecipeChoice.class, float.class, int.class)
+                    .newInstance(key, result, inputChoice, definition.getExperience(), definition.getCookTime());
+            if (recipe instanceof Recipe) {
+                return (Recipe) recipe;
+            }
+        } catch (Exception ignored) {
+            // BlastingRecipe not available on this API.
+        }
+        return null;
     }
 
     static final class SmeltingRecipeDefinition {
