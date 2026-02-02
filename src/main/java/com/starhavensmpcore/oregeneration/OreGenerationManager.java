@@ -189,28 +189,44 @@ public class OreGenerationManager implements Listener {
         if (rules == null) {
             return;
         }
-        if (random.nextDouble() > rules.getChunkChance()) {
+        int attempts = resolveChunkAttempts(rules.getChunkChance());
+        if (attempts <= 0) {
             debug("Skip " + definition.getId() + " in chunk " + chunk.getX() + "," + chunk.getZ() + " (chance)");
             return;
         }
-        boolean surfacePlacement = random.nextDouble() < rules.getSurfaceChance();
+        for (int attempt = 0; attempt < attempts; attempt++) {
+            boolean surfacePlacement = random.nextDouble() < rules.getSurfaceChance();
 
-        if (surfacePlacement) {
-            Block surface = findSurfaceBlock(chunk, rules);
-            if (surface != null) {
-                int placed = placeVein(surface, definition, rules);
-                debug("Placed " + placed + " " + definition.getId() + " at surface " + locationString(surface));
-                return;
+            if (surfacePlacement) {
+                Block surface = findSurfaceBlock(chunk, rules);
+                if (surface != null) {
+                    int placed = placeVein(surface, definition, rules);
+                    debug("Placed " + placed + " " + definition.getId() + " at surface " + locationString(surface));
+                    continue;
+                }
+            }
+
+            Block buried = findBuriedBlock(chunk, rules);
+            if (buried != null) {
+                int placed = placeVein(buried, definition, rules);
+                debug("Placed " + placed + " " + definition.getId() + " buried at " + locationString(buried));
+            } else {
+                debug("No valid spawn for " + definition.getId() + " in chunk " + chunk.getX() + "," + chunk.getZ());
             }
         }
+    }
 
-        Block buried = findBuriedBlock(chunk, rules);
-        if (buried != null) {
-            int placed = placeVein(buried, definition, rules);
-            debug("Placed " + placed + " " + definition.getId() + " buried at " + locationString(buried));
-        } else {
-            debug("No valid spawn for " + definition.getId() + " in chunk " + chunk.getX() + "," + chunk.getZ());
+    private int resolveChunkAttempts(double chance) {
+        if (chance <= 0) {
+            return 0;
         }
+        int guaranteed = (int) Math.floor(chance);
+        double remainder = chance - guaranteed;
+        int attempts = guaranteed;
+        if (remainder > 0 && random.nextDouble() < remainder) {
+            attempts++;
+        }
+        return attempts;
     }
 
     private Block findSurfaceBlock(Chunk chunk, GenerationRules rules) {
@@ -233,7 +249,23 @@ public class OreGenerationManager implements Listener {
             }
             Block block = world.getBlockAt(x, y, z);
             if (rules.getReplaceableBlocks().contains(block.getType())
-                    && block.getRelative(BlockFace.UP).getType().isAir()) {
+                    && isExposedToAirOrLiquid(block)) {
+                return block;
+            }
+        }
+
+        int minY = rules.getMinY() == -1 ? world.getMinHeight() : Math.max(world.getMinHeight(), rules.getMinY());
+        int maxY = rules.getMaxY() == -1 ? world.getMaxHeight() - 1 : Math.min(world.getMaxHeight() - 1, rules.getMaxY());
+        if (maxY < minY) {
+            return null;
+        }
+        for (int i = 0; i < attempts; i++) {
+            int x = baseX + random.nextInt(16);
+            int y = minY + random.nextInt(Math.max(1, maxY - minY + 1));
+            int z = baseZ + random.nextInt(16);
+            Block block = world.getBlockAt(x, y, z);
+            if (rules.getReplaceableBlocks().contains(block.getType())
+                    && isExposedToAirOrLiquid(block)) {
                 return block;
             }
         }
@@ -307,6 +339,16 @@ public class OreGenerationManager implements Listener {
                 candidates.add(adjacent);
             }
         }
+    }
+
+    private boolean isExposedToAirOrLiquid(Block block) {
+        for (BlockFace face : NEIGHBOR_FACES) {
+            Block adjacent = block.getRelative(face);
+            if (adjacent.getType().isAir() || adjacent.isLiquid()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void placeBlock(Block block, BlockDefinition definition) {
