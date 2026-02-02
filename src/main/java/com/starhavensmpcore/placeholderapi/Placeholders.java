@@ -57,8 +57,6 @@ public class Placeholders extends PlaceholderExpansion {
         String lower = params.toLowerCase();
         DatabaseManager.Stats global = databaseManager.getStats("global");
         DatabaseManager.Stats playerStats = databaseManager.getStats(playerKey(player));
-        TeamService teamService = plugin.getTeamService();
-        TeamService.TeamTotals teamTotals = teamService == null ? TeamService.TeamTotals.empty() : teamService.getTeamTotals(player);
 
         switch (lower) {
             case "season":
@@ -97,11 +95,11 @@ public class Placeholders extends PlaceholderExpansion {
             case "player_listed_items":
                 return String.valueOf(databaseManager.getTotalItemsInShopForSeller(playerKey(player)));
             case "team_money":
-                return rawMoney(teamTotals.getTotalEco());
+                return rawMoney(getTeamTotals(player).getTotalEco());
             case "team_money_formatted":
-                return formatMoney(teamTotals.getTotalEco());
+                return formatMoney(getTeamTotals(player).getTotalEco());
             case "team_items":
-                return teamTotals.getTotalItems().toString();
+                return getTeamTotals(player).getTotalItems().toString();
             default:
                 return "Not Valid";
         }
@@ -120,5 +118,13 @@ public class Placeholders extends PlaceholderExpansion {
 
     private String rawMoney(double amount) {
         return String.valueOf(amount);
+    }
+
+    private TeamService.TeamTotals getTeamTotals(OfflinePlayer player) {
+        TeamService teamService = plugin.getTeamService();
+        if (teamService == null) {
+            return TeamService.TeamTotals.empty();
+        }
+        return teamService.getTeamTotals(player);
     }
 }
