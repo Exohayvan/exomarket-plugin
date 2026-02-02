@@ -15,6 +15,9 @@ public final class OreBreakdown {
     public static final BigInteger COPPER_BLOCK_RATIO = BigInteger.valueOf(9);
     public static final BigInteger GOLD_NUGGET_RATIO = BigInteger.valueOf(9);
     public static final BigInteger GOLD_BLOCK_RATIO = BigInteger.valueOf(9);
+    public static final BigInteger RAW_IRON_BLOCK_RATIO = BigInteger.valueOf(9);
+    public static final BigInteger RAW_GOLD_BLOCK_RATIO = BigInteger.valueOf(9);
+    public static final BigInteger RAW_COPPER_BLOCK_RATIO = BigInteger.valueOf(9);
 
     private OreBreakdown() {
     }
@@ -62,6 +65,30 @@ public final class OreBreakdown {
             return entries;
         }
 
+        if (stack.getType() == Material.RAW_IRON_BLOCK) {
+            BigInteger rawIron = safeAmount.multiply(RAW_IRON_BLOCK_RATIO);
+            if (rawIron.signum() > 0) {
+                entries.add(new SplitEntry(new ItemStack(Material.RAW_IRON), rawIron));
+            }
+            return entries;
+        }
+
+        if (stack.getType() == Material.RAW_GOLD_BLOCK) {
+            BigInteger rawGold = safeAmount.multiply(RAW_GOLD_BLOCK_RATIO);
+            if (rawGold.signum() > 0) {
+                entries.add(new SplitEntry(new ItemStack(Material.RAW_GOLD), rawGold));
+            }
+            return entries;
+        }
+
+        if (stack.getType() == Material.RAW_COPPER_BLOCK) {
+            BigInteger rawCopper = safeAmount.multiply(RAW_COPPER_BLOCK_RATIO);
+            if (rawCopper.signum() > 0) {
+                entries.add(new SplitEntry(new ItemStack(Material.RAW_COPPER), rawCopper));
+            }
+            return entries;
+        }
+
         entries.add(new SplitEntry(cloneSingle(stack), safeAmount));
         return entries;
     }
@@ -80,6 +107,18 @@ public final class OreBreakdown {
 
     public static boolean isGoldIngotListing(ItemStack stack) {
         return stack != null && stack.getType() == Material.GOLD_INGOT;
+    }
+
+    public static boolean isRawIronListing(ItemStack stack) {
+        return stack != null && stack.getType() == Material.RAW_IRON;
+    }
+
+    public static boolean isRawGoldListing(ItemStack stack) {
+        return stack != null && stack.getType() == Material.RAW_GOLD;
+    }
+
+    public static boolean isRawCopperListing(ItemStack stack) {
+        return stack != null && stack.getType() == Material.RAW_COPPER;
     }
 
     public static BigInteger getNuggetRatio(Material nuggetType) {

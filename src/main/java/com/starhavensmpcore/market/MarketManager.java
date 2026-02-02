@@ -924,6 +924,81 @@ public class MarketManager {
                 }
 
                 databaseManager.removeMarketItem(listing);
+                continue;
+            }
+
+            if (listing.getType() == Material.RAW_IRON_BLOCK) {
+                changed = true;
+                BigInteger quantity = listing.getQuantity();
+                if (quantity.signum() <= 0) {
+                    databaseManager.removeMarketItem(listing);
+                    continue;
+                }
+
+                BigInteger rawIron = quantity.multiply(OreBreakdown.RAW_IRON_BLOCK_RATIO);
+                String sellerUuid = listing.getSellerUUID();
+                ItemStack rawStack = new ItemStack(Material.RAW_IRON);
+                MarketItem existing = databaseManager.getMarketItem(rawStack, sellerUuid);
+                double pricePerRaw = listing.getPrice() / OreBreakdown.RAW_IRON_BLOCK_RATIO.doubleValue();
+                if (existing == null) {
+                    MarketItem newItem = new MarketItem(rawStack, rawIron, pricePerRaw, sellerUuid);
+                    databaseManager.addMarketItem(newItem);
+                } else {
+                    existing.addQuantity(rawIron);
+                    databaseManager.updateMarketItem(existing);
+                }
+
+                databaseManager.removeMarketItem(listing);
+                continue;
+            }
+
+            if (listing.getType() == Material.RAW_GOLD_BLOCK) {
+                changed = true;
+                BigInteger quantity = listing.getQuantity();
+                if (quantity.signum() <= 0) {
+                    databaseManager.removeMarketItem(listing);
+                    continue;
+                }
+
+                BigInteger rawGold = quantity.multiply(OreBreakdown.RAW_GOLD_BLOCK_RATIO);
+                String sellerUuid = listing.getSellerUUID();
+                ItemStack rawStack = new ItemStack(Material.RAW_GOLD);
+                MarketItem existing = databaseManager.getMarketItem(rawStack, sellerUuid);
+                double pricePerRaw = listing.getPrice() / OreBreakdown.RAW_GOLD_BLOCK_RATIO.doubleValue();
+                if (existing == null) {
+                    MarketItem newItem = new MarketItem(rawStack, rawGold, pricePerRaw, sellerUuid);
+                    databaseManager.addMarketItem(newItem);
+                } else {
+                    existing.addQuantity(rawGold);
+                    databaseManager.updateMarketItem(existing);
+                }
+
+                databaseManager.removeMarketItem(listing);
+                continue;
+            }
+
+            if (listing.getType() == Material.RAW_COPPER_BLOCK) {
+                changed = true;
+                BigInteger quantity = listing.getQuantity();
+                if (quantity.signum() <= 0) {
+                    databaseManager.removeMarketItem(listing);
+                    continue;
+                }
+
+                BigInteger rawCopper = quantity.multiply(OreBreakdown.RAW_COPPER_BLOCK_RATIO);
+                String sellerUuid = listing.getSellerUUID();
+                ItemStack rawStack = new ItemStack(Material.RAW_COPPER);
+                MarketItem existing = databaseManager.getMarketItem(rawStack, sellerUuid);
+                double pricePerRaw = listing.getPrice() / OreBreakdown.RAW_COPPER_BLOCK_RATIO.doubleValue();
+                if (existing == null) {
+                    MarketItem newItem = new MarketItem(rawStack, rawCopper, pricePerRaw, sellerUuid);
+                    databaseManager.addMarketItem(newItem);
+                } else {
+                    existing.addQuantity(rawCopper);
+                    databaseManager.updateMarketItem(existing);
+                }
+
+                databaseManager.removeMarketItem(listing);
             }
         }
 

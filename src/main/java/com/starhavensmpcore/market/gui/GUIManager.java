@@ -159,6 +159,10 @@ public class GUIManager implements Listener {
             openOreUnitMenu(player, listing);
             return;
         }
+        if (isRawIronListing(listing) || isRawGoldListing(listing) || isRawCopperListing(listing)) {
+            openOreUnitMenu(player, listing);
+            return;
+        }
 
         openQuantityMenu(player, listing, listing.getTemplate(), BigInteger.ONE, 1);
     }
@@ -255,6 +259,30 @@ public class GUIManager implements Listener {
                     OreBreakdown.GOLD_NUGGET_RATIO,
                     OreBreakdown.GOLD_BLOCK_RATIO,
                     "Gold");
+        } else if (isRawIronListing(listing)) {
+            populateRawUnitMenu(
+                    inventory,
+                    listing,
+                    Material.RAW_IRON,
+                    Material.RAW_IRON_BLOCK,
+                    OreBreakdown.RAW_IRON_BLOCK_RATIO,
+                    "Raw Iron");
+        } else if (isRawGoldListing(listing)) {
+            populateRawUnitMenu(
+                    inventory,
+                    listing,
+                    Material.RAW_GOLD,
+                    Material.RAW_GOLD_BLOCK,
+                    OreBreakdown.RAW_GOLD_BLOCK_RATIO,
+                    "Raw Gold");
+        } else if (isRawCopperListing(listing)) {
+            populateRawUnitMenu(
+                    inventory,
+                    listing,
+                    Material.RAW_COPPER,
+                    Material.RAW_COPPER_BLOCK,
+                    OreBreakdown.RAW_COPPER_BLOCK_RATIO,
+                    "Raw Copper");
         }
 
         selectedMarketItem.put(player, listing);
@@ -293,6 +321,31 @@ public class GUIManager implements Listener {
                     availableBlocks,
                     listing.getPricePerItem() * blockRatio.doubleValue());
             inventory.setItem(6, blockOption);
+        }
+    }
+
+    private void populateRawUnitMenu(Inventory inventory,
+                                     AggregatedListing listing,
+                                     Material rawType,
+                                     Material rawBlockType,
+                                     BigInteger blockRatio,
+                                     String label) {
+        BigInteger availableRaw = listing.getTotalQuantity();
+        ItemStack rawOption = createOreUnitItem(
+                rawType,
+                "Buy " + label,
+                availableRaw,
+                listing.getPricePerItem());
+        inventory.setItem(3, rawOption);
+
+        if (availableRaw.compareTo(blockRatio) >= 0) {
+            BigInteger availableBlocks = availableRaw.divide(blockRatio);
+            ItemStack blockOption = createOreUnitItem(
+                    rawBlockType,
+                    "Buy " + label + " Blocks",
+                    availableBlocks,
+                    listing.getPricePerItem() * blockRatio.doubleValue());
+            inventory.setItem(5, blockOption);
         }
     }
 
@@ -449,6 +502,7 @@ public class GUIManager implements Listener {
         DatabaseManager databaseManager = plugin.getDatabaseManager();
         List<MarketItem> marketItems = databaseManager.getMarketItems();
         marketItems.removeIf(this::shouldHideFromMarket);
+        marketItems = normalizeRawBlockListingsForDisplay(marketItems);
         Map<String, AggregatedListing> aggregatedMap = new LinkedHashMap<>();
         for (MarketItem marketItem : marketItems) {
             AggregatedListing listing = aggregatedMap.computeIfAbsent(
@@ -505,6 +559,43 @@ public class GUIManager implements Listener {
         }
 
         player.openInventory(inventory);
+    }
+
+    private List<MarketItem> normalizeRawBlockListingsForDisplay(List<MarketItem> marketItems) {
+        if (marketItems == null || marketItems.isEmpty()) {
+            return marketItems;
+        }
+        List<MarketItem> normalized = new ArrayList<>(marketItems.size());
+        for (MarketItem listing : marketItems) {
+            if (listing == null) {
+                continue;
+            }
+            Material type = listing.getType();
+            if (type == Material.RAW_IRON_BLOCK) {
+                normalized.add(convertRawBlockListing(listing, Material.RAW_IRON, OreBreakdown.RAW_IRON_BLOCK_RATIO));
+                continue;
+            }
+            if (type == Material.RAW_GOLD_BLOCK) {
+                normalized.add(convertRawBlockListing(listing, Material.RAW_GOLD, OreBreakdown.RAW_GOLD_BLOCK_RATIO));
+                continue;
+            }
+            if (type == Material.RAW_COPPER_BLOCK) {
+                normalized.add(convertRawBlockListing(listing, Material.RAW_COPPER, OreBreakdown.RAW_COPPER_BLOCK_RATIO));
+                continue;
+            }
+            normalized.add(listing);
+        }
+        return normalized;
+    }
+
+    private MarketItem convertRawBlockListing(MarketItem listing, Material rawType, BigInteger ratio) {
+        BigInteger quantity = listing.getQuantity().max(BigInteger.ZERO);
+        if (quantity.signum() <= 0) {
+            return listing;
+        }
+        BigInteger rawAmount = quantity.multiply(ratio);
+        double pricePerRaw = listing.getPrice() / ratio.doubleValue();
+        return new MarketItem(new ItemStack(rawType), rawAmount, pricePerRaw, listing.getSellerUUID());
     }
 
     private String normalizeFilter(String filter) {
@@ -579,6 +670,18 @@ public class GUIManager implements Listener {
 
     private boolean isGoldIngotListing(AggregatedListing listing) {
         return listing != null && OreBreakdown.isGoldIngotListing(listing.getTemplate());
+    }
+
+    private boolean isRawIronListing(AggregatedListing listing) {
+        return listing != null && OreBreakdown.isRawIronListing(listing.getTemplate());
+    }
+
+    private boolean isRawGoldListing(AggregatedListing listing) {
+        return listing != null && OreBreakdown.isRawGoldListing(listing.getTemplate());
+    }
+
+    private boolean isRawCopperListing(AggregatedListing listing) {
+        return listing != null && OreBreakdown.isRawCopperListing(listing.getTemplate());
     }
 
     private BigInteger countForLevel(int level) {
@@ -725,6 +828,18 @@ public class GUIManager implements Listener {
                     openQuantityMenu(player, selected, new ItemStack(Material.GOLD_INGOT), BigInteger.ONE, 1);
                 } else if (clickedItem.getType() == Material.GOLD_BLOCK) {
                     openQuantityMenu(player, selected, new ItemStack(Material.GOLD_BLOCK), OreBreakdown.GOLD_BLOCK_RATIO, 1);
+                } else if (clickedItem.getType() == Material.RAW_IRON) {
+                    openQuantityMenu(player, selected, new ItemStack(Material.RAW_IRON), BigInteger.ONE, 1);
+                } else if (clickedItem.getType() == Material.RAW_IRON_BLOCK) {
+                    openQuantityMenu(player, selected, new ItemStack(Material.RAW_IRON_BLOCK), OreBreakdown.RAW_IRON_BLOCK_RATIO, 1);
+                } else if (clickedItem.getType() == Material.RAW_GOLD) {
+                    openQuantityMenu(player, selected, new ItemStack(Material.RAW_GOLD), BigInteger.ONE, 1);
+                } else if (clickedItem.getType() == Material.RAW_GOLD_BLOCK) {
+                    openQuantityMenu(player, selected, new ItemStack(Material.RAW_GOLD_BLOCK), OreBreakdown.RAW_GOLD_BLOCK_RATIO, 1);
+                } else if (clickedItem.getType() == Material.RAW_COPPER) {
+                    openQuantityMenu(player, selected, new ItemStack(Material.RAW_COPPER), BigInteger.ONE, 1);
+                } else if (clickedItem.getType() == Material.RAW_COPPER_BLOCK) {
+                    openQuantityMenu(player, selected, new ItemStack(Material.RAW_COPPER_BLOCK), OreBreakdown.RAW_COPPER_BLOCK_RATIO, 1);
                 }
             }
         } else if (title.startsWith("Select Quantity")) {
