@@ -63,6 +63,10 @@ public class EconomyManager {
         return economy.getBalance(player);
     }
 
+    public double getBalance(OfflinePlayer player) {
+        return economy.getBalance(player);
+    }
+
     public double getTotalMoney() {
         double totalMoney = 0;
         

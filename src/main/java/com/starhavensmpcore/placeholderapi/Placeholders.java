@@ -4,6 +4,7 @@ import com.starhavensmpcore.core.StarhavenSMPCore;
 import com.starhavensmpcore.market.db.DatabaseManager;
 import com.starhavensmpcore.market.economy.CurrencyFormatter;
 import com.starhavensmpcore.seasons.SeasonUtil;
+import com.starhavensmpcore.team.TeamService;
 import me.clip.placeholderapi.expansion.PlaceholderExpansion;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.plugin.PluginDescriptionFile;
@@ -56,6 +57,8 @@ public class Placeholders extends PlaceholderExpansion {
         String lower = params.toLowerCase();
         DatabaseManager.Stats global = databaseManager.getStats("global");
         DatabaseManager.Stats playerStats = databaseManager.getStats(playerKey(player));
+        TeamService teamService = plugin.getTeamService();
+        TeamService.TeamTotals teamTotals = teamService == null ? TeamService.TeamTotals.empty() : teamService.getTeamTotals(player);
 
         switch (lower) {
             case "season":
@@ -70,8 +73,12 @@ public class Placeholders extends PlaceholderExpansion {
             case "total_items_sold":
                 return String.valueOf(global.itemsSold);
             case "total_money_spent":
-                return formatMoney(global.moneySpent);
+                return rawMoney(global.moneySpent);
             case "total_money_earned":
+                return rawMoney(global.moneyEarned);
+            case "total_money_spent_formatted":
+                return formatMoney(global.moneySpent);
+            case "total_money_earned_formatted":
                 return formatMoney(global.moneyEarned);
             case "total_listed_items":
                 return String.valueOf(databaseManager.getTotalItemsInShop());
@@ -80,13 +87,23 @@ public class Placeholders extends PlaceholderExpansion {
             case "player_items_sold":
                 return String.valueOf(playerStats.itemsSold);
             case "player_money_spent":
-                return formatMoney(playerStats.moneySpent);
+                return rawMoney(playerStats.moneySpent);
             case "player_money_earned":
+                return rawMoney(playerStats.moneyEarned);
+            case "player_money_spent_formatted":
+                return formatMoney(playerStats.moneySpent);
+            case "player_money_earned_formatted":
                 return formatMoney(playerStats.moneyEarned);
             case "player_listed_items":
                 return String.valueOf(databaseManager.getTotalItemsInShopForSeller(playerKey(player)));
+            case "team_money":
+                return rawMoney(teamTotals.getTotalEco());
+            case "team_money_formatted":
+                return formatMoney(teamTotals.getTotalEco());
+            case "team_items":
+                return teamTotals.getTotalItems().toString();
             default:
-                return "";
+                return "Not Valid";
         }
     }
 
@@ -99,5 +116,9 @@ public class Placeholders extends PlaceholderExpansion {
 
     private String formatMoney(double amount) {
         return CurrencyFormatter.format(amount);
+    }
+
+    private String rawMoney(double amount) {
+        return String.valueOf(amount);
     }
 }
