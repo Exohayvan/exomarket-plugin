@@ -1,25 +1,27 @@
 package com.starhavensmpcore.market.items;
 
+import com.starhavensmpcore.items.CustomItemManager;
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 public final class OreBreakdown {
     public static final BigInteger DIAMOND_BLOCK_RATIO = BigInteger.valueOf(9);
-    public static final BigInteger IRON_NUGGET_RATIO = BigInteger.valueOf(9);
-    public static final BigInteger IRON_BLOCK_RATIO = BigInteger.valueOf(9);
-    public static final BigInteger COPPER_NUGGET_RATIO = BigInteger.valueOf(9);
-    public static final BigInteger COPPER_BLOCK_RATIO = BigInteger.valueOf(9);
-    public static final BigInteger GOLD_NUGGET_RATIO = BigInteger.valueOf(9);
-    public static final BigInteger GOLD_BLOCK_RATIO = BigInteger.valueOf(9);
     public static final BigInteger RAW_IRON_BLOCK_RATIO = BigInteger.valueOf(9);
     public static final BigInteger RAW_GOLD_BLOCK_RATIO = BigInteger.valueOf(9);
     public static final BigInteger RAW_COPPER_BLOCK_RATIO = BigInteger.valueOf(9);
 
+    private static CustomItemManager customItemManager;
+
     private OreBreakdown() {
+    }
+
+    public static void setCustomItemManager(CustomItemManager manager) {
+        customItemManager = manager;
     }
 
     public static List<SplitEntry> split(ItemStack stack, BigInteger amount) {
@@ -33,34 +35,14 @@ public final class OreBreakdown {
             return entries;
         }
 
-        if (stack.getType() == Material.DIAMOND_BLOCK) {
-            BigInteger diamonds = safeAmount.multiply(DIAMOND_BLOCK_RATIO);
-            if (diamonds.signum() > 0) {
-                entries.add(new SplitEntry(new ItemStack(Material.DIAMOND), diamonds));
-            }
-            return entries;
-        }
-
-        if (stack.getType() == Material.IRON_BLOCK) {
-            BigInteger ingots = safeAmount.multiply(IRON_BLOCK_RATIO);
+        OreFamilyList.OreFamily family = getFamilyForBlock(stack);
+        if (family != null) {
+            BigInteger ingots = safeAmount.multiply(family.getBlockRatio());
             if (ingots.signum() > 0) {
-                entries.add(new SplitEntry(new ItemStack(Material.IRON_INGOT), ingots));
-            }
-            return entries;
-        }
-
-        if (stack.getType() == Material.COPPER_BLOCK) {
-            BigInteger ingots = safeAmount.multiply(COPPER_BLOCK_RATIO);
-            if (ingots.signum() > 0) {
-                entries.add(new SplitEntry(new ItemStack(Material.COPPER_INGOT), ingots));
-            }
-            return entries;
-        }
-
-        if (stack.getType() == Material.GOLD_BLOCK) {
-            BigInteger ingots = safeAmount.multiply(GOLD_BLOCK_RATIO);
-            if (ingots.signum() > 0) {
-                entries.add(new SplitEntry(new ItemStack(Material.GOLD_INGOT), ingots));
+                ItemStack base = createItemFromId(family.getBaseId());
+                if (base != null) {
+                    entries.add(new SplitEntry(base, ingots));
+                }
             }
             return entries;
         }
@@ -98,15 +80,15 @@ public final class OreBreakdown {
     }
 
     public static boolean isIronIngotListing(ItemStack stack) {
-        return stack != null && stack.getType() == Material.IRON_INGOT;
+        return isBaseOfFamily(stack, "iron");
     }
 
     public static boolean isCopperIngotListing(ItemStack stack) {
-        return stack != null && stack.getType() == Material.COPPER_INGOT;
+        return isBaseOfFamily(stack, "copper");
     }
 
     public static boolean isGoldIngotListing(ItemStack stack) {
-        return stack != null && stack.getType() == Material.GOLD_INGOT;
+        return isBaseOfFamily(stack, "gold");
     }
 
     public static boolean isRawIronListing(ItemStack stack) {
@@ -121,29 +103,119 @@ public final class OreBreakdown {
         return stack != null && stack.getType() == Material.RAW_COPPER;
     }
 
-    public static BigInteger getNuggetRatio(Material nuggetType) {
-        if (nuggetType == Material.IRON_NUGGET) {
-            return IRON_NUGGET_RATIO;
+    public static BigInteger getNuggetRatio(ItemStack stack) {
+        OreFamilyList.OreFamily family = getFamilyForNugget(stack);
+        return family == null ? null : family.getNuggetRatio();
+    }
+
+    public static boolean isOreFamilyNugget(ItemStack stack) {
+        return getFamilyForNugget(stack) != null;
+    }
+
+    public static boolean isOreFamilyBlock(ItemStack stack) {
+        return getFamilyForBlock(stack) != null;
+    }
+
+    public static OreFamilyList.OreFamily getFamilyForBase(ItemStack stack) {
+        return getFamilyForRole(stack, OreFamilyRole.BASE);
+    }
+
+    public static OreFamilyList.OreFamily getFamilyForNugget(ItemStack stack) {
+        return getFamilyForRole(stack, OreFamilyRole.NUGGET);
+    }
+
+    public static OreFamilyList.OreFamily getFamilyForBlock(ItemStack stack) {
+        return getFamilyForRole(stack, OreFamilyRole.BLOCK);
+    }
+
+    public static ItemStack createItemFromId(String id) {
+        if (id == null || id.isEmpty()) {
+            return null;
         }
-        if (nuggetType == Material.GOLD_NUGGET) {
-            return GOLD_NUGGET_RATIO;
+        if (customItemManager != null) {
+            ItemStack custom = customItemManager.createItem(id, 1);
+            if (custom != null) {
+                return custom;
+            }
         }
-        if (isCopperNugget(nuggetType)) {
-            return COPPER_NUGGET_RATIO;
+        Material material = Material.matchMaterial(id);
+        if (material == null) {
+            material = Material.matchMaterial("minecraft:" + id.toLowerCase(Locale.ROOT));
+        }
+        if (material == null) {
+            return null;
+        }
+        return new ItemStack(material);
+    }
+
+    public static boolean isBaseOfFamily(ItemStack stack, String familyId) {
+        OreFamilyList.OreFamily family = getFamilyForBase(stack);
+        return family != null && family.getId().equalsIgnoreCase(familyId);
+    }
+
+    public static boolean isSameFamilyItem(ItemStack a, ItemStack b) {
+        if (a == null || b == null) {
+            return false;
+        }
+        return matchesId(a, getCustomId(b)) || matchesId(b, getCustomId(a))
+                || matchesId(a, materialId(b)) || matchesId(b, materialId(a));
+    }
+
+    private static OreFamilyList.OreFamily getFamilyForRole(ItemStack stack, OreFamilyRole role) {
+        if (stack == null) {
+            return null;
+        }
+        for (OreFamilyList.OreFamily family : OreFamilyList.getFamilies()) {
+            String id = role == OreFamilyRole.NUGGET ? family.getNuggetId()
+                    : role == OreFamilyRole.BLOCK ? family.getBlockId()
+                    : family.getBaseId();
+            if (id == null || id.isEmpty()) {
+                continue;
+            }
+            if (matchesId(stack, id)) {
+                return family;
+            }
         }
         return null;
     }
 
-    public static Material getCopperNuggetMaterial() {
-        Material direct = Material.matchMaterial("COPPER_NUGGET");
-        if (direct != null) {
-            return direct;
+    private static boolean matchesId(ItemStack stack, String id) {
+        if (stack == null || id == null || id.isEmpty()) {
+            return false;
         }
-        return Material.matchMaterial("minecraft:copper_nugget");
+        String customId = getCustomId(stack);
+        if (customId != null) {
+            return customId.equalsIgnoreCase(id);
+        }
+        String normalized = normalizeId(id);
+        String materialName = stack.getType().name();
+        return materialName.equalsIgnoreCase(normalized);
     }
 
-    public static boolean isCopperNugget(Material material) {
-        return material != null && material.name().equals("COPPER_NUGGET");
+    private static String materialId(ItemStack stack) {
+        return stack == null ? null : stack.getType().name();
+    }
+
+    private static String getCustomId(ItemStack stack) {
+        if (customItemManager == null || stack == null) {
+            return null;
+        }
+        return customItemManager.getCustomItemId(stack);
+    }
+
+    private static String normalizeId(String id) {
+        String trimmed = id.trim();
+        int colon = trimmed.indexOf(':');
+        if (colon >= 0 && colon + 1 < trimmed.length()) {
+            trimmed = trimmed.substring(colon + 1);
+        }
+        return trimmed.toUpperCase(Locale.ROOT);
+    }
+
+    private enum OreFamilyRole {
+        NUGGET,
+        BASE,
+        BLOCK
     }
 
     private static ItemStack cloneSingle(ItemStack stack) {

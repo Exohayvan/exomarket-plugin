@@ -8,6 +8,7 @@ import com.starhavensmpcore.market.items.EnchantedBookSplitter;
 import com.starhavensmpcore.market.items.ItemDisplayNameFormatter;
 import com.starhavensmpcore.market.items.ItemSanitizer;
 import com.starhavensmpcore.market.items.OreBreakdown;
+import com.starhavensmpcore.market.items.OreFamilyList;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
@@ -389,9 +390,7 @@ public class MarketManager {
         BigInteger total = BigInteger.ZERO;
         List<MarketItem> items = databaseManager.getMarketItems();
         for (MarketItem item : items) {
-            if (item.getType() == Material.IRON_NUGGET
-                    || OreBreakdown.isCopperNugget(item.getType())
-                    || item.getType() == Material.GOLD_NUGGET) {
+            if (OreBreakdown.isOreFamilyNugget(item.getItemStack())) {
                 continue;
             }
             total = total.add(item.getQuantity().max(BigInteger.ZERO));
@@ -402,23 +401,20 @@ public class MarketManager {
     private boolean hasDirtyListingData() {
         List<MarketItem> items = databaseManager.getMarketItems();
         Map<String, BigInteger> nuggetTotals = new HashMap<>();
-        Map<String, Material> nuggetTypes = new HashMap<>();
+        Map<String, OreFamilyList.OreFamily> nuggetFamilies = new HashMap<>();
         for (MarketItem listing : items) {
             if (listing.getType() != Material.ENCHANTED_BOOK && !listing.getItemStack().getEnchantments().isEmpty()) {
                 return true;
             }
             if (listing.getType() == Material.DIAMOND_BLOCK
-                    || listing.getType() == Material.IRON_BLOCK
-                    || listing.getType() == Material.COPPER_BLOCK
-                    || listing.getType() == Material.GOLD_BLOCK) {
+                    || OreBreakdown.isOreFamilyBlock(listing.getItemStack())) {
                 return true;
             }
-            if (listing.getType() == Material.IRON_NUGGET
-                    || OreBreakdown.isCopperNugget(listing.getType())
-                    || listing.getType() == Material.GOLD_NUGGET) {
-                String key = listing.getSellerUUID() + "|" + listing.getType().toString();
+            OreFamilyList.OreFamily family = OreBreakdown.getFamilyForNugget(listing.getItemStack());
+            if (family != null) {
+                String key = listing.getSellerUUID() + "|" + family.getId();
                 nuggetTotals.merge(key, listing.getQuantity().max(BigInteger.ZERO), BigInteger::add);
-                nuggetTypes.put(key, listing.getType());
+                nuggetFamilies.put(key, family);
             }
             ItemStack normalizedStack = ItemSanitizer.sanitizeForMarket(listing.getItemStack());
             String normalized = ItemSanitizer.serializeToString(normalizedStack);
@@ -427,9 +423,8 @@ public class MarketManager {
             }
         }
         for (Map.Entry<String, BigInteger> entry : nuggetTotals.entrySet()) {
-            Material nuggetType = nuggetTypes.get(entry.getKey());
-            BigInteger ratio = OreBreakdown.getNuggetRatio(nuggetType);
-            if (ratio != null && entry.getValue().compareTo(ratio) >= 0) {
+            OreFamilyList.OreFamily family = nuggetFamilies.get(entry.getKey());
+            if (family != null && entry.getValue().compareTo(family.getNuggetRatio()) >= 0) {
                 return true;
             }
         }
@@ -852,7 +847,8 @@ public class MarketManager {
                 continue;
             }
 
-            if (listing.getType() == Material.IRON_BLOCK) {
+            OreFamilyList.OreFamily familyBlock = OreBreakdown.getFamilyForBlock(listing.getItemStack());
+            if (familyBlock != null) {
                 changed = true;
                 BigInteger quantity = listing.getQuantity();
                 if (quantity.signum() <= 0) {
@@ -860,61 +856,15 @@ public class MarketManager {
                     continue;
                 }
 
-                BigInteger ingots = quantity.multiply(OreBreakdown.IRON_BLOCK_RATIO);
+                BigInteger ingots = quantity.multiply(familyBlock.getBlockRatio());
                 String sellerUuid = listing.getSellerUUID();
-                ItemStack ingotStack = new ItemStack(Material.IRON_INGOT);
-                MarketItem existing = databaseManager.getMarketItem(ingotStack, sellerUuid);
-                double pricePerIngot = listing.getPrice() / OreBreakdown.IRON_BLOCK_RATIO.doubleValue();
-                if (existing == null) {
-                    MarketItem newItem = new MarketItem(ingotStack, ingots, pricePerIngot, sellerUuid);
-                    databaseManager.addMarketItem(newItem);
-                } else {
-                    existing.addQuantity(ingots);
-                    databaseManager.updateMarketItem(existing);
-                }
-
-                databaseManager.removeMarketItem(listing);
-                continue;
-            }
-
-            if (listing.getType() == Material.COPPER_BLOCK) {
-                changed = true;
-                BigInteger quantity = listing.getQuantity();
-                if (quantity.signum() <= 0) {
+                ItemStack ingotStack = OreBreakdown.createItemFromId(familyBlock.getBaseId());
+                if (ingotStack == null) {
                     databaseManager.removeMarketItem(listing);
                     continue;
                 }
-
-                BigInteger ingots = quantity.multiply(OreBreakdown.COPPER_BLOCK_RATIO);
-                String sellerUuid = listing.getSellerUUID();
-                ItemStack ingotStack = new ItemStack(Material.COPPER_INGOT);
                 MarketItem existing = databaseManager.getMarketItem(ingotStack, sellerUuid);
-                double pricePerIngot = listing.getPrice() / OreBreakdown.COPPER_BLOCK_RATIO.doubleValue();
-                if (existing == null) {
-                    MarketItem newItem = new MarketItem(ingotStack, ingots, pricePerIngot, sellerUuid);
-                    databaseManager.addMarketItem(newItem);
-                } else {
-                    existing.addQuantity(ingots);
-                    databaseManager.updateMarketItem(existing);
-                }
-
-                databaseManager.removeMarketItem(listing);
-                continue;
-            }
-
-            if (listing.getType() == Material.GOLD_BLOCK) {
-                changed = true;
-                BigInteger quantity = listing.getQuantity();
-                if (quantity.signum() <= 0) {
-                    databaseManager.removeMarketItem(listing);
-                    continue;
-                }
-
-                BigInteger ingots = quantity.multiply(OreBreakdown.GOLD_BLOCK_RATIO);
-                String sellerUuid = listing.getSellerUUID();
-                ItemStack ingotStack = new ItemStack(Material.GOLD_INGOT);
-                MarketItem existing = databaseManager.getMarketItem(ingotStack, sellerUuid);
-                double pricePerIngot = listing.getPrice() / OreBreakdown.GOLD_BLOCK_RATIO.doubleValue();
+                double pricePerIngot = listing.getPrice() / familyBlock.getBlockRatio().doubleValue();
                 if (existing == null) {
                     MarketItem newItem = new MarketItem(ingotStack, ingots, pricePerIngot, sellerUuid);
                     databaseManager.addMarketItem(newItem);
@@ -1010,12 +960,9 @@ public class MarketManager {
 
     private List<MarketItem> normalizeNuggetListings(List<MarketItem> marketItems) {
         boolean changed = false;
-        changed |= normalizeNuggetListingsFor(marketItems, Material.IRON_NUGGET, Material.IRON_INGOT, OreBreakdown.IRON_NUGGET_RATIO);
-        Material copperNugget = OreBreakdown.getCopperNuggetMaterial();
-        if (copperNugget != null) {
-            changed |= normalizeNuggetListingsFor(marketItems, copperNugget, Material.COPPER_INGOT, OreBreakdown.COPPER_NUGGET_RATIO);
+        for (OreFamilyList.OreFamily family : OreFamilyList.getFamilies()) {
+            changed |= normalizeNuggetListingsFor(marketItems, family);
         }
-        changed |= normalizeNuggetListingsFor(marketItems, Material.GOLD_NUGGET, Material.GOLD_INGOT, OreBreakdown.GOLD_NUGGET_RATIO);
 
         if (changed) {
             return databaseManager.getMarketItems();
@@ -1023,10 +970,11 @@ public class MarketManager {
         return marketItems;
     }
 
-    private boolean normalizeNuggetListingsFor(List<MarketItem> marketItems, Material nuggetType, Material ingotType, BigInteger ratio) {
+    private boolean normalizeNuggetListingsFor(List<MarketItem> marketItems, OreFamilyList.OreFamily family) {
         Map<String, List<MarketItem>> bySeller = new HashMap<>();
         for (MarketItem listing : marketItems) {
-            if (listing.getType() != nuggetType) {
+            OreFamilyList.OreFamily listingFamily = OreBreakdown.getFamilyForNugget(listing.getItemStack());
+            if (listingFamily == null || !listingFamily.getId().equalsIgnoreCase(family.getId())) {
                 continue;
             }
             bySeller.computeIfAbsent(listing.getSellerUUID(), ignored -> new ArrayList<>()).add(listing);
@@ -1045,6 +993,7 @@ public class MarketManager {
                 totalNuggets = totalNuggets.add(listing.getQuantity().max(BigInteger.ZERO));
             }
 
+            BigInteger ratio = family.getNuggetRatio();
             BigInteger ingots = totalNuggets.divide(ratio);
             BigInteger remainder = totalNuggets.remainder(ratio);
 
@@ -1058,13 +1007,18 @@ public class MarketManager {
             }
 
             if (remainder.signum() > 0) {
-                ItemStack nuggetStack = new ItemStack(nuggetType);
-                MarketItem remainderItem = new MarketItem(nuggetStack, remainder, 0, sellerUuid);
-                databaseManager.addMarketItem(remainderItem);
+                ItemStack nuggetStack = OreBreakdown.createItemFromId(family.getNuggetId());
+                if (nuggetStack != null) {
+                    MarketItem remainderItem = new MarketItem(nuggetStack, remainder, 0, sellerUuid);
+                    databaseManager.addMarketItem(remainderItem);
+                }
             }
 
             if (ingots.signum() > 0) {
-                ItemStack ingotStack = new ItemStack(ingotType);
+                ItemStack ingotStack = OreBreakdown.createItemFromId(family.getBaseId());
+                if (ingotStack == null) {
+                    continue;
+                }
                 MarketItem existing = databaseManager.getMarketItem(ingotStack, sellerUuid);
                 if (existing == null) {
                     MarketItem newItem = new MarketItem(ingotStack, ingots, 0, sellerUuid);
@@ -1082,9 +1036,7 @@ public class MarketManager {
     private List<MarketItem> filterHiddenListings(List<MarketItem> marketItems) {
         List<MarketItem> visible = new ArrayList<>();
         for (MarketItem listing : marketItems) {
-            if (listing.getType() == Material.IRON_NUGGET
-                    || OreBreakdown.isCopperNugget(listing.getType())
-                    || listing.getType() == Material.GOLD_NUGGET) {
+            if (OreBreakdown.isOreFamilyNugget(listing.getItemStack())) {
                 continue;
             }
             visible.add(listing);

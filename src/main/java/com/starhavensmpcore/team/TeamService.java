@@ -5,10 +5,10 @@ import com.starhavensmpcore.market.MarketItem;
 import com.starhavensmpcore.market.db.DatabaseManager;
 import com.starhavensmpcore.market.economy.EconomyManager;
 import com.starhavensmpcore.market.items.OreBreakdown;
-import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.Server;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.Plugin;
 
 import java.lang.reflect.Method;
@@ -122,7 +122,7 @@ public class TeamService {
         List<MarketItem> listings = databaseManager.getMarketItemsByOwner(playerUuid.toString());
         BigInteger total = BigInteger.ZERO;
         for (MarketItem listing : listings) {
-            if (isHiddenListing(listing.getType())) {
+            if (isHiddenListing(listing.getItemStack())) {
                 continue;
             }
             total = total.add(listing.getQuantity().max(BigInteger.ZERO));
@@ -130,10 +130,8 @@ public class TeamService {
         return total;
     }
 
-    private boolean isHiddenListing(Material type) {
-        return type == Material.IRON_NUGGET
-                || type == Material.GOLD_NUGGET
-                || OreBreakdown.isCopperNugget(type);
+    private boolean isHiddenListing(ItemStack stack) {
+        return OreBreakdown.isOreFamilyNugget(stack);
     }
 
     private void ensureInitialized() {

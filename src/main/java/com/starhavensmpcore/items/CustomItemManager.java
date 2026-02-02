@@ -62,6 +62,14 @@ public class CustomItemManager implements Listener, CommandExecutor {
         return item;
     }
 
+    public ItemStack createItem(String id, int amount) {
+        BlockDefinition definition = ItemList.fromArgument(id);
+        if (definition == null) {
+            return null;
+        }
+        return createItem(definition, amount);
+    }
+
     public BlockDefinition getCustomItemDefinition(ItemStack item) {
         if (item == null || item.getType() == Material.AIR) {
             return null;
@@ -73,6 +81,18 @@ public class CustomItemManager implements Listener, CommandExecutor {
         PersistentDataContainer container = meta.getPersistentDataContainer();
         String id = container.get(itemKey, PersistentDataType.STRING);
         return ItemList.fromArgument(id);
+    }
+
+    public String getCustomItemId(ItemStack item) {
+        if (item == null || item.getType() == Material.AIR) {
+            return null;
+        }
+        ItemMeta meta = item.getItemMeta();
+        if (meta == null) {
+            return null;
+        }
+        PersistentDataContainer container = meta.getPersistentDataContainer();
+        return container.get(itemKey, PersistentDataType.STRING);
     }
 
     @EventHandler

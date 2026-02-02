@@ -9,6 +9,7 @@ import com.starhavensmpcore.market.economy.QuantityFormatter;
 import com.starhavensmpcore.market.items.ItemDisplayNameFormatter;
 import com.starhavensmpcore.market.items.ItemSanitizer;
 import com.starhavensmpcore.market.items.OreBreakdown;
+import com.starhavensmpcore.market.items.OreFamilyList;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
@@ -38,6 +39,7 @@ public class GUIManager implements Listener {
     private Map<Player, Integer> selectedOreUnitSize = new HashMap<>();
     private Map<Player, Integer> selectedOreOutputMultiplier = new HashMap<>();
     private Map<Player, ItemStack> selectedOreTemplate = new HashMap<>();
+    private Map<Player, OreUnitOptions> selectedOreUnitOptions = new HashMap<>();
 
     private static class AggregatedListing {
         private final String itemData;
@@ -123,6 +125,20 @@ public class GUIManager implements Listener {
             return displayItem;
         }
     }
+
+    private static final class OreUnitOptions {
+        private final ItemStack nugget;
+        private final ItemStack base;
+        private final ItemStack block;
+        private final BigInteger blockRatio;
+
+        private OreUnitOptions(ItemStack nugget, ItemStack base, ItemStack block, BigInteger blockRatio) {
+            this.nugget = nugget;
+            this.base = base;
+            this.block = block;
+            this.blockRatio = blockRatio;
+        }
+    }
     public GUIManager(StarhavenSMPCore plugin) {
         this.plugin = plugin;
     }
@@ -143,6 +159,7 @@ public class GUIManager implements Listener {
         selectedOreUnitSize.remove(player);
         selectedOreOutputMultiplier.remove(player);
         selectedOreTemplate.remove(player);
+        selectedOreUnitOptions.remove(player);
         openMarketPage(player);
     }
 
@@ -151,15 +168,11 @@ public class GUIManager implements Listener {
             openEnchantLevelMenu(player, listing);
             return;
         }
-        if (isDiamondListing(listing) || isIronIngotListing(listing)) {
-            openOreUnitMenu(player, listing);
-            return;
-        }
-        if (isCopperIngotListing(listing) || isGoldIngotListing(listing)) {
-            openOreUnitMenu(player, listing);
-            return;
-        }
         if (isRawIronListing(listing) || isRawGoldListing(listing) || isRawCopperListing(listing)) {
+            openOreUnitMenu(player, listing);
+            return;
+        }
+        if (OreBreakdown.getFamilyForBase(listing.getTemplate()) != null) {
             openOreUnitMenu(player, listing);
             return;
         }
@@ -195,6 +208,7 @@ public class GUIManager implements Listener {
         selectedOreUnitSize.remove(player);
         selectedOreOutputMultiplier.remove(player);
         selectedOreTemplate.remove(player);
+        selectedOreUnitOptions.remove(player);
         if (unitSize.compareTo(BigInteger.ONE) > 0 || outputMultiplier != 1 || unitTemplate.getType() != listing.getTemplate().getType()) {
             selectedOreUnitSize.put(player, unitSize.intValue());
             selectedOreOutputMultiplier.put(player, outputMultiplier);
@@ -207,82 +221,37 @@ public class GUIManager implements Listener {
 
     private void openOreUnitMenu(Player player, AggregatedListing listing) {
         Inventory inventory = Bukkit.createInventory(null, 9, "Select Unit");
+        selectedOreUnitOptions.remove(player);
 
-        if (isDiamondListing(listing)) {
-            BigInteger availableDiamonds = listing.getTotalQuantity();
-            ItemStack diamondOption = createOreUnitItem(
-                    Material.DIAMOND,
-                    "Buy Diamonds",
-                    availableDiamonds,
-                    listing.getPricePerItem());
-            inventory.setItem(3, diamondOption);
-
-            if (availableDiamonds.compareTo(OreBreakdown.DIAMOND_BLOCK_RATIO) >= 0) {
-                BigInteger availableBlocks = availableDiamonds.divide(OreBreakdown.DIAMOND_BLOCK_RATIO);
-                ItemStack blockOption = createOreUnitItem(
-                        Material.DIAMOND_BLOCK,
-                        "Buy Diamond Blocks",
-                        availableBlocks,
-                        listing.getPricePerItem() * OreBreakdown.DIAMOND_BLOCK_RATIO.doubleValue());
-                inventory.setItem(5, blockOption);
-            }
-        } else if (isIronIngotListing(listing)) {
-            populateIngotUnitMenu(
-                    inventory,
-                    player,
-                    listing,
-                    Material.IRON_NUGGET,
-                    Material.IRON_INGOT,
-                    Material.IRON_BLOCK,
-                    OreBreakdown.IRON_NUGGET_RATIO,
-                    OreBreakdown.IRON_BLOCK_RATIO,
-                    "Iron");
-        } else if (isCopperIngotListing(listing)) {
-            populateIngotUnitMenu(
-                    inventory,
-                    player,
-                    listing,
-                    OreBreakdown.getCopperNuggetMaterial(),
-                    Material.COPPER_INGOT,
-                    Material.COPPER_BLOCK,
-                    OreBreakdown.COPPER_NUGGET_RATIO,
-                    OreBreakdown.COPPER_BLOCK_RATIO,
-                    "Copper");
-        } else if (isGoldIngotListing(listing)) {
-            populateIngotUnitMenu(
-                    inventory,
-                    player,
-                    listing,
-                    Material.GOLD_NUGGET,
-                    Material.GOLD_INGOT,
-                    Material.GOLD_BLOCK,
-                    OreBreakdown.GOLD_NUGGET_RATIO,
-                    OreBreakdown.GOLD_BLOCK_RATIO,
-                    "Gold");
-        } else if (isRawIronListing(listing)) {
+        if (isRawIronListing(listing)) {
             populateRawUnitMenu(
                     inventory,
                     listing,
-                    Material.RAW_IRON,
-                    Material.RAW_IRON_BLOCK,
+                    new ItemStack(Material.RAW_IRON),
+                    new ItemStack(Material.RAW_IRON_BLOCK),
                     OreBreakdown.RAW_IRON_BLOCK_RATIO,
                     "Raw Iron");
         } else if (isRawGoldListing(listing)) {
             populateRawUnitMenu(
                     inventory,
                     listing,
-                    Material.RAW_GOLD,
-                    Material.RAW_GOLD_BLOCK,
+                    new ItemStack(Material.RAW_GOLD),
+                    new ItemStack(Material.RAW_GOLD_BLOCK),
                     OreBreakdown.RAW_GOLD_BLOCK_RATIO,
                     "Raw Gold");
         } else if (isRawCopperListing(listing)) {
             populateRawUnitMenu(
                     inventory,
                     listing,
-                    Material.RAW_COPPER,
-                    Material.RAW_COPPER_BLOCK,
+                    new ItemStack(Material.RAW_COPPER),
+                    new ItemStack(Material.RAW_COPPER_BLOCK),
                     OreBreakdown.RAW_COPPER_BLOCK_RATIO,
                     "Raw Copper");
+        } else {
+            OreFamilyList.OreFamily family = OreBreakdown.getFamilyForBase(listing.getTemplate());
+            if (family != null) {
+                populateOreFamilyUnitMenu(inventory, player, listing, family);
+            }
         }
 
         selectedMarketItem.put(player, listing);
@@ -296,27 +265,29 @@ public class GUIManager implements Listener {
     private void populateIngotUnitMenu(Inventory inventory,
                                        Player player,
                                        AggregatedListing listing,
-                                       Material nuggetType,
-                                       Material ingotType,
-                                       Material blockType,
+                                       ItemStack nuggetItem,
+                                       ItemStack ingotItem,
+                                       ItemStack blockItem,
                                        BigInteger nuggetRatio,
                                        BigInteger blockRatio,
                                        String label) {
         BigInteger availableIngots = listing.getTotalQuantity();
-        ItemStack nuggetInfo = createNuggetInfoItem(player, nuggetType, nuggetRatio, label);
-        inventory.setItem(2, nuggetInfo);
+        ItemStack nuggetInfo = createNuggetInfoItem(player, nuggetItem, nuggetRatio, label);
+        if (nuggetInfo != null) {
+            inventory.setItem(2, nuggetInfo);
+        }
 
         ItemStack ingotOption = createOreUnitItem(
-                ingotType,
+                ingotItem,
                 "Buy " + label + " Ingots",
                 availableIngots,
                 listing.getPricePerItem());
         inventory.setItem(4, ingotOption);
 
-        if (availableIngots.compareTo(blockRatio) >= 0) {
+        if (blockItem != null && availableIngots.compareTo(blockRatio) >= 0) {
             BigInteger availableBlocks = availableIngots.divide(blockRatio);
             ItemStack blockOption = createOreUnitItem(
-                    blockType,
+                    blockItem,
                     "Buy " + label + " Blocks",
                     availableBlocks,
                     listing.getPricePerItem() * blockRatio.doubleValue());
@@ -324,10 +295,33 @@ public class GUIManager implements Listener {
         }
     }
 
+    private void populateOreFamilyUnitMenu(Inventory inventory,
+                                           Player player,
+                                           AggregatedListing listing,
+                                           OreFamilyList.OreFamily family) {
+        ItemStack baseItem = listing.getTemplate();
+        baseItem.setAmount(1);
+        ItemStack nuggetItem = OreBreakdown.createItemFromId(family.getNuggetId());
+        ItemStack blockItem = OreBreakdown.createItemFromId(family.getBlockId());
+
+        selectedOreUnitOptions.put(player, new OreUnitOptions(nuggetItem, baseItem, blockItem, family.getBlockRatio()));
+
+        populateIngotUnitMenu(
+                inventory,
+                player,
+                listing,
+                nuggetItem,
+                baseItem,
+                blockItem,
+                family.getNuggetRatio(),
+                family.getBlockRatio(),
+                family.getLabel());
+    }
+
     private void populateRawUnitMenu(Inventory inventory,
                                      AggregatedListing listing,
-                                     Material rawType,
-                                     Material rawBlockType,
+                                     ItemStack rawType,
+                                     ItemStack rawBlockType,
                                      BigInteger blockRatio,
                                      String label) {
         BigInteger availableRaw = listing.getTotalQuantity();
@@ -349,26 +343,16 @@ public class GUIManager implements Listener {
         }
     }
 
-    private ItemStack createNuggetInfoItem(Player player, Material nuggetType, BigInteger ratio, String label) {
-        if (nuggetType == null) {
-            ItemStack fallback = new ItemStack(Material.PAPER);
-            ItemMeta meta = fallback.getItemMeta();
-            if (meta != null) {
-                meta.setDisplayName(ChatColor.YELLOW + "Queued " + label + " Nuggets");
-                List<String> lore = new ArrayList<>();
-                lore.add(ChatColor.GRAY + "This server API does not");
-                lore.add(ChatColor.GRAY + "expose " + label.toLowerCase() + " nuggets.");
-                lore.add(ChatColor.DARK_GRAY + "Not for sale");
-                meta.setLore(lore);
-                fallback.setItemMeta(meta);
-            }
-            return fallback;
+    private ItemStack createNuggetInfoItem(Player player, ItemStack nuggetItem, BigInteger ratio, String label) {
+        if (nuggetItem == null) {
+            return null;
         }
 
-        ItemStack item = new ItemStack(nuggetType);
+        ItemStack item = nuggetItem.clone();
+        item.setAmount(1);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            BigInteger queued = getQueuedNuggets(player, nuggetType);
+            BigInteger queued = getQueuedNuggets(player, nuggetItem);
             BigInteger remainder = queued.remainder(ratio);
             BigInteger needed = remainder.signum() == 0 ? BigInteger.ZERO : ratio.subtract(remainder);
             meta.setDisplayName(ChatColor.YELLOW + "Queued " + label + " Nuggets");
@@ -388,7 +372,7 @@ public class GUIManager implements Listener {
         return item;
     }
 
-    private BigInteger getQueuedNuggets(Player player, Material nuggetType) {
+    private BigInteger getQueuedNuggets(Player player, ItemStack nuggetItem) {
         if (player == null) {
             return BigInteger.ZERO;
         }
@@ -396,15 +380,28 @@ public class GUIManager implements Listener {
                 .getMarketItemsByOwner(player.getUniqueId().toString());
         BigInteger total = BigInteger.ZERO;
         for (MarketItem listing : listings) {
-            if (listing.getType() == nuggetType) {
+            if (matchesTemplate(listing.getItemStack(), nuggetItem)) {
                 total = total.add(listing.getQuantity().max(BigInteger.ZERO));
             }
         }
         return total;
     }
 
-    private ItemStack createOreUnitItem(Material material, String name, BigInteger available, double unitPrice) {
-        ItemStack item = new ItemStack(material);
+    private boolean matchesTemplate(ItemStack item, ItemStack template) {
+        if (item == null || template == null) {
+            return false;
+        }
+        String itemId = plugin.getCustomItemManager().getCustomItemId(item);
+        String templateId = plugin.getCustomItemManager().getCustomItemId(template);
+        if (itemId != null || templateId != null) {
+            return itemId != null && templateId != null && itemId.equalsIgnoreCase(templateId);
+        }
+        return item.getType() == template.getType();
+    }
+
+    private ItemStack createOreUnitItem(ItemStack template, String name, BigInteger available, double unitPrice) {
+        ItemStack item = template == null ? new ItemStack(Material.PAPER) : template.clone();
+        item.setAmount(1);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
             meta.setDisplayName(ChatColor.GOLD + name);
@@ -499,6 +496,7 @@ public class GUIManager implements Listener {
         selectedOreUnitSize.remove(player);
         selectedOreOutputMultiplier.remove(player);
         selectedOreTemplate.remove(player);
+        selectedOreUnitOptions.remove(player);
         DatabaseManager databaseManager = plugin.getDatabaseManager();
         List<MarketItem> marketItems = databaseManager.getMarketItems();
         marketItems.removeIf(this::shouldHideFromMarket);
@@ -647,9 +645,7 @@ public class GUIManager implements Listener {
     }
 
     private boolean shouldHideFromMarket(MarketItem listing) {
-        return listing != null && (listing.getType() == Material.IRON_NUGGET
-                || OreBreakdown.isCopperNugget(listing.getType())
-                || listing.getType() == Material.GOLD_NUGGET);
+        return listing != null && OreBreakdown.isOreFamilyNugget(listing.getItemStack());
     }
 
     private boolean isEnchantedBookListing(AggregatedListing listing) {
@@ -658,18 +654,6 @@ public class GUIManager implements Listener {
 
     private boolean isDiamondListing(AggregatedListing listing) {
         return listing != null && OreBreakdown.isDiamondListing(listing.getTemplate());
-    }
-
-    private boolean isIronIngotListing(AggregatedListing listing) {
-        return listing != null && OreBreakdown.isIronIngotListing(listing.getTemplate());
-    }
-
-    private boolean isCopperIngotListing(AggregatedListing listing) {
-        return listing != null && OreBreakdown.isCopperIngotListing(listing.getTemplate());
-    }
-
-    private boolean isGoldIngotListing(AggregatedListing listing) {
-        return listing != null && OreBreakdown.isGoldIngotListing(listing.getTemplate());
     }
 
     private boolean isRawIronListing(AggregatedListing listing) {
@@ -806,29 +790,22 @@ public class GUIManager implements Listener {
                 if (selected == null) {
                     return;
                 }
-                if (clickedItem.getType() == Material.DIAMOND) {
-                    openQuantityMenu(player, selected, selected.getTemplate(), BigInteger.ONE, 1);
-                } else if (clickedItem.getType() == Material.DIAMOND_BLOCK) {
-                    openQuantityMenu(player, selected, new ItemStack(Material.DIAMOND_BLOCK), OreBreakdown.DIAMOND_BLOCK_RATIO, 1);
-                } else if (clickedItem.getType() == Material.IRON_NUGGET) {
-                    player.sendMessage(ChatColor.GRAY + "Iron nuggets are queued and not for sale.");
-                } else if (clickedItem.getType() == Material.IRON_INGOT) {
-                    openQuantityMenu(player, selected, new ItemStack(Material.IRON_INGOT), BigInteger.ONE, 1);
-                } else if (clickedItem.getType() == Material.IRON_BLOCK) {
-                    openQuantityMenu(player, selected, new ItemStack(Material.IRON_BLOCK), OreBreakdown.IRON_BLOCK_RATIO, 1);
-                } else if (OreBreakdown.isCopperNugget(clickedItem.getType())) {
-                    player.sendMessage(ChatColor.GRAY + "Copper nuggets are queued and not for sale.");
-                } else if (clickedItem.getType() == Material.COPPER_INGOT) {
-                    openQuantityMenu(player, selected, new ItemStack(Material.COPPER_INGOT), BigInteger.ONE, 1);
-                } else if (clickedItem.getType() == Material.COPPER_BLOCK) {
-                    openQuantityMenu(player, selected, new ItemStack(Material.COPPER_BLOCK), OreBreakdown.COPPER_BLOCK_RATIO, 1);
-                } else if (clickedItem.getType() == Material.GOLD_NUGGET) {
-                    player.sendMessage(ChatColor.GRAY + "Gold nuggets are queued and not for sale.");
-                } else if (clickedItem.getType() == Material.GOLD_INGOT) {
-                    openQuantityMenu(player, selected, new ItemStack(Material.GOLD_INGOT), BigInteger.ONE, 1);
-                } else if (clickedItem.getType() == Material.GOLD_BLOCK) {
-                    openQuantityMenu(player, selected, new ItemStack(Material.GOLD_BLOCK), OreBreakdown.GOLD_BLOCK_RATIO, 1);
-                } else if (clickedItem.getType() == Material.RAW_IRON) {
+                OreUnitOptions options = selectedOreUnitOptions.get(player);
+                if (options != null) {
+                    if (options.nugget != null && matchesTemplate(clickedItem, options.nugget)) {
+                        player.sendMessage(ChatColor.GRAY + "Nuggets are queued and not for sale.");
+                        return;
+                    }
+                    if (options.base != null && matchesTemplate(clickedItem, options.base)) {
+                        openQuantityMenu(player, selected, options.base, BigInteger.ONE, 1);
+                        return;
+                    }
+                    if (options.block != null && options.blockRatio != null && matchesTemplate(clickedItem, options.block)) {
+                        openQuantityMenu(player, selected, options.block, options.blockRatio, 1);
+                        return;
+                    }
+                }
+                if (clickedItem.getType() == Material.RAW_IRON) {
                     openQuantityMenu(player, selected, new ItemStack(Material.RAW_IRON), BigInteger.ONE, 1);
                 } else if (clickedItem.getType() == Material.RAW_IRON_BLOCK) {
                     openQuantityMenu(player, selected, new ItemStack(Material.RAW_IRON_BLOCK), OreBreakdown.RAW_IRON_BLOCK_RATIO, 1);

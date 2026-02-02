@@ -77,6 +77,10 @@ public class StarhavenSMPCore extends JavaPlugin {
         return this.teamService;
     }
 
+    public CustomItemManager getCustomItemManager() {
+        return this.customItemManager;
+    }
+
     private File configFile;
     private FileConfiguration config;
     private boolean debugMarket;
@@ -96,11 +100,22 @@ public class StarhavenSMPCore extends JavaPlugin {
         marketItemsGUI = new MarketItemsGUI(this, marketManager, databaseManager);
         marketWebServer = new MarketWebServer(this, databaseManager, WEB_PORT);
         teamService = new TeamService(this, databaseManager, economyManager);
-        placeholders = new Placeholders(this, databaseManager);
-        placeholdersSh = new PlaceholdersSh(this, databaseManager);
+        if (getServer().getPluginManager().isPluginEnabled("PlaceholderAPI")) {
+            try {
+                placeholders = new Placeholders(this, databaseManager);
+                placeholdersSh = new PlaceholdersSh(this, databaseManager);
+                placeholders.register();
+                placeholdersSh.register();
+            } catch (NoClassDefFoundError ex) {
+                getLogger().warning("PlaceholderAPI detected but classes are missing; skipping placeholders.");
+            }
+        } else {
+            getLogger().info("PlaceholderAPI not found; placeholders disabled.");
+        }
         resourcePackManager = new ResourcePackManager(this);
         customBlockRegistry = new CustomBlockRegistry();
         customItemManager = new CustomItemManager(this, customBlockRegistry);
+        OreBreakdown.setCustomItemManager(customItemManager);
         noteBlockGuard = new NoteBlockGuard(this, customBlockRegistry, customItemManager);
         oreGenerationManager = new OreGenerationManager(this, customBlockRegistry);
 
@@ -323,9 +338,7 @@ public class StarhavenSMPCore extends JavaPlugin {
     private List<String> getMarketItemSuggestions(String prefix) {
         List<String> suggestions = new ArrayList<>();
         for (MarketItem item : databaseManager.getMarketItems()) {
-            if (item.getType() == Material.IRON_NUGGET
-                    || OreBreakdown.isCopperNugget(item.getType())
-                    || item.getType() == Material.GOLD_NUGGET) {
+            if (OreBreakdown.isOreFamilyNugget(item.getItemStack())) {
                 continue;
             }
             String name = item.getType().toString().toLowerCase();
@@ -366,9 +379,7 @@ public class StarhavenSMPCore extends JavaPlugin {
         double totalValue = 0d;
         Set<String> uniqueItems = new HashSet<>();
         for (MarketItem item : items) {
-            if (item.getType() == Material.IRON_NUGGET
-                    || OreBreakdown.isCopperNugget(item.getType())
-                    || item.getType() == Material.GOLD_NUGGET) {
+            if (OreBreakdown.isOreFamilyNugget(item.getItemStack())) {
                 continue;
             }
             totalListings++;
@@ -399,9 +410,7 @@ public class StarhavenSMPCore extends JavaPlugin {
         double ownedValue = 0d;
         Set<String> ownedUnique = new HashSet<>();
         for (MarketItem item : owned) {
-            if (item.getType() == Material.IRON_NUGGET
-                    || OreBreakdown.isCopperNugget(item.getType())
-                    || item.getType() == Material.GOLD_NUGGET) {
+            if (OreBreakdown.isOreFamilyNugget(item.getItemStack())) {
                 continue;
             }
             ownedListings++;

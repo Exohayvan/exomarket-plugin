@@ -9,7 +9,6 @@ import com.starhavensmpcore.market.items.ItemDisplayNameFormatter;
 import com.starhavensmpcore.market.items.OreBreakdown;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
-import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.inventory.ItemStack;
 
@@ -224,9 +223,7 @@ public class MarketWebServer {
     private Map<String, Aggregate> aggregate(List<MarketItem> items) {
         Map<String, Aggregate> aggregates = new LinkedHashMap<>();
         for (MarketItem item : items) {
-            if (item.getType() == Material.IRON_NUGGET
-                    || OreBreakdown.isCopperNugget(item.getType())
-                    || item.getType() == Material.GOLD_NUGGET) {
+            if (OreBreakdown.isOreFamilyNugget(item.getItemStack())) {
                 continue;
             }
             Aggregate aggregate = aggregates.get(item.getItemData());
