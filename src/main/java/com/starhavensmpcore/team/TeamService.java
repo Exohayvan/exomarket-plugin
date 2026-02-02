@@ -16,14 +16,20 @@ import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 public class TeamService {
+
+    private static final long CACHE_TTL_MS = TimeUnit.SECONDS.toMillis(5);
 
     private final StarhavenSMPCore plugin;
     private final DatabaseManager databaseManager;
     private final EconomyManager economyManager;
+    private final Map<UUID, CachedTotals> cache = new ConcurrentHashMap<>();
     private volatile boolean initialized = false;
     private volatile boolean available = false;
     private Method getTeamByUuid;
@@ -53,7 +59,38 @@ public class TeamService {
         if (!available) {
             return TeamTotals.empty();
         }
+        UUID key = player.getUniqueId();
+        if (plugin.getServer().isPrimaryThread()) {
+            CachedTotals cached = cache.get(key);
+            long now = System.currentTimeMillis();
+            if (cached != null && now - cached.timestampMs <= CACHE_TTL_MS) {
+                return cached.totals;
+            }
+            scheduleRefresh(player);
+            return cached == null ? TeamTotals.empty() : cached.totals;
+        }
+        TeamTotals totals = computeTeamTotals(player);
+        cache.put(key, new CachedTotals(totals, System.currentTimeMillis()));
+        return totals;
+    }
 
+    private void scheduleRefresh(OfflinePlayer player) {
+        if (player == null || player.getUniqueId() == null) {
+            return;
+        }
+        UUID key = player.getUniqueId();
+        CachedTotals cached = cache.get(key);
+        if (cached != null && cached.refreshing) {
+            return;
+        }
+        cache.put(key, CachedTotals.refreshing(cached));
+        plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
+            TeamTotals totals = computeTeamTotals(player);
+            cache.put(key, new CachedTotals(totals, System.currentTimeMillis()));
+        });
+    }
+
+    private TeamTotals computeTeamTotals(OfflinePlayer player) {
         Object team = getTeam(player);
         if (team == null) {
             return TeamTotals.empty();
@@ -214,7 +251,6 @@ public class TeamService {
         }
     }
 
-    @SuppressWarnings("unchecked")
     private List<OfflinePlayer> getTeamMembers(Object team, OfflinePlayer requester) {
         if (team == null || getMembers == null) {
             return Collections.emptyList();
@@ -287,8 +323,8 @@ public class TeamService {
         if (value == null) {
             return Collections.emptyList();
         }
-        if (value instanceof java.util.Map) {
-            return coerceMap((java.util.Map<?, ?>) value);
+        if (value instanceof Map) {
+            return coerceMap((Map<?, ?>) value);
         }
         if (value instanceof Collection) {
             return coerceCollection((Collection<?>) value);
@@ -349,7 +385,10 @@ public class TeamService {
             return plugin.getServer().getOfflinePlayer((UUID) entry);
         }
         if (entry instanceof String) {
-            return plugin.getServer().getOfflinePlayer((String) entry);
+            OfflinePlayer byUuid = offlinePlayerFromString((String) entry);
+            if (byUuid != null) {
+                return byUuid;
+            }
         }
         OfflinePlayer fromMethod = offlinePlayerFromMethod(entry);
         if (fromMethod != null) {
@@ -361,7 +400,10 @@ public class TeamService {
         }
         String name = nameFromMethod(entry);
         if (name != null) {
-            return plugin.getServer().getOfflinePlayer(name);
+            OfflinePlayer byName = plugin.getServer().getOfflinePlayerIfCached(name);
+            if (byName != null) {
+                return byName;
+            }
         }
         return null;
     }
@@ -397,6 +439,18 @@ public class TeamService {
             }
         }
         return null;
+    }
+
+    private OfflinePlayer offlinePlayerFromString(String value) {
+        if (value == null || value.isEmpty()) {
+            return null;
+        }
+        try {
+            UUID uuid = UUID.fromString(value);
+            return plugin.getServer().getOfflinePlayer(uuid);
+        } catch (IllegalArgumentException ignored) {
+            return plugin.getServer().getOfflinePlayerIfCached(value);
+        }
     }
 
     private Object invokeNoArg(Object target, String methodName) {
@@ -456,6 +510,29 @@ public class TeamService {
 
         public static TeamTotals empty() {
             return new TeamTotals(0d, BigInteger.ZERO);
+        }
+    }
+
+    private static final class CachedTotals {
+        private final TeamTotals totals;
+        private final long timestampMs;
+        private final boolean refreshing;
+
+        private CachedTotals(TeamTotals totals, long timestampMs, boolean refreshing) {
+            this.totals = totals == null ? TeamTotals.empty() : totals;
+            this.timestampMs = timestampMs;
+            this.refreshing = refreshing;
+        }
+
+        private CachedTotals(TeamTotals totals, long timestampMs) {
+            this(totals, timestampMs, false);
+        }
+
+        private static CachedTotals refreshing(CachedTotals prior) {
+            if (prior == null) {
+                return new CachedTotals(TeamTotals.empty(), 0L, true);
+            }
+            return new CachedTotals(prior.totals, prior.timestampMs, true);
         }
     }
 }
