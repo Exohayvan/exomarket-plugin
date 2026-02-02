@@ -652,10 +652,6 @@ public class GUIManager implements Listener {
         return listing != null && listing.getTemplate().getType() == Material.ENCHANTED_BOOK;
     }
 
-    private boolean isDiamondListing(AggregatedListing listing) {
-        return listing != null && OreBreakdown.isDiamondListing(listing.getTemplate());
-    }
-
     private boolean isRawIronListing(AggregatedListing listing) {
         return listing != null && OreBreakdown.isRawIronListing(listing.getTemplate());
     }
