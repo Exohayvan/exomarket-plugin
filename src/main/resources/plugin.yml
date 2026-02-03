@@ -2,7 +2,7 @@ name: StarhavenSMPCore
 description: A plugin for managing the market GUI
 depend: [Essentials]
 softdepend: [PlaceholderAPI, BetterTeams]
-version: 4.6.39
+version: 4.6.40
 api-version: 1.21
 main: com.starhavensmpcore.core.StarhavenSMPCore
 
