@@ -26,6 +26,7 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 import org.bukkit.OfflinePlayer;
+import java.util.Locale;
 
 public class MarketManager {
 
@@ -92,6 +93,11 @@ public class MarketManager {
 
     public boolean sellItem(Player player, ItemStack stack, boolean broadcast) {
         if (stack == null || stack.getType().isAir()) {
+            return false;
+        }
+
+        if (isOreItem(stack)) {
+            player.sendMessage(ChatColor.RED + "Ores cannot be sold. Please break the block down first.");
             return false;
         }
 
@@ -279,6 +285,18 @@ public class MarketManager {
                 ItemDisplayNameFormatter.format(itemToGive) + " for " + CurrencyFormatter.format(totalCost));
 
         recalculatePrices();
+    }
+
+    private boolean isOreItem(ItemStack stack) {
+        if (stack == null) {
+            return false;
+        }
+        String typeName = stack.getType().name();
+        if (typeName.endsWith("_ORE")) {
+            return true;
+        }
+        String customId = plugin.getCustomItemManager().getCustomItemId(stack);
+        return customId != null && customId.toLowerCase(Locale.ROOT).endsWith("_ore");
     }
 
     public void buyEnchantedBookLevel(Player player, String itemData, ItemStack template, int level, int quantity) {
