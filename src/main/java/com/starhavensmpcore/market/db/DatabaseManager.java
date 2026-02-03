@@ -17,6 +17,7 @@ import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
@@ -848,6 +849,44 @@ public class DatabaseManager {
             total = total.add(item.getQuantity().max(BigInteger.ZERO));
         }
         return total;
+    }
+
+    public void updatePricesByItemData(Map<String, Double> prices) {
+        if (prices == null || prices.isEmpty()) {
+            return;
+        }
+        if (!isDbThread()) {
+            runOnDbThread(() -> updatePricesByItemData(prices));
+            return;
+        }
+        try (PreparedStatement statement = connection.prepareStatement(
+                "UPDATE market_items SET price = ? WHERE item_data = ?")) {
+            connection.setAutoCommit(false);
+            for (Map.Entry<String, Double> entry : prices.entrySet()) {
+                String itemData = entry.getKey();
+                if (itemData == null || itemData.isEmpty()) {
+                    continue;
+                }
+                statement.setDouble(1, entry.getValue());
+                statement.setString(2, itemData);
+                statement.addBatch();
+            }
+            statement.executeBatch();
+            connection.commit();
+        } catch (SQLException e) {
+            try {
+                connection.rollback();
+            } catch (SQLException ignored) {
+                // ignore rollback failures
+            }
+            e.printStackTrace();
+        } finally {
+            try {
+                connection.setAutoCommit(true);
+            } catch (SQLException ignored) {
+                // ignore reset failures
+            }
+        }
     }
 
     private BigInteger parseBigInteger(String value) {

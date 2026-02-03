@@ -727,14 +727,14 @@ public class MarketManager {
         if (snapshot == null || result == null) {
             return;
         }
-        for (MarketItem listing : snapshot.listings) {
-            AggregateResult aggregate = result.aggregates.get(listing.getItemData());
-            if (aggregate == null) {
+        Map<String, Double> priceByItemData = new HashMap<>();
+        for (AggregateResult aggregate : result.aggregates.values()) {
+            if (aggregate.itemData == null || aggregate.itemData.isEmpty()) {
                 continue;
             }
-            listing.setPrice(aggregate.finalPrice);
-            databaseManager.updateMarketItem(listing);
+            priceByItemData.put(aggregate.itemData, aggregate.finalPrice);
         }
+        databaseManager.updatePricesByItemData(priceByItemData);
 
         if (snapshot.totalMarketValue > 0
                 && result.totalAppliedValue > 0
@@ -776,6 +776,7 @@ public class MarketManager {
         private final Map<String, BigInteger> demandMetrics;
         private final Map<String, String> commodityNames;
         private final BigInteger actualTotalItems;
+        @SuppressWarnings("unused")
         private final int totalListings;
         private final double totalMarketValue;
         private final double maxPrice;
