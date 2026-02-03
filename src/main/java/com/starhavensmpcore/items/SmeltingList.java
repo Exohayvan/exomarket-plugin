@@ -25,6 +25,13 @@ public final class SmeltingList {
                 0.7f,
                 200
         ));
+        recipes.add(new SmeltingRecipeDefinition(
+                "cobalt_ingot_from_cobalt_tin",
+                RecipeIngredient.custom("raw_cobalt"),
+                "cobalt_ingot",
+                1.2f,
+                200
+        ));
 
         RECIPES = Collections.unmodifiableList(recipes);
     }
@@ -72,8 +79,9 @@ public final class SmeltingList {
         try {
             Class<?> blastingClass = Class.forName("org.bukkit.inventory.BlastingRecipe");
             NamespacedKey key = new NamespacedKey(plugin, definition.getKey() + "_blast");
+            int blastCookTime = toBlastCookTime(definition.getCookTime());
             Object recipe = blastingClass.getConstructor(NamespacedKey.class, ItemStack.class, RecipeChoice.class, float.class, int.class)
-                    .newInstance(key, result, inputChoice, definition.getExperience(), definition.getCookTime());
+                    .newInstance(key, result, inputChoice, definition.getExperience(), blastCookTime);
             if (recipe instanceof Recipe) {
                 return (Recipe) recipe;
             }
@@ -81,6 +89,11 @@ public final class SmeltingList {
             // BlastingRecipe not available on this API.
         }
         return null;
+    }
+
+    private static int toBlastCookTime(int cookTime) {
+        int base = Math.max(1, cookTime);
+        return Math.max(1, (int) Math.round(base * 0.5));
     }
 
     static final class SmeltingRecipeDefinition {
