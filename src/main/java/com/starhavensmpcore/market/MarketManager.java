@@ -24,6 +24,8 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 import org.bukkit.OfflinePlayer;
@@ -44,6 +46,7 @@ public class MarketManager {
     private volatile BigInteger lastRecalculationItemCount = BigInteger.valueOf(-1L);
     private final Object recalculationCallbackLock = new Object();
     private final List<RecalculationCallback> recalculationCallbacks = new ArrayList<>();
+    private final ExecutorService recalculationExecutor;
 
     public MarketManager(StarhavenSMPCore plugin, DatabaseManager databaseManager, EconomyManager economyManager, double marketValueMultiplier, double maxPricePercent, double minPrice) {
         this.plugin = plugin;
@@ -52,6 +55,11 @@ public class MarketManager {
         this.marketValueMultiplier = marketValueMultiplier;
         this.maxPricePercent = maxPricePercent;
         this.minPrice = minPrice;
+        this.recalculationExecutor = Executors.newSingleThreadExecutor(runnable -> {
+            Thread thread = new Thread(runnable, "StarhavenSMPCore-Recalc");
+            thread.setDaemon(true);
+            return thread;
+        });
     }
 
     public void sellItem(Player player, int amount) {
@@ -402,34 +410,53 @@ public class MarketManager {
 
     public void recalculatePricesIfNeededAsync(Runnable onSuccess, Runnable onFailure, java.util.function.Consumer<Boolean> onQueued) {
         databaseManager.runOnDbThread(() -> {
-            boolean willRecalculate = recalculatePricesIfNeeded(onSuccess, onFailure);
+            boolean willRecalculate = shouldRecalculate();
             if (onQueued != null) {
                 plugin.getServer().getScheduler().runTask(plugin, () -> onQueued.accept(willRecalculate));
             }
+            if (!willRecalculate) {
+                if (onSuccess != null) {
+                    plugin.getServer().getScheduler().runTask(plugin, onSuccess);
+                }
+                return;
+            }
+            if (onSuccess != null || onFailure != null) {
+                synchronized (recalculationCallbackLock) {
+                    recalculationCallbacks.add(new RecalculationCallback(onSuccess, onFailure));
+                }
+            }
+            if (recalculationRunning.get()) {
+                return;
+            }
+            scheduleRecalculation(true);
         });
     }
 
     public boolean recalculatePricesIfNeeded(Runnable onSuccess, Runnable onFailure) {
-        BigInteger currentItemCount = getVisibleItemCount();
-        if (currentItemCount.equals(lastRecalculationItemCount) && !recalculationRunning.get() && !hasDirtyListingData()) {
+        boolean willRecalculate = shouldRecalculate();
+        if (!willRecalculate) {
             if (onSuccess != null) {
                 plugin.getServer().getScheduler().runTask(plugin, onSuccess);
             }
             return false;
         }
-
         if (onSuccess != null || onFailure != null) {
             synchronized (recalculationCallbackLock) {
                 recalculationCallbacks.add(new RecalculationCallback(onSuccess, onFailure));
             }
         }
-
         if (recalculationRunning.get()) {
             return true;
         }
-
         scheduleRecalculation(true);
         return true;
+    }
+
+    private boolean shouldRecalculate() {
+        BigInteger currentItemCount = getVisibleItemCount();
+        return !(currentItemCount.equals(lastRecalculationItemCount)
+                && !recalculationRunning.get()
+                && !hasDirtyListingData());
     }
 
     private BigInteger getVisibleItemCount() {
@@ -485,29 +512,48 @@ public class MarketManager {
         }
 
         if (recalculationRunning.compareAndSet(false, true)) {
-            databaseManager.runOnDbThread(() -> {
-                boolean success = false;
-                try {
-                    performPriceRecalculation();
-                    lastSuccessfulRecalculation = System.currentTimeMillis();
-                    success = true;
-                } catch (Exception ex) {
-                    plugin.getLogger().log(Level.SEVERE, "Failed to recalculate market prices", ex);
-                } finally {
-                    recalculationRunning.set(false);
-                    if (recalculationQueued.getAndSet(false)) {
-                        scheduleRecalculation(true);
-                        return;
-                    }
-                    notifyRecalculationCallbacks(success);
-                }
-            });
-        } else {
-            recalculationQueued.set(true);
+            databaseManager.runOnDbThread(this::startRecalculation);
+            return;
+        }
+        recalculationQueued.set(true);
+    }
+    private void startRecalculation() {
+        try {
+            RecalculationSnapshot snapshot = prepareRecalculationSnapshot();
+            if (snapshot == null || snapshot.listings.isEmpty()) {
+                finishRecalculation(true, snapshot);
+                return;
+            }
+            recalculationExecutor.execute(() -> computeAndApplyRecalculation(snapshot));
+        } catch (Exception ex) {
+            plugin.getLogger().log(Level.SEVERE, "Failed to prepare market recalculation", ex);
+            finishRecalculation(false, null);
         }
     }
 
-    private void performPriceRecalculation() {
+    private void computeAndApplyRecalculation(RecalculationSnapshot snapshot) {
+        RecalculationResult result = null;
+        try {
+            result = computeRecalculation(snapshot);
+        } catch (Exception ex) {
+            plugin.getLogger().log(Level.SEVERE, "Failed to compute market recalculation", ex);
+        }
+        RecalculationResult finalResult = result;
+        databaseManager.runOnDbThread(() -> {
+            boolean success = finalResult != null;
+            if (success) {
+                try {
+                    applyRecalculation(snapshot, finalResult);
+                } catch (Exception ex) {
+                    success = false;
+                    plugin.getLogger().log(Level.SEVERE, "Failed to apply market recalculation", ex);
+                }
+            }
+            finishRecalculation(success, snapshot);
+        });
+    }
+
+    private RecalculationSnapshot prepareRecalculationSnapshot() {
         List<MarketItem> marketItems = databaseManager.getMarketItems();
         marketItems = normalizeOreListings(marketItems);
         marketItems = normalizeNuggetListings(marketItems);
@@ -517,22 +563,68 @@ public class MarketManager {
         marketItems = filterHiddenListings(marketItems);
         if (marketItems.isEmpty()) {
             lastRecalculationItemCount = BigInteger.ZERO;
-            return;
+            return new RecalculationSnapshot(marketItems, new HashMap<>(), new HashMap<>(),
+                    BigInteger.ZERO, 0, 0d, 0d, minPrice, 0d, plugin.isDebugMarket());
+        }
+
+        Map<String, BigInteger> demandMetrics = new HashMap<>();
+        Map<String, String> commodityNames = new HashMap<>();
+        BigInteger actualTotalItems = BigInteger.ZERO;
+        for (MarketItem listing : marketItems) {
+            BigInteger qty = listing.getQuantity().max(BigInteger.ZERO);
+            actualTotalItems = actualTotalItems.add(qty);
+            String itemData = listing.getItemData();
+            if (itemData == null || itemData.isEmpty()) {
+                continue;
+            }
+            if (!demandMetrics.containsKey(itemData)) {
+                DatabaseManager.DemandStats demand = databaseManager.getDemandForItem(itemData);
+                demandMetrics.put(itemData, DemandMetric.summarize(demand));
+            }
+            commodityNames.putIfAbsent(itemData, listing.getType().toString());
         }
 
         double totalMoney = economyManager.getTotalMoney();
         double totalMarketValue = totalMoney * marketValueMultiplier;
         double maxPrice = totalMoney * maxPricePercent;
-        double commodityCap = totalMoney * 0.20; // cap any single commodity at 20% of total economy value
+        double commodityCap = totalMoney * 0.20;
+        return new RecalculationSnapshot(
+                marketItems,
+                demandMetrics,
+                commodityNames,
+                actualTotalItems,
+                marketItems.size(),
+                totalMarketValue,
+                maxPrice,
+                minPrice,
+                commodityCap,
+                plugin.isDebugMarket()
+        );
+    }
 
-        Map<String, Aggregate> aggregates = new HashMap<>();
+    private RecalculationResult computeRecalculation(RecalculationSnapshot snapshot) {
+        Map<String, AggregateComputation> aggregates = new HashMap<>();
         BigInteger totalItems = BigInteger.ZERO;
         int totalListings = 0;
 
-        for (MarketItem listing : marketItems) {
-            totalItems = totalItems.add(listing.getQuantity().max(BigInteger.ZERO));
+        for (MarketItem listing : snapshot.listings) {
+            String itemData = listing.getItemData();
+            if (itemData == null || itemData.isEmpty()) {
+                continue;
+            }
+            BigInteger qty = listing.getQuantity().max(BigInteger.ZERO);
+            totalItems = totalItems.add(qty);
             totalListings++;
-            aggregates.computeIfAbsent(listing.getItemData(), key -> new Aggregate()).addListing(listing);
+            AggregateComputation aggregate = aggregates.computeIfAbsent(itemData,
+                    key -> new AggregateComputation(key,
+                            snapshot.demandMetrics.getOrDefault(key, BigInteger.ZERO),
+                            snapshot.commodityNames.getOrDefault(key, key)));
+            aggregate.totalQuantity = aggregate.totalQuantity.add(qty);
+            aggregate.listingCount++;
+        }
+
+        if (aggregates.isEmpty()) {
+            return new RecalculationResult(new HashMap<>(), 0d);
         }
 
         BigInteger actualTotalItems = totalItems;
@@ -543,14 +635,7 @@ public class MarketManager {
         double averageQuantity = Math.max(1d, toDoubleCapped(totalItems) / aggregates.size());
         double averageListings = Math.max(1d, (double) totalListings / aggregates.size());
         BigInteger totalDemand = BigInteger.ZERO;
-        for (Aggregate aggregate : aggregates.values()) {
-            String itemData = aggregate.getItemData();
-            if (itemData != null && !itemData.isEmpty()) {
-                DatabaseManager.DemandStats demand = databaseManager.getDemandForItem(itemData);
-                aggregate.demandMetric = DemandMetric.summarize(demand);
-            } else {
-                aggregate.demandMetric = BigInteger.ZERO;
-            }
+        for (AggregateComputation aggregate : aggregates.values()) {
             totalDemand = totalDemand.add(aggregate.demandMetric);
         }
         double averageDemand = Math.max(1d, toDoubleCapped(totalDemand) / aggregates.size());
@@ -561,7 +646,7 @@ public class MarketManager {
         double minWeight = 1e-3;
         double maxWeight = 5.0;
 
-        for (Aggregate aggregate : aggregates.values()) {
+        for (AggregateComputation aggregate : aggregates.values()) {
             double aggregateQuantity = Math.max(1d, toDoubleCapped(aggregate.totalQuantity));
             double quantityFactor = Math.pow(averageQuantity / aggregateQuantity, quantityExponent);
             double listingFactor = Math.pow(averageListings / Math.max(1d, aggregate.listingCount), listingExponent);
@@ -576,36 +661,36 @@ public class MarketManager {
             aggregate.weight = weight;
         }
 
-        double remainingValue = totalMarketValue;
-        List<Aggregate> adjustable = new ArrayList<>(aggregates.values());
+        double remainingValue = snapshot.totalMarketValue;
+        List<AggregateComputation> adjustable = new ArrayList<>(aggregates.values());
 
         while (!adjustable.isEmpty() && remainingValue > 0.0001) {
             double weightSum = 0d;
-            for (Aggregate aggregate : adjustable) {
+            for (AggregateComputation aggregate : adjustable) {
                 weightSum += aggregate.weight;
             }
 
             if (weightSum <= 0) {
                 double equalWeight = 1d / adjustable.size();
-                for (Aggregate aggregate : adjustable) {
+                for (AggregateComputation aggregate : adjustable) {
                     aggregate.weight = equalWeight;
                 }
                 weightSum = 1d;
             }
 
             double allocatedThisRound = 0d;
-            List<Aggregate> cappedThisRound = new ArrayList<>();
+            List<AggregateComputation> cappedThisRound = new ArrayList<>();
 
-            for (Aggregate aggregate : adjustable) {
+            for (AggregateComputation aggregate : adjustable) {
                 double share = aggregate.weight / weightSum;
                 double proposed = remainingValue * share;
-                double remainingCap = commodityCap - aggregate.assignedValue;
+                double remainingCap = snapshot.commodityCap - aggregate.assignedValue;
                 double allocation = Math.max(0d, Math.min(proposed, remainingCap));
 
                 if (allocation > 0) {
                     aggregate.assignedValue += allocation;
                     allocatedThisRound += allocation;
-                    if (aggregate.assignedValue >= commodityCap - 1e-6) {
+                    if (aggregate.assignedValue >= snapshot.commodityCap - 1e-6) {
                         cappedThisRound.add(aggregate);
                     }
                 } else if (remainingCap <= 0) {
@@ -621,64 +706,143 @@ public class MarketManager {
             adjustable.removeAll(cappedThisRound);
         }
 
+        Map<String, AggregateResult> results = new HashMap<>();
         double totalAppliedValue = 0d;
-        for (Aggregate aggregate : aggregates.values()) {
+        for (AggregateComputation aggregate : aggregates.values()) {
             double quantity = Math.max(1d, toDoubleCapped(aggregate.totalQuantity));
             double basePrice = aggregate.assignedValue / quantity;
-            double finalPrice = Math.max(minPrice, Math.min(maxPrice, basePrice));
-
-            for (MarketItem listing : aggregate.listings) {
-                listing.setPrice(finalPrice);
-                databaseManager.updateMarketItem(listing);
-            }
-
-            double commodityValue = finalPrice * quantity;
-            totalAppliedValue += commodityValue;
-            double marketShare = totalMarketValue > 0 ? (commodityValue / totalMarketValue) * 100 : 0;
-            if (plugin.isDebugMarket()) {
-                plugin.getLogger().info("Updated price for " + aggregate.getCommodityName() + " to " + CurrencyFormatter.format(finalPrice) +
-                        " (supply: " + aggregate.totalQuantity.toString() + ", market share: " +
-                    String.format("%.2f%%", marketShare) + ")");
-            }
+            double finalPrice = Math.max(snapshot.minPrice, Math.min(snapshot.maxPrice, basePrice));
+            AggregateResult result = new AggregateResult(aggregate.itemData, aggregate.totalQuantity, finalPrice, aggregate.commodityName);
+            results.put(aggregate.itemData, result);
+            totalAppliedValue += finalPrice * quantity;
         }
 
-        if (totalAppliedValue > 0 && Math.abs(totalAppliedValue - totalMarketValue) / totalMarketValue > 0.25) {
-            plugin.getLogger().warning("Applied market value deviates significantly from target. Applied: " + totalAppliedValue + " Target: " + totalMarketValue);
+        if (actualTotalItems.signum() <= 0 && snapshot.actualTotalItems != null) {
+            actualTotalItems = snapshot.actualTotalItems;
         }
-
-        lastRecalculationItemCount = actualTotalItems.max(BigInteger.ZERO);
+        return new RecalculationResult(results, totalAppliedValue);
     }
 
-    private static class Aggregate {
+    private void applyRecalculation(RecalculationSnapshot snapshot, RecalculationResult result) {
+        if (snapshot == null || result == null) {
+            return;
+        }
+        for (MarketItem listing : snapshot.listings) {
+            AggregateResult aggregate = result.aggregates.get(listing.getItemData());
+            if (aggregate == null) {
+                continue;
+            }
+            listing.setPrice(aggregate.finalPrice);
+            databaseManager.updateMarketItem(listing);
+        }
+
+        if (snapshot.totalMarketValue > 0
+                && result.totalAppliedValue > 0
+                && Math.abs(result.totalAppliedValue - snapshot.totalMarketValue) / snapshot.totalMarketValue > 0.25) {
+            plugin.getLogger().warning("Applied market value deviates significantly from target. Applied: " +
+                    result.totalAppliedValue + " Target: " + snapshot.totalMarketValue);
+        }
+
+        if (snapshot.debug) {
+            for (AggregateResult aggregate : result.aggregates.values()) {
+                double quantity = Math.max(1d, toDoubleCapped(aggregate.totalQuantity));
+                double marketShare = snapshot.totalMarketValue > 0 ? (aggregate.finalPrice * quantity / snapshot.totalMarketValue) * 100 : 0;
+                plugin.getLogger().info("Updated price for " + aggregate.commodityName + " to " +
+                        CurrencyFormatter.format(aggregate.finalPrice) + " (supply: " +
+                        aggregate.totalQuantity.toString() + ", market share: " +
+                        String.format("%.2f%%", marketShare) + ")");
+            }
+        }
+
+        if (snapshot.actualTotalItems != null) {
+            lastRecalculationItemCount = snapshot.actualTotalItems.max(BigInteger.ZERO);
+        }
+    }
+
+    private void finishRecalculation(boolean success, RecalculationSnapshot snapshot) {
+        if (success) {
+            lastSuccessfulRecalculation = System.currentTimeMillis();
+        }
+        recalculationRunning.set(false);
+        if (recalculationQueued.getAndSet(false)) {
+            scheduleRecalculation(true);
+            return;
+        }
+        notifyRecalculationCallbacks(success);
+    }
+
+    private static final class RecalculationSnapshot {
+        private final List<MarketItem> listings;
+        private final Map<String, BigInteger> demandMetrics;
+        private final Map<String, String> commodityNames;
+        private final BigInteger actualTotalItems;
+        private final int totalListings;
+        private final double totalMarketValue;
+        private final double maxPrice;
+        private final double minPrice;
+        private final double commodityCap;
+        private final boolean debug;
+
+        private RecalculationSnapshot(List<MarketItem> listings,
+                                      Map<String, BigInteger> demandMetrics,
+                                      Map<String, String> commodityNames,
+                                      BigInteger actualTotalItems,
+                                      int totalListings,
+                                      double totalMarketValue,
+                                      double maxPrice,
+                                      double minPrice,
+                                      double commodityCap,
+                                      boolean debug) {
+            this.listings = listings;
+            this.demandMetrics = demandMetrics;
+            this.commodityNames = commodityNames;
+            this.actualTotalItems = actualTotalItems;
+            this.totalListings = totalListings;
+            this.totalMarketValue = totalMarketValue;
+            this.maxPrice = maxPrice;
+            this.minPrice = minPrice;
+            this.commodityCap = commodityCap;
+            this.debug = debug;
+        }
+    }
+
+    private static final class AggregateComputation {
+        private final String itemData;
+        private final BigInteger demandMetric;
+        private final String commodityName;
         private BigInteger totalQuantity = BigInteger.ZERO;
         private int listingCount = 0;
-        private final List<MarketItem> listings = new ArrayList<>();
-        private MarketItem representative;
         private double weight = 1d;
         private double assignedValue = 0d;
-        private BigInteger demandMetric = BigInteger.ZERO;
 
-        void addListing(MarketItem item) {
-            if (representative == null) {
-                representative = item;
-            }
-            totalQuantity = totalQuantity.add(item.getQuantity());
-            listingCount++;
-            listings.add(item);
+        private AggregateComputation(String itemData, BigInteger demandMetric, String commodityName) {
+            this.itemData = itemData;
+            this.demandMetric = demandMetric == null ? BigInteger.ZERO : demandMetric;
+            this.commodityName = commodityName == null ? "Unknown" : commodityName;
         }
+    }
 
-        String getCommodityName() {
-            if (representative == null) {
-                return "Unknown";
-            }
-            return representative.getType().toString();
+    private static final class AggregateResult {
+        private final String itemData;
+        private final BigInteger totalQuantity;
+        private final double finalPrice;
+        private final String commodityName;
+
+        private AggregateResult(String itemData, BigInteger totalQuantity, double finalPrice, String commodityName) {
+            this.itemData = itemData;
+            this.totalQuantity = totalQuantity == null ? BigInteger.ZERO : totalQuantity;
+            this.finalPrice = finalPrice;
+            this.commodityName = commodityName == null ? "Unknown" : commodityName;
         }
+    }
 
-        String getItemData() {
-            if (representative == null) {
-                return "";
-            }
-            return representative.getItemData();
+    private static final class RecalculationResult {
+        private final Map<String, AggregateResult> aggregates;
+        private final double totalAppliedValue;
+
+        private RecalculationResult(Map<String, AggregateResult> aggregates, double totalAppliedValue) {
+            this.aggregates = aggregates;
+            this.totalAppliedValue = totalAppliedValue;
         }
     }
 
