@@ -87,6 +87,10 @@ public class GUIManager implements Listener {
         }
 
         String getTypeName() {
+            OreFamilyList.OreFamily family = OreBreakdown.getFamilyForBase(template);
+            if (family != null && family.getLabel() != null && !family.getLabel().isEmpty()) {
+                return family.getLabel();
+            }
             return ItemDisplayNameFormatter.format(template);
         }
 
@@ -168,10 +172,6 @@ public class GUIManager implements Listener {
             openEnchantLevelMenu(player, listing);
             return;
         }
-        if (isRawIronListing(listing) || isRawGoldListing(listing) || isRawCopperListing(listing)) {
-            openOreUnitMenu(player, listing);
-            return;
-        }
         if (OreBreakdown.getFamilyForBase(listing.getTemplate()) != null) {
             openOreUnitMenu(player, listing);
             return;
@@ -223,35 +223,9 @@ public class GUIManager implements Listener {
         Inventory inventory = Bukkit.createInventory(null, 9, "Select Unit");
         selectedOreUnitOptions.remove(player);
 
-        if (isRawIronListing(listing)) {
-            populateRawUnitMenu(
-                    inventory,
-                    listing,
-                    new ItemStack(Material.RAW_IRON),
-                    new ItemStack(Material.RAW_IRON_BLOCK),
-                    OreBreakdown.RAW_IRON_BLOCK_RATIO,
-                    "Raw Iron");
-        } else if (isRawGoldListing(listing)) {
-            populateRawUnitMenu(
-                    inventory,
-                    listing,
-                    new ItemStack(Material.RAW_GOLD),
-                    new ItemStack(Material.RAW_GOLD_BLOCK),
-                    OreBreakdown.RAW_GOLD_BLOCK_RATIO,
-                    "Raw Gold");
-        } else if (isRawCopperListing(listing)) {
-            populateRawUnitMenu(
-                    inventory,
-                    listing,
-                    new ItemStack(Material.RAW_COPPER),
-                    new ItemStack(Material.RAW_COPPER_BLOCK),
-                    OreBreakdown.RAW_COPPER_BLOCK_RATIO,
-                    "Raw Copper");
-        } else {
-            OreFamilyList.OreFamily family = OreBreakdown.getFamilyForBase(listing.getTemplate());
-            if (family != null) {
-                populateOreFamilyUnitMenu(inventory, player, listing, family);
-            }
+        OreFamilyList.OreFamily family = OreBreakdown.getFamilyForBase(listing.getTemplate());
+        if (family != null) {
+            populateOreFamilyUnitMenu(inventory, player, listing, family);
         }
 
         selectedMarketItem.put(player, listing);
@@ -318,30 +292,6 @@ public class GUIManager implements Listener {
                 family.getLabel());
     }
 
-    private void populateRawUnitMenu(Inventory inventory,
-                                     AggregatedListing listing,
-                                     ItemStack rawType,
-                                     ItemStack rawBlockType,
-                                     BigInteger blockRatio,
-                                     String label) {
-        BigInteger availableRaw = listing.getTotalQuantity();
-        ItemStack rawOption = createOreUnitItem(
-                rawType,
-                "Buy " + label,
-                availableRaw,
-                listing.getPricePerItem());
-        inventory.setItem(3, rawOption);
-
-        if (availableRaw.compareTo(blockRatio) >= 0) {
-            BigInteger availableBlocks = availableRaw.divide(blockRatio);
-            ItemStack blockOption = createOreUnitItem(
-                    rawBlockType,
-                    "Buy " + label + " Blocks",
-                    availableBlocks,
-                    listing.getPricePerItem() * blockRatio.doubleValue());
-            inventory.setItem(5, blockOption);
-        }
-    }
 
     private ItemStack createNuggetInfoItem(Player player, ItemStack nuggetItem, BigInteger ratio, String label) {
         if (nuggetItem == null) {
@@ -568,32 +518,27 @@ public class GUIManager implements Listener {
             if (listing == null) {
                 continue;
             }
-            Material type = listing.getType();
-            if (type == Material.RAW_IRON_BLOCK) {
-                normalized.add(convertRawBlockListing(listing, Material.RAW_IRON, OreBreakdown.RAW_IRON_BLOCK_RATIO));
-                continue;
-            }
-            if (type == Material.RAW_GOLD_BLOCK) {
-                normalized.add(convertRawBlockListing(listing, Material.RAW_GOLD, OreBreakdown.RAW_GOLD_BLOCK_RATIO));
-                continue;
-            }
-            if (type == Material.RAW_COPPER_BLOCK) {
-                normalized.add(convertRawBlockListing(listing, Material.RAW_COPPER, OreBreakdown.RAW_COPPER_BLOCK_RATIO));
-                continue;
+            OreFamilyList.OreFamily family = OreBreakdown.getFamilyForBlock(listing.getItemStack());
+            if (family != null && family.getId().toLowerCase(Locale.ROOT).startsWith("raw_")) {
+                ItemStack baseItem = OreBreakdown.createItemFromId(family.getBaseId());
+                if (baseItem != null) {
+                    normalized.add(convertRawBlockListing(listing, baseItem, family.getBlockRatio()));
+                    continue;
+                }
             }
             normalized.add(listing);
         }
         return normalized;
     }
 
-    private MarketItem convertRawBlockListing(MarketItem listing, Material rawType, BigInteger ratio) {
+    private MarketItem convertRawBlockListing(MarketItem listing, ItemStack baseItem, BigInteger ratio) {
         BigInteger quantity = listing.getQuantity().max(BigInteger.ZERO);
         if (quantity.signum() <= 0) {
             return listing;
         }
         BigInteger rawAmount = quantity.multiply(ratio);
         double pricePerRaw = listing.getPrice() / ratio.doubleValue();
-        return new MarketItem(new ItemStack(rawType), rawAmount, pricePerRaw, listing.getSellerUUID());
+        return new MarketItem(baseItem, rawAmount, pricePerRaw, listing.getSellerUUID());
     }
 
     private String normalizeFilter(String filter) {
@@ -650,18 +595,6 @@ public class GUIManager implements Listener {
 
     private boolean isEnchantedBookListing(AggregatedListing listing) {
         return listing != null && listing.getTemplate().getType() == Material.ENCHANTED_BOOK;
-    }
-
-    private boolean isRawIronListing(AggregatedListing listing) {
-        return listing != null && OreBreakdown.isRawIronListing(listing.getTemplate());
-    }
-
-    private boolean isRawGoldListing(AggregatedListing listing) {
-        return listing != null && OreBreakdown.isRawGoldListing(listing.getTemplate());
-    }
-
-    private boolean isRawCopperListing(AggregatedListing listing) {
-        return listing != null && OreBreakdown.isRawCopperListing(listing.getTemplate());
     }
 
     private BigInteger countForLevel(int level) {
@@ -800,19 +733,6 @@ public class GUIManager implements Listener {
                         openQuantityMenu(player, selected, options.block, options.blockRatio, 1);
                         return;
                     }
-                }
-                if (clickedItem.getType() == Material.RAW_IRON) {
-                    openQuantityMenu(player, selected, new ItemStack(Material.RAW_IRON), BigInteger.ONE, 1);
-                } else if (clickedItem.getType() == Material.RAW_IRON_BLOCK) {
-                    openQuantityMenu(player, selected, new ItemStack(Material.RAW_IRON_BLOCK), OreBreakdown.RAW_IRON_BLOCK_RATIO, 1);
-                } else if (clickedItem.getType() == Material.RAW_GOLD) {
-                    openQuantityMenu(player, selected, new ItemStack(Material.RAW_GOLD), BigInteger.ONE, 1);
-                } else if (clickedItem.getType() == Material.RAW_GOLD_BLOCK) {
-                    openQuantityMenu(player, selected, new ItemStack(Material.RAW_GOLD_BLOCK), OreBreakdown.RAW_GOLD_BLOCK_RATIO, 1);
-                } else if (clickedItem.getType() == Material.RAW_COPPER) {
-                    openQuantityMenu(player, selected, new ItemStack(Material.RAW_COPPER), BigInteger.ONE, 1);
-                } else if (clickedItem.getType() == Material.RAW_COPPER_BLOCK) {
-                    openQuantityMenu(player, selected, new ItemStack(Material.RAW_COPPER_BLOCK), OreBreakdown.RAW_COPPER_BLOCK_RATIO, 1);
                 }
             }
         } else if (title.startsWith("Select Quantity")) {

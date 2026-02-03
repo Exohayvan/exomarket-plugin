@@ -17,7 +17,7 @@ public final class OreFamilyList {
                 "iron_block",
                 BigInteger.valueOf(9),
                 BigInteger.valueOf(9),
-                "Iron"
+                "IRON"
         ));
         families.add(new OreFamily(
                 "gold",
@@ -26,7 +26,7 @@ public final class OreFamilyList {
                 "gold_block",
                 BigInteger.valueOf(9),
                 BigInteger.valueOf(9),
-                "Gold"
+                "GOLD"
         ));
         families.add(new OreFamily(
                 "copper",
@@ -35,7 +35,7 @@ public final class OreFamilyList {
                 "copper_block",
                 BigInteger.valueOf(9),
                 BigInteger.valueOf(9),
-                "Copper"
+                "COPPER"
         ));
         families.add(new OreFamily(
                 "diamond",
@@ -44,7 +44,7 @@ public final class OreFamilyList {
                 "diamond_block",
                 BigInteger.valueOf(9),
                 BigInteger.valueOf(9),
-                "Diamond"
+                "DIAMOND"
         ));
         families.add(new OreFamily(
                 "lapis",
@@ -53,7 +53,88 @@ public final class OreFamilyList {
                 "lapis_block",
                 BigInteger.valueOf(9),
                 BigInteger.valueOf(9),
-                "Lapis"
+                "LAPIS"
+        ));
+        families.add(new OreFamily(
+                "coal",
+                null,
+                "coal",
+                "coal_block",
+                BigInteger.valueOf(9),
+                BigInteger.valueOf(9),
+                "COAL"
+        ));
+        families.add(new OreFamily(
+                "emerald",
+                null,
+                "emerald",
+                "emerald_block",
+                BigInteger.valueOf(9),
+                BigInteger.valueOf(9),
+                "EMERALD"
+        ));
+        families.add(new OreFamily(
+                "netherite",
+                null,
+                "netherite_ingot",
+                "netherite_block",
+                BigInteger.valueOf(9),
+                BigInteger.valueOf(9),
+                "NETHERITE"
+        ));
+        families.add(new OreFamily(
+                "resin",
+                null,
+                "resin_clump",
+                "resin_block",
+                BigInteger.valueOf(9),
+                BigInteger.valueOf(9),
+                "RESIN"
+        ));
+        families.add(new OreFamily(
+                "slime",
+                null,
+                "slime_ball",
+                "slime_block",
+                BigInteger.valueOf(9),
+                BigInteger.valueOf(9),
+                "SLIME"
+        ));
+        families.add(new OreFamily(
+                "redstone",
+                null,
+                "redstone",
+                "redstone_block",
+                BigInteger.valueOf(9),
+                BigInteger.valueOf(9),
+                "REDSTONE"
+        ));
+        families.add(new OreFamily(
+                "raw_iron",
+                null,
+                "raw_iron",
+                "raw_iron_block",
+                BigInteger.valueOf(9),
+                BigInteger.valueOf(9),
+                "RAW IRON"
+        ));
+        families.add(new OreFamily(
+                "raw_gold",
+                null,
+                "raw_gold",
+                "raw_gold_block",
+                BigInteger.valueOf(9),
+                BigInteger.valueOf(9),
+                "RAW GOLD"
+        ));
+        families.add(new OreFamily(
+                "raw_copper",
+                null,
+                "raw_copper",
+                "raw_copper_block",
+                BigInteger.valueOf(9),
+                BigInteger.valueOf(9),
+                "RAW COPPER"
         ));
         families.add(new OreFamily(
                 "tin",
@@ -62,7 +143,16 @@ public final class OreFamilyList {
                 "tin_block",
                 BigInteger.valueOf(9),
                 BigInteger.valueOf(9),
-                "Tin"
+                "TIN"
+        ));
+        families.add(new OreFamily(
+                "tin",
+                null,
+                "raw_tin",
+                "raw_tin_block",
+                BigInteger.valueOf(9),
+                BigInteger.valueOf(9),
+                "RAW TIN"
         ));
         FAMILIES = Collections.unmodifiableList(families);
     }

@@ -47,30 +47,6 @@ public final class OreBreakdown {
             return entries;
         }
 
-        if (stack.getType() == Material.RAW_IRON_BLOCK) {
-            BigInteger rawIron = safeAmount.multiply(RAW_IRON_BLOCK_RATIO);
-            if (rawIron.signum() > 0) {
-                entries.add(new SplitEntry(new ItemStack(Material.RAW_IRON), rawIron));
-            }
-            return entries;
-        }
-
-        if (stack.getType() == Material.RAW_GOLD_BLOCK) {
-            BigInteger rawGold = safeAmount.multiply(RAW_GOLD_BLOCK_RATIO);
-            if (rawGold.signum() > 0) {
-                entries.add(new SplitEntry(new ItemStack(Material.RAW_GOLD), rawGold));
-            }
-            return entries;
-        }
-
-        if (stack.getType() == Material.RAW_COPPER_BLOCK) {
-            BigInteger rawCopper = safeAmount.multiply(RAW_COPPER_BLOCK_RATIO);
-            if (rawCopper.signum() > 0) {
-                entries.add(new SplitEntry(new ItemStack(Material.RAW_COPPER), rawCopper));
-            }
-            return entries;
-        }
-
         entries.add(new SplitEntry(cloneSingle(stack), safeAmount));
         return entries;
     }

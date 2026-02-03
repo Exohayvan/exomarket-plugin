@@ -7,6 +7,7 @@ import com.starhavensmpcore.market.economy.CurrencyFormatter;
 import com.starhavensmpcore.market.economy.QuantityFormatter;
 import com.starhavensmpcore.market.items.ItemDisplayNameFormatter;
 import com.starhavensmpcore.market.items.OreBreakdown;
+import com.starhavensmpcore.market.items.OreFamilyList;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import org.bukkit.OfflinePlayer;
@@ -328,7 +329,12 @@ public class MarketWebServer {
         private double lowestPrice = Double.MAX_VALUE;
 
         Aggregate(ItemStack stack, String itemData) {
-            this.displayName = ItemDisplayNameFormatter.format(stack);
+            OreFamilyList.OreFamily family = OreBreakdown.getFamilyForBase(stack);
+            if (family != null && family.getLabel() != null && !family.getLabel().isEmpty()) {
+                this.displayName = family.getLabel();
+            } else {
+                this.displayName = ItemDisplayNameFormatter.format(stack);
+            }
             this.itemData = itemData;
         }
     }
