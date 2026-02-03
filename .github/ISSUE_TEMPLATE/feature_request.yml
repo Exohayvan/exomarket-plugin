@@ -1,0 +1,43 @@
+name: Feature request / Enhancement
+description: Suggest an improvement or new feature
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What do you want to add or improve?
+      placeholder: Short description of the feature.
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / Motivation
+      description: What problem does this solve or what value does it add?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: How should it work?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any alternative approaches you considered?
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope / Impact
+      description: What parts of the plugin will be affected?
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Screenshots, links, or other details.
