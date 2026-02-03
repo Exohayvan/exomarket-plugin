@@ -4,6 +4,7 @@ import com.starhavensmpcore.core.StarhavenSMPCore;
 import com.starhavensmpcore.market.db.DatabaseManager;
 import com.starhavensmpcore.market.economy.CurrencyFormatter;
 import com.starhavensmpcore.market.economy.EconomyManager;
+import com.starhavensmpcore.market.items.DurabilityQueue;
 import com.starhavensmpcore.market.items.EnchantedBookSplitter;
 import com.starhavensmpcore.market.items.ItemDisplayNameFormatter;
 import com.starhavensmpcore.market.items.ItemSanitizer;
@@ -65,11 +66,6 @@ public class MarketManager {
             return;
         }
 
-        if (ItemSanitizer.isDamaged(itemInHand)) {
-            player.sendMessage(ChatColor.RED + "Damaged items cannot be listed on the market.");
-            return;
-        }
-
         ItemStack toSell = itemInHand.clone();
         toSell.setAmount(amount);
 
@@ -101,11 +97,6 @@ public class MarketManager {
             return false;
         }
 
-        if (ItemSanitizer.isDamaged(stack)) {
-            player.sendMessage(ChatColor.RED + "Damaged items cannot be listed on the market.");
-            return false;
-        }
-
         List<EnchantedBookSplitter.SplitEntry> entries = EnchantedBookSplitter.splitWithEnchantmentBooks(stack);
         if (entries.isEmpty()) {
             return false;
@@ -117,6 +108,19 @@ public class MarketManager {
             for (OreBreakdown.SplitEntry oreEntry : oreEntries) {
                 BigInteger amount = oreEntry.getQuantity();
                 if (amount.signum() <= 0) {
+                    continue;
+                }
+
+                DurabilityQueueService.Result durabilityResult = DurabilityQueueService.queueDurability(
+                        plugin,
+                        databaseManager,
+                        player.getUniqueId().toString(),
+                        oreEntry.getItemStack(),
+                        amount
+                );
+                if (durabilityResult.isQueued()) {
+                    listedAny = true;
+                    sendDurabilityQueueMessage(player, oreEntry.getItemStack(), durabilityResult);
                     continue;
                 }
 
@@ -141,6 +145,21 @@ public class MarketManager {
         }
 
         return listedAny;
+    }
+
+    private void sendDurabilityQueueMessage(Player player, ItemStack stack, DurabilityQueueService.Result result) {
+        if (player == null || result == null) {
+            return;
+        }
+        ItemStack template = DurabilityQueue.createListingTemplate(stack);
+        String name = ItemDisplayNameFormatter.format(template);
+        if (result.getFullItems().signum() > 0) {
+            player.sendMessage(ChatColor.GREEN + "Added " + result.getFullItems() + " " + name + " to the market.");
+        }
+        if (result.getRemainder().signum() > 0) {
+            player.sendMessage(ChatColor.GRAY + "Queued durability: " + result.getRemainder() + "/" + result.getMaxDurability()
+                    + " for " + name + ".");
+        }
     }
 
     public void buyItem(Player player, MarketItem marketItem, int quantity) {
@@ -408,7 +427,8 @@ public class MarketManager {
         BigInteger total = BigInteger.ZERO;
         List<MarketItem> items = databaseManager.getMarketItems();
         for (MarketItem item : items) {
-            if (OreBreakdown.isOreFamilyNugget(item.getItemStack())) {
+            if (OreBreakdown.isOreFamilyNugget(item.getItemStack())
+                    || DurabilityQueue.isQueueItem(plugin, item.getItemStack())) {
                 continue;
             }
             total = total.add(item.getQuantity().max(BigInteger.ZERO));
@@ -1054,7 +1074,8 @@ public class MarketManager {
     private List<MarketItem> filterHiddenListings(List<MarketItem> marketItems) {
         List<MarketItem> visible = new ArrayList<>();
         for (MarketItem listing : marketItems) {
-            if (OreBreakdown.isOreFamilyNugget(listing.getItemStack())) {
+            if (OreBreakdown.isOreFamilyNugget(listing.getItemStack())
+                    || DurabilityQueue.isQueueItem(plugin, listing.getItemStack())) {
                 continue;
             }
             visible.add(listing);

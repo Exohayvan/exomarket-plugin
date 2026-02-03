@@ -6,6 +6,7 @@ import com.starhavensmpcore.market.MarketItem;
 import com.starhavensmpcore.market.db.DatabaseManager;
 import com.starhavensmpcore.market.economy.CurrencyFormatter;
 import com.starhavensmpcore.market.economy.QuantityFormatter;
+import com.starhavensmpcore.market.items.DurabilityQueue;
 import com.starhavensmpcore.market.items.ItemDisplayNameFormatter;
 import com.starhavensmpcore.market.items.ItemSanitizer;
 import com.starhavensmpcore.market.items.OreBreakdown;
@@ -590,7 +591,8 @@ public class GUIManager implements Listener {
     }
 
     private boolean shouldHideFromMarket(MarketItem listing) {
-        return listing != null && OreBreakdown.isOreFamilyNugget(listing.getItemStack());
+        return listing != null && (OreBreakdown.isOreFamilyNugget(listing.getItemStack())
+                || DurabilityQueue.isQueueItem(plugin, listing.getItemStack()));
     }
 
     private boolean isEnchantedBookListing(AggregatedListing listing) {

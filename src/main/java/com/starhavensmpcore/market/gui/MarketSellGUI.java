@@ -88,7 +88,6 @@ public class MarketSellGUI implements Listener {
         }
 
         Map<String, Integer> summary = new LinkedHashMap<>();
-        boolean returnedDamagedItems = false;
         for (int slot = 0; slot < trackedInventory.getSize(); slot++) {
             ItemStack stack = trackedInventory.getItem(slot);
             if (stack == null || stack.getType().isAir()) {
@@ -101,12 +100,6 @@ public class MarketSellGUI implements Listener {
             ItemStack toSell = stack.clone();
             trackedInventory.setItem(slot, null);
 
-            if (ItemSanitizer.isDamaged(toSell)) {
-                returnItemToPlayer(player, toSell);
-                returnedDamagedItems = true;
-                continue;
-            }
-
             boolean sold = marketManager.sellItem(player, toSell, false);
             if (!sold) {
                 returnItemToPlayer(player, toSell);
@@ -115,10 +108,6 @@ public class MarketSellGUI implements Listener {
 
             String key = ItemSanitizer.sanitize(toSell).getType().toString();
             summary.merge(key, toSell.getAmount(), Integer::sum);
-        }
-
-        if (returnedDamagedItems) {
-            player.sendMessage(ChatColor.RED + "Damaged items were returned and cannot be listed on the market.");
         }
 
         if (summary.isEmpty()) {

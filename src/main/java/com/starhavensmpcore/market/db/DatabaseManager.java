@@ -1,7 +1,9 @@
 package com.starhavensmpcore.market.db;
 
 import com.starhavensmpcore.core.StarhavenSMPCore;
+import com.starhavensmpcore.market.DurabilityQueueService;
 import com.starhavensmpcore.market.MarketItem;
+import com.starhavensmpcore.market.items.DurabilityQueue;
 import com.starhavensmpcore.market.items.EnchantedBookSplitter;
 import com.starhavensmpcore.market.items.ItemSanitizer;
 import com.starhavensmpcore.market.items.OreBreakdown;
@@ -329,10 +331,6 @@ public class DatabaseManager {
             return;
         }
 
-        if (ItemSanitizer.isDamaged(itemStack)) {
-            return;
-        }
-
         if (playerUUID == null) {
             return;
         }
@@ -355,6 +353,16 @@ public class DatabaseManager {
             for (OreBreakdown.SplitEntry oreEntry : oreEntries) {
                 BigInteger amount = oreEntry.getQuantity();
                 if (amount.signum() <= 0) {
+                    continue;
+                }
+                DurabilityQueueService.Result durabilityResult = DurabilityQueueService.queueDurability(
+                        plugin,
+                        this,
+                        sellerId,
+                        oreEntry.getItemStack(),
+                        amount
+                );
+                if (durabilityResult.isQueued()) {
                     continue;
                 }
                 ItemStack template = ItemSanitizer.sanitize(oreEntry.getItemStack());
@@ -676,13 +684,12 @@ public class DatabaseManager {
 
     public synchronized BigInteger getTotalItemsInShop() {
         BigInteger total = BigInteger.ZERO;
-        try (PreparedStatement statement = connection.prepareStatement("SELECT quantity FROM market_items");
-             ResultSet rs = statement.executeQuery()) {
-            while (rs.next()) {
-                total = total.add(parseBigInteger(rs.getString("quantity")));
+        for (MarketItem item : getMarketItems()) {
+            if (OreBreakdown.isOreFamilyNugget(item.getItemStack())
+                    || DurabilityQueue.isQueueItem(plugin, item.getItemStack())) {
+                continue;
             }
-        } catch (SQLException e) {
-            e.printStackTrace();
+            total = total.add(item.getQuantity().max(BigInteger.ZERO));
         }
         return total;
     }
@@ -692,16 +699,12 @@ public class DatabaseManager {
             return BigInteger.ZERO;
         }
         BigInteger total = BigInteger.ZERO;
-        try (PreparedStatement statement = connection.prepareStatement(
-                "SELECT quantity FROM market_items WHERE seller_uuid = ?")) {
-            statement.setString(1, sellerUuid);
-            try (ResultSet rs = statement.executeQuery()) {
-                while (rs.next()) {
-                    total = total.add(parseBigInteger(rs.getString("quantity")));
-                }
+        for (MarketItem item : getMarketItemsByOwner(sellerUuid)) {
+            if (OreBreakdown.isOreFamilyNugget(item.getItemStack())
+                    || DurabilityQueue.isQueueItem(plugin, item.getItemStack())) {
+                continue;
             }
-        } catch (SQLException e) {
-            e.printStackTrace();
+            total = total.add(item.getQuantity().max(BigInteger.ZERO));
         }
         return total;
     }

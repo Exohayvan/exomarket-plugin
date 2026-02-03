@@ -6,6 +6,7 @@ import com.starhavensmpcore.market.db.DatabaseManager;
 import com.starhavensmpcore.market.economy.CurrencyFormatter;
 import com.starhavensmpcore.market.economy.QuantityFormatter;
 import com.starhavensmpcore.market.items.ItemDisplayNameFormatter;
+import com.starhavensmpcore.market.items.DurabilityQueue;
 import com.starhavensmpcore.market.items.OreBreakdown;
 import com.starhavensmpcore.market.items.OreFamilyList;
 import com.sun.net.httpserver.HttpExchange;
@@ -224,7 +225,8 @@ public class MarketWebServer {
     private Map<String, Aggregate> aggregate(List<MarketItem> items) {
         Map<String, Aggregate> aggregates = new LinkedHashMap<>();
         for (MarketItem item : items) {
-            if (OreBreakdown.isOreFamilyNugget(item.getItemStack())) {
+            if (OreBreakdown.isOreFamilyNugget(item.getItemStack())
+                    || DurabilityQueue.isQueueItem(plugin, item.getItemStack())) {
                 continue;
             }
             Aggregate aggregate = aggregates.get(item.getItemData());

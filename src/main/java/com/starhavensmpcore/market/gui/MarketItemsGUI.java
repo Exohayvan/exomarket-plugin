@@ -7,6 +7,7 @@ import com.starhavensmpcore.market.MarketManager;
 import com.starhavensmpcore.market.db.DatabaseManager;
 import com.starhavensmpcore.market.economy.CurrencyFormatter;
 import com.starhavensmpcore.market.economy.QuantityFormatter;
+import com.starhavensmpcore.market.items.DurabilityQueue;
 import com.starhavensmpcore.market.items.ItemDisplayNameFormatter;
 import com.starhavensmpcore.market.items.ItemSanitizer;
 import org.bukkit.Bukkit;
@@ -100,6 +101,22 @@ public class MarketItemsGUI implements Listener {
 
             MarketItem listing = listings.get(index);
             ItemStack display = listing.getItemStack();
+            boolean isQueued = DurabilityQueue.isQueueItem(plugin, display);
+            int queuedRemaining = 0;
+            int queuedMax = 0;
+            if (isQueued) {
+                queuedMax = DurabilityQueue.getMaxDurability(display);
+                if (queuedMax > 0) {
+                    queuedRemaining = listing.getQuantity()
+                            .min(BigInteger.valueOf(queuedMax))
+                            .max(BigInteger.ZERO)
+                            .intValue();
+                }
+                display = DurabilityQueue.applyRemainingDurability(
+                        DurabilityQueue.stripQueueMarker(plugin, display),
+                        queuedRemaining
+                );
+            }
             ItemMeta meta = display.getItemMeta();
             if (meta != null) {
                 if (!meta.hasDisplayName()) {
@@ -110,9 +127,14 @@ public class MarketItemsGUI implements Listener {
                 if (!lore.isEmpty()) {
                     lore.add(ChatColor.DARK_GRAY + "" + ChatColor.STRIKETHROUGH + "----------------");
                 }
-                lore.add(ChatColor.GRAY + "Supply: " + QuantityFormatter.format(listing.getQuantity()));
-                lore.add(ChatColor.GRAY + "Demand: " + QuantityFormatter.format(DemandMetric.summarize(demand)));
-                lore.add(ChatColor.GRAY + "Price: " + ChatColor.GOLD + CurrencyFormatter.format(listing.getPrice()));
+                if (isQueued) {
+                    lore.add(ChatColor.GRAY + "Queued durability: " + queuedRemaining + "/" + queuedMax);
+                    lore.add(ChatColor.DARK_GRAY + "Not listed for sale.");
+                } else {
+                    lore.add(ChatColor.GRAY + "Supply: " + QuantityFormatter.format(listing.getQuantity()));
+                    lore.add(ChatColor.GRAY + "Demand: " + QuantityFormatter.format(DemandMetric.summarize(demand)));
+                    lore.add(ChatColor.GRAY + "Price: " + ChatColor.GOLD + CurrencyFormatter.format(listing.getPrice()));
+                }
                 meta.setLore(lore);
                 display.setItemMeta(meta);
             }
@@ -204,6 +226,10 @@ public class MarketItemsGUI implements Listener {
 
             MarketItem listing = slots.get(event.getRawSlot());
             if (listing != null) {
+                if (DurabilityQueue.isQueueItem(plugin, listing.getItemStack())) {
+                    removeQueuedDurability(player, listing);
+                    return;
+                }
                 if (listing.getType() == Material.ENCHANTED_BOOK) {
                     openRemoveEnchantLevelMenu(player, listing);
                 } else {
@@ -323,6 +349,10 @@ public class MarketItemsGUI implements Listener {
     }
 
     private void removeListingQuantity(Player player, MarketItem listing, int quantity) {
+        if (DurabilityQueue.isQueueItem(plugin, listing.getItemStack())) {
+            removeQueuedDurability(player, listing);
+            return;
+        }
         if (listing.getQuantity().compareTo(BigInteger.valueOf(quantity)) < 0) {
             player.sendMessage(ChatColor.RED + "You do not have that many items listed.");
             return;
@@ -343,6 +373,39 @@ public class MarketItemsGUI implements Listener {
         player.sendMessage(ChatColor.GREEN + "Removed " + quantity + " " + listing.getType().toString() + " from your listings.");
         marketManager.recalculatePrices();
         selectedItem.remove(player.getUniqueId());
+    }
+
+    private void removeQueuedDurability(Player player, MarketItem listing) {
+        int maxDurability = DurabilityQueue.getMaxDurability(listing.getItemStack());
+        if (maxDurability <= 0) {
+            player.sendMessage(ChatColor.RED + "That item cannot be removed from the queue.");
+            return;
+        }
+        int remaining = listing.getQuantity()
+                .min(BigInteger.valueOf(maxDurability))
+                .max(BigInteger.ZERO)
+                .intValue();
+        databaseManager.removeMarketItem(listing);
+
+        ItemStack item = DurabilityQueue.applyRemainingDurability(
+                DurabilityQueue.stripQueueMarker(plugin, listing.getItemStack()),
+                remaining
+        );
+        Map<Integer, ItemStack> leftovers = player.getInventory().addItem(item);
+        leftovers.values().forEach(leftover -> player.getWorld().dropItemNaturally(player.getLocation(), leftover));
+
+        player.sendMessage(ChatColor.GREEN + "Removed queued item (" + remaining + "/" + maxDurability + " durability).");
+        marketManager.recalculatePrices();
+        selectedItem.remove(player.getUniqueId());
+        refreshListings(player);
+    }
+
+    private void refreshListings(Player player) {
+        if (player == null) {
+            return;
+        }
+        int page = currentPage.getOrDefault(player.getUniqueId(), 1);
+        openListings(player, page);
     }
 
     private void removeEnchantedBookQuantity(Player player, MarketItem listing, int level, int quantity) {
