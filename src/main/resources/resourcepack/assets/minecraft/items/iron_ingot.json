@@ -9,6 +9,13 @@
           "type": "minecraft:model",
           "model": "minecraft:item/tin_ingot"
         }
+      },
+      {
+        "threshold": 69103,
+        "model": {
+          "type": "minecraft:model",
+          "model": "minecraft:item/cobalt_ingot"
+        }
       }
     ],
     "fallback": {

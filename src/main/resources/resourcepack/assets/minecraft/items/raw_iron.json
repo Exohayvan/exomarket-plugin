@@ -9,6 +9,13 @@
           "type": "minecraft:model",
           "model": "minecraft:item/raw_tin"
         }
+      },
+      {
+        "threshold": 69102,
+        "model": {
+          "type": "minecraft:model",
+          "model": "minecraft:item/raw_cobalt"
+        }
       }
     ],
     "fallback": {

@@ -17,6 +17,8 @@
     "instrument=flute,note=14,powered=true": { "model": "minecraft:block/zinc_ore" },
     "instrument=bit,note=0,powered=true": { "model": "minecraft:block/void_block" },
     "instrument=bit,note=1,powered=true": { "model": "minecraft:block/tin_block" },
-    "instrument=bit,note=2,powered=true": { "model": "minecraft:block/raw_tin_block" }
+    "instrument=bit,note=2,powered=true": { "model": "minecraft:block/raw_tin_block" },
+    "instrument=bit,note=3,powered=true": { "model": "minecraft:block/cobalt_block" },
+    "instrument=bit,note=4,powered=true": { "model": "minecraft:block/raw_cobalt_block" }
   }
 }
