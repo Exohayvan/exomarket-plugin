@@ -64,6 +64,42 @@ public final class CraftingList implements Listener {
                 RecipeIngredient.custom("tin_block")
         ));
 
+        recipes.add(CraftingRecipeDefinition.shaped(
+                "cobalt_ingot_from_cobalt_block",
+                "cobalt_ingot",
+                9,
+                new String[]{"x"},
+                mapOf('x', RecipeIngredient.custom("cobalt_block")),
+                RecipeIngredient.custom("cobalt_block")
+        ));
+
+        recipes.add(CraftingRecipeDefinition.shaped(
+                "cobalt_block_from_cobalt_ingot",
+                "cobalt_block",
+                1,
+                new String[]{"xxx", "xxx", "xxx"},
+                mapOf('x', RecipeIngredient.custom("cobalt_ingot")),
+                RecipeIngredient.custom("cobalt_ingot")
+        ));
+
+        recipes.add(CraftingRecipeDefinition.shaped(
+                "raw_cobalt_block_from_cobalt_tin",
+                "raw_cobalt_block",
+                1,
+                new String[]{"xxx", "xxx", "xxx"},
+                mapOf('x', RecipeIngredient.custom("cobalt_tin")),
+                RecipeIngredient.custom("cobalt_tin")
+        ));
+
+        recipes.add(CraftingRecipeDefinition.shaped(
+                "raw_cobalt_from_raw_cobalt_block",
+                "cobalt_tin",
+                9,
+                new String[]{"x"},
+                mapOf('x', RecipeIngredient.custom("raw_cobalt_block")),
+                RecipeIngredient.custom("raw_cobalt_block")
+        ));
+
         RECIPES = Collections.unmodifiableList(recipes);
     }
 
