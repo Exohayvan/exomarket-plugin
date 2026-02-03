@@ -9,6 +9,12 @@ import me.clip.placeholderapi.expansion.PlaceholderExpansion;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.plugin.PluginDescriptionFile;
 
+import java.math.BigInteger;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+
 /**
  * PlaceholderAPI expansion exposing basic market stats.
  */
@@ -16,6 +22,15 @@ public class Placeholders extends PlaceholderExpansion {
 
     private final StarhavenSMPCore plugin;
     private final DatabaseManager databaseManager;
+    private static final long CACHE_TTL_MS = 2_000L;
+    private volatile DatabaseManager.Stats globalStatsCache = new DatabaseManager.Stats();
+    private volatile BigInteger globalTotalItemsCache = BigInteger.ZERO;
+    private volatile long globalCacheLastRefresh = 0L;
+    private final AtomicBoolean globalRefreshing = new AtomicBoolean(false);
+    private final Map<UUID, DatabaseManager.Stats> playerStatsCache = new ConcurrentHashMap<>();
+    private final Map<UUID, BigInteger> playerTotalItemsCache = new ConcurrentHashMap<>();
+    private final Map<UUID, Long> playerCacheLastRefresh = new ConcurrentHashMap<>();
+    private final Map<UUID, AtomicBoolean> playerRefreshing = new ConcurrentHashMap<>();
 
     public Placeholders(StarhavenSMPCore plugin, DatabaseManager databaseManager) {
         this.plugin = plugin;
@@ -55,8 +70,12 @@ public class Placeholders extends PlaceholderExpansion {
         }
 
         String lower = params.toLowerCase();
-        DatabaseManager.Stats global = databaseManager.getStats("global");
-        DatabaseManager.Stats playerStats = databaseManager.getStats(playerKey(player));
+        refreshGlobalCache();
+        refreshPlayerCache(player);
+        DatabaseManager.Stats global = globalStatsCache;
+        DatabaseManager.Stats playerStats = getPlayerStats(player);
+        BigInteger totalItems = globalTotalItemsCache;
+        BigInteger playerItems = getPlayerTotalItems(player);
 
         switch (lower) {
             case "season":
@@ -79,7 +98,7 @@ public class Placeholders extends PlaceholderExpansion {
             case "total_money_earned_formatted":
                 return formatMoney(global.moneyEarned);
             case "total_listed_items":
-                return String.valueOf(databaseManager.getTotalItemsInShop());
+                return String.valueOf(totalItems);
             case "player_items_bought":
                 return String.valueOf(playerStats.itemsBought);
             case "player_items_sold":
@@ -93,7 +112,7 @@ public class Placeholders extends PlaceholderExpansion {
             case "player_money_earned_formatted":
                 return formatMoney(playerStats.moneyEarned);
             case "player_listed_items":
-                return String.valueOf(databaseManager.getTotalItemsInShopForSeller(playerKey(player)));
+                return String.valueOf(playerItems);
             case "team_money":
                 return rawMoney(getTeamTotals(player).getTotalEco());
             case "team_money_formatted":
@@ -103,6 +122,63 @@ public class Placeholders extends PlaceholderExpansion {
             default:
                 return "Not Valid";
         }
+    }
+
+    private void refreshGlobalCache() {
+        long now = System.currentTimeMillis();
+        if (now - globalCacheLastRefresh < CACHE_TTL_MS) {
+            return;
+        }
+        if (!globalRefreshing.compareAndSet(false, true)) {
+            return;
+        }
+        databaseManager.runOnDbThread(() -> {
+            DatabaseManager.Stats stats = databaseManager.getStats("global");
+            BigInteger totalItems = databaseManager.getTotalItemsInShop();
+            globalStatsCache = stats;
+            globalTotalItemsCache = totalItems;
+            globalCacheLastRefresh = System.currentTimeMillis();
+            globalRefreshing.set(false);
+        });
+    }
+
+    private void refreshPlayerCache(OfflinePlayer player) {
+        if (player == null || player.getUniqueId() == null) {
+            return;
+        }
+        UUID playerId = player.getUniqueId();
+        long now = System.currentTimeMillis();
+        long last = playerCacheLastRefresh.getOrDefault(playerId, 0L);
+        if (now - last < CACHE_TTL_MS) {
+            return;
+        }
+        AtomicBoolean refreshing = playerRefreshing.computeIfAbsent(playerId, ignored -> new AtomicBoolean(false));
+        if (!refreshing.compareAndSet(false, true)) {
+            return;
+        }
+        String key = playerKey(player);
+        databaseManager.runOnDbThread(() -> {
+            DatabaseManager.Stats stats = databaseManager.getStats(key);
+            BigInteger totalItems = databaseManager.getTotalItemsInShopForSeller(key);
+            playerStatsCache.put(playerId, stats);
+            playerTotalItemsCache.put(playerId, totalItems);
+            playerCacheLastRefresh.put(playerId, System.currentTimeMillis());
+            refreshing.set(false);
+        });
+    }
+
+    private DatabaseManager.Stats getPlayerStats(OfflinePlayer player) {
+        if (player == null || player.getUniqueId() == null) {
+            return new DatabaseManager.Stats();
+        }
+        return playerStatsCache.getOrDefault(player.getUniqueId(), new DatabaseManager.Stats());
+    }
+
+    private BigInteger getPlayerTotalItems(OfflinePlayer player) {
+        if (player == null || player.getUniqueId() == null) {
+            return BigInteger.ZERO;
+        }
+        return playerTotalItemsCache.getOrDefault(player.getUniqueId(), BigInteger.ZERO);
     }
 
     private String playerKey(OfflinePlayer player) {
