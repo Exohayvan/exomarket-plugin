@@ -18,6 +18,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 public class DatabaseManager {
 
@@ -28,9 +32,17 @@ public class DatabaseManager {
     private static final long DEMAND_WINDOW_DAY = 60L * 60L * 24L;
     private static final long DEMAND_WINDOW_MONTH = 60L * 60L * 24L * 30L;
     private static final long DEMAND_WINDOW_YEAR = 60L * 60L * 24L * 365L;
+    private final ExecutorService dbExecutor;
+    private volatile Thread dbThread;
 
     public DatabaseManager(StarhavenSMPCore plugin) {
         this.plugin = plugin;
+        this.dbExecutor = Executors.newSingleThreadExecutor(runnable -> {
+            Thread thread = new Thread(runnable, "StarhavenSMPCore-DB");
+            thread.setDaemon(true);
+            dbThread = thread;
+            return thread;
+        });
         connect();
     }
 
@@ -55,6 +67,40 @@ public class DatabaseManager {
         } catch (ClassNotFoundException | SQLException e) {
             e.printStackTrace();
         }
+    }
+
+    public void runOnDbThread(Runnable task) {
+        if (task == null) {
+            return;
+        }
+        if (isDbThread()) {
+            task.run();
+            return;
+        }
+        dbExecutor.execute(task);
+    }
+
+    public <T> T callOnDbThread(Callable<T> task) {
+        if (task == null) {
+            return null;
+        }
+        if (isDbThread()) {
+            try {
+                return task.call();
+            } catch (Exception ex) {
+                throw new RuntimeException(ex);
+            }
+        }
+        Future<T> future = dbExecutor.submit(task);
+        try {
+            return future.get();
+        } catch (Exception ex) {
+            throw new RuntimeException(ex);
+        }
+    }
+
+    private boolean isDbThread() {
+        return Thread.currentThread() == dbThread;
     }
 
     private void createTable() {
@@ -266,7 +312,10 @@ public class DatabaseManager {
         );
     }
 
-    public synchronized MarketItem getMarketItem(Material type) {
+    public MarketItem getMarketItem(Material type) {
+        if (!isDbThread()) {
+            return callOnDbThread(() -> getMarketItem(type));
+        }
         try (PreparedStatement statement = connection.prepareStatement("SELECT * FROM market_items WHERE type = ?")) {
             statement.setString(1, type.toString());
             try (ResultSet resultSet = statement.executeQuery()) {
@@ -280,7 +329,10 @@ public class DatabaseManager {
         return null;
     }
 
-    public synchronized MarketItem getMarketItem(Material type, String sellerUUID) {
+    public MarketItem getMarketItem(Material type, String sellerUUID) {
+        if (!isDbThread()) {
+            return callOnDbThread(() -> getMarketItem(type, sellerUUID));
+        }
         try (PreparedStatement statement = connection.prepareStatement("SELECT * FROM market_items WHERE type = ? AND seller_uuid = ?")) {
             statement.setString(1, type.toString());
             statement.setString(2, sellerUUID);
@@ -295,7 +347,10 @@ public class DatabaseManager {
         return null;
     }
 
-    public synchronized MarketItem getMarketItem(ItemStack itemStack, String sellerUUID) {
+    public MarketItem getMarketItem(ItemStack itemStack, String sellerUUID) {
+        if (!isDbThread()) {
+            return callOnDbThread(() -> getMarketItem(itemStack, sellerUUID));
+        }
         String serialized = serializeItem(itemStack);
         try (PreparedStatement statement = connection.prepareStatement("SELECT * FROM market_items WHERE seller_uuid = ? AND item_data = ?")) {
             statement.setString(1, sellerUUID);
@@ -311,7 +366,10 @@ public class DatabaseManager {
         return null;
     }
 
-    public synchronized List<MarketItem> getMarketItemsByItemData(String itemData) {
+    public List<MarketItem> getMarketItemsByItemData(String itemData) {
+        if (!isDbThread()) {
+            return callOnDbThread(() -> getMarketItemsByItemData(itemData));
+        }
         List<MarketItem> marketItems = new ArrayList<>();
         try (PreparedStatement statement = connection.prepareStatement("SELECT * FROM market_items WHERE item_data = ? ORDER BY rowid")) {
             statement.setString(1, itemData);
@@ -326,7 +384,14 @@ public class DatabaseManager {
         return marketItems;
     }
 
-    public synchronized void sellItemsDirectly(UUID playerUUID, ItemStack itemStack, int quantity) {
+    public void sellItemsDirectly(UUID playerUUID, ItemStack itemStack, int quantity) {
+        if (!isDbThread()) {
+            callOnDbThread(() -> {
+                sellItemsDirectly(playerUUID, itemStack, quantity);
+                return null;
+            });
+            return;
+        }
         if (itemStack == null || itemStack.getType().isAir()) {
             return;
         }
@@ -378,7 +443,14 @@ public class DatabaseManager {
         }
     }
 
-    public synchronized void addMarketItem(MarketItem marketItem) {
+    public void addMarketItem(MarketItem marketItem) {
+        if (!isDbThread()) {
+            callOnDbThread(() -> {
+                addMarketItem(marketItem);
+                return null;
+            });
+            return;
+        }
         try (PreparedStatement statement = connection.prepareStatement(
                 "INSERT INTO market_items (type, quantity, price, seller_uuid, item_data) VALUES (?, ?, ?, ?, ?)")) {
             statement.setString(1, marketItem.getType().toString());
@@ -392,7 +464,14 @@ public class DatabaseManager {
         }
     }
 
-    public synchronized void updateMarketItem(MarketItem marketItem) {
+    public void updateMarketItem(MarketItem marketItem) {
+        if (!isDbThread()) {
+            callOnDbThread(() -> {
+                updateMarketItem(marketItem);
+                return null;
+            });
+            return;
+        }
         try (PreparedStatement statement = connection.prepareStatement(
                 "UPDATE market_items SET quantity = ?, price = ?, item_data = ? WHERE type = ? AND seller_uuid = ? AND item_data = ?")) {
             statement.setString(1, marketItem.getQuantity().toString());
@@ -407,7 +486,14 @@ public class DatabaseManager {
         }
     }
 
-    public synchronized void removeMarketItem(MarketItem marketItem) {
+    public void removeMarketItem(MarketItem marketItem) {
+        if (!isDbThread()) {
+            callOnDbThread(() -> {
+                removeMarketItem(marketItem);
+                return null;
+            });
+            return;
+        }
         try (PreparedStatement statement = connection.prepareStatement(
                 "DELETE FROM market_items WHERE type = ? AND seller_uuid = ? AND item_data = ?")) {
             statement.setString(1, marketItem.getType().toString());
@@ -419,7 +505,10 @@ public class DatabaseManager {
         }
     }
 
-    public synchronized List<MarketItem> getMarketItems() {
+    public List<MarketItem> getMarketItems() {
+        if (!isDbThread()) {
+            return callOnDbThread(this::getMarketItems);
+        }
         List<MarketItem> marketItems = new ArrayList<>();
         try (PreparedStatement statement = connection.prepareStatement("SELECT * FROM market_items");
              ResultSet resultSet = statement.executeQuery()) {
@@ -432,7 +521,10 @@ public class DatabaseManager {
         return marketItems;
     }
 
-    public synchronized List<MarketItem> getMarketItemsBySeller(Material type) {
+    public List<MarketItem> getMarketItemsBySeller(Material type) {
+        if (!isDbThread()) {
+            return callOnDbThread(() -> getMarketItemsBySeller(type));
+        }
         List<MarketItem> marketItems = new ArrayList<>();
         try (PreparedStatement statement = connection.prepareStatement("SELECT * FROM market_items WHERE type = ?")) {
             statement.setString(1, type.toString());
@@ -447,7 +539,10 @@ public class DatabaseManager {
         return marketItems;
     }
 
-    public synchronized List<MarketItem> getMarketItemsByOwner(String ownerUUID) {
+    public List<MarketItem> getMarketItemsByOwner(String ownerUUID) {
+        if (!isDbThread()) {
+            return callOnDbThread(() -> getMarketItemsByOwner(ownerUUID));
+        }
         List<MarketItem> marketItems = new ArrayList<>();
         try (PreparedStatement statement = connection.prepareStatement("SELECT * FROM market_items WHERE seller_uuid = ?")) {
             statement.setString(1, ownerUUID);
@@ -462,7 +557,14 @@ public class DatabaseManager {
         return marketItems;
     }
 
-    public synchronized void recordPlayerName(UUID playerUUID, String name) {
+    public void recordPlayerName(UUID playerUUID, String name) {
+        if (!isDbThread()) {
+            callOnDbThread(() -> {
+                recordPlayerName(playerUUID, name);
+                return null;
+            });
+            return;
+        }
         if (playerUUID == null || name == null || name.isEmpty()) {
             return;
         }
@@ -477,7 +579,10 @@ public class DatabaseManager {
         }
     }
 
-    public synchronized String getLastKnownName(String uuid) {
+    public String getLastKnownName(String uuid) {
+        if (!isDbThread()) {
+            return callOnDbThread(() -> getLastKnownName(uuid));
+        }
         if (uuid == null || uuid.isEmpty()) {
             return null;
         }
@@ -495,11 +600,25 @@ public class DatabaseManager {
         return null;
     }
 
-    public synchronized void recordSale(String sellerUuid, String buyerUuid, int quantity, double totalPrice) {
+    public void recordSale(String sellerUuid, String buyerUuid, int quantity, double totalPrice) {
+        if (!isDbThread()) {
+            callOnDbThread(() -> {
+                recordSale(sellerUuid, buyerUuid, quantity, totalPrice);
+                return null;
+            });
+            return;
+        }
         recordSale(sellerUuid, buyerUuid, BigInteger.valueOf(quantity), totalPrice);
     }
 
-    public synchronized void recordSale(String sellerUuid, String buyerUuid, BigInteger quantity, double totalPrice) {
+    public void recordSale(String sellerUuid, String buyerUuid, BigInteger quantity, double totalPrice) {
+        if (!isDbThread()) {
+            callOnDbThread(() -> {
+                recordSale(sellerUuid, buyerUuid, quantity, totalPrice);
+                return null;
+            });
+            return;
+        }
         if (quantity == null || quantity.signum() <= 0 || totalPrice < 0) {
             return;
         }
@@ -567,7 +686,10 @@ public class DatabaseManager {
         }
     }
 
-    public synchronized Stats getStats(String key) {
+    public Stats getStats(String key) {
+        if (!isDbThread()) {
+            return callOnDbThread(() -> getStats(key));
+        }
         Stats stats = new Stats();
         if (key == null || key.isEmpty()) {
             return stats;
@@ -589,7 +711,14 @@ public class DatabaseManager {
         return stats;
     }
 
-    public synchronized void recordDemand(String itemData, BigInteger quantity) {
+    public void recordDemand(String itemData, BigInteger quantity) {
+        if (!isDbThread()) {
+            callOnDbThread(() -> {
+                recordDemand(itemData, quantity);
+                return null;
+            });
+            return;
+        }
         if (itemData == null || itemData.isEmpty()) {
             return;
         }
@@ -609,7 +738,10 @@ public class DatabaseManager {
         cleanupOldDemand(nowSeconds);
     }
 
-    public synchronized DemandStats getDemandForItem(String itemData) {
+    public DemandStats getDemandForItem(String itemData) {
+        if (!isDbThread()) {
+            return callOnDbThread(() -> getDemandForItem(itemData));
+        }
         DemandStats stats = new DemandStats();
         if (itemData == null || itemData.isEmpty()) {
             return stats;
@@ -629,7 +761,10 @@ public class DatabaseManager {
         return stats;
     }
 
-    public synchronized DemandStats getDemandTotals() {
+    public DemandStats getDemandTotals() {
+        if (!isDbThread()) {
+            return callOnDbThread(this::getDemandTotals);
+        }
         DemandStats stats = new DemandStats();
         long nowSeconds = System.currentTimeMillis() / 1000L;
         long earliest = nowSeconds - DEMAND_WINDOW_YEAR;
@@ -682,7 +817,10 @@ public class DatabaseManager {
         }
     }
 
-    public synchronized BigInteger getTotalItemsInShop() {
+    public BigInteger getTotalItemsInShop() {
+        if (!isDbThread()) {
+            return callOnDbThread(this::getTotalItemsInShop);
+        }
         BigInteger total = BigInteger.ZERO;
         for (MarketItem item : getMarketItems()) {
             if (OreBreakdown.isOreFamilyNugget(item.getItemStack())
@@ -694,7 +832,10 @@ public class DatabaseManager {
         return total;
     }
 
-    public synchronized BigInteger getTotalItemsInShopForSeller(String sellerUuid) {
+    public BigInteger getTotalItemsInShopForSeller(String sellerUuid) {
+        if (!isDbThread()) {
+            return callOnDbThread(() -> getTotalItemsInShopForSeller(sellerUuid));
+        }
         if (sellerUuid == null || sellerUuid.isEmpty()) {
             return BigInteger.ZERO;
         }

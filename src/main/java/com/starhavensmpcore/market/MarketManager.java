@@ -476,7 +476,7 @@ public class MarketManager {
         }
 
         if (recalculationRunning.compareAndSet(false, true)) {
-            plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
+            databaseManager.runOnDbThread(() -> {
                 boolean success = false;
                 try {
                     performPriceRecalculation();
