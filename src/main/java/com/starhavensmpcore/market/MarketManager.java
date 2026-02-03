@@ -518,8 +518,11 @@ public class MarketManager {
         recalculationQueued.set(true);
     }
     private void startRecalculation() {
+        RecalculationTiming timing = new RecalculationTiming();
+        timing.startNs = System.nanoTime();
         try {
-            RecalculationSnapshot snapshot = prepareRecalculationSnapshot();
+            RecalculationSnapshot snapshot = prepareRecalculationSnapshot(timing);
+            timing.snapshotEndNs = System.nanoTime();
             if (snapshot == null || snapshot.listings.isEmpty()) {
                 finishRecalculation(true, snapshot);
                 return;
@@ -537,6 +540,10 @@ public class MarketManager {
             result = computeRecalculation(snapshot);
         } catch (Exception ex) {
             plugin.getLogger().log(Level.SEVERE, "Failed to compute market recalculation", ex);
+        } finally {
+            if (snapshot != null && snapshot.timing != null) {
+                snapshot.timing.computeEndNs = System.nanoTime();
+            }
         }
         RecalculationResult finalResult = result;
         databaseManager.runOnDbThread(() -> {
@@ -553,7 +560,7 @@ public class MarketManager {
         });
     }
 
-    private RecalculationSnapshot prepareRecalculationSnapshot() {
+    private RecalculationSnapshot prepareRecalculationSnapshot(RecalculationTiming timing) {
         List<MarketItem> marketItems = databaseManager.getMarketItems();
         marketItems = normalizeOreListings(marketItems);
         marketItems = normalizeNuggetListings(marketItems);
@@ -564,7 +571,7 @@ public class MarketManager {
         if (marketItems.isEmpty()) {
             lastRecalculationItemCount = BigInteger.ZERO;
             return new RecalculationSnapshot(marketItems, new HashMap<>(), new HashMap<>(),
-                    BigInteger.ZERO, 0, 0d, 0d, minPrice, 0d, plugin.isDebugMarket());
+                    BigInteger.ZERO, 0, 0d, 0d, minPrice, 0d, plugin.isDebugMarket(), timing);
         }
 
         Map<String, BigInteger> demandMetrics = new HashMap<>();
@@ -598,7 +605,8 @@ public class MarketManager {
                 maxPrice,
                 minPrice,
                 commodityCap,
-                plugin.isDebugMarket()
+                plugin.isDebugMarket(),
+                timing
         );
     }
 
@@ -735,6 +743,9 @@ public class MarketManager {
             priceByItemData.put(aggregate.itemData, aggregate.finalPrice);
         }
         databaseManager.updatePricesByItemData(priceByItemData);
+        if (snapshot.timing != null) {
+            snapshot.timing.applyEndNs = System.nanoTime();
+        }
 
         if (snapshot.totalMarketValue > 0
                 && result.totalAppliedValue > 0
@@ -763,12 +774,62 @@ public class MarketManager {
         if (success) {
             lastSuccessfulRecalculation = System.currentTimeMillis();
         }
+        if (snapshot != null && snapshot.debug && snapshot.timing != null) {
+            logRecalculationTiming(snapshot.timing);
+        }
         recalculationRunning.set(false);
         if (recalculationQueued.getAndSet(false)) {
             scheduleRecalculation(true);
             return;
         }
         notifyRecalculationCallbacks(success);
+    }
+
+    private void logRecalculationTiming(RecalculationTiming timing) {
+        if (timing == null) {
+            return;
+        }
+        long startNs = timing.startNs;
+        long snapshotEndNs = timing.snapshotEndNs > 0 ? timing.snapshotEndNs : startNs;
+        long computeEndNs = timing.computeEndNs > 0 ? timing.computeEndNs : snapshotEndNs;
+        long applyEndNs = timing.applyEndNs > 0 ? timing.applyEndNs : computeEndNs;
+
+        long totalMs = Math.max(0L, (applyEndNs - startNs) / 1_000_000L);
+        long snapshotMs = Math.max(0L, (snapshotEndNs - startNs) / 1_000_000L);
+        long computeMs = Math.max(0L, (computeEndNs - snapshotEndNs) / 1_000_000L);
+        long applyMs = Math.max(0L, (applyEndNs - computeEndNs) / 1_000_000L);
+
+        long denom = Math.max(1L, totalMs);
+        long snapshotPct = snapshotMs * 100 / denom;
+        long computePct = computeMs * 100 / denom;
+        long applyPct = applyMs * 100 / denom;
+
+        String longestLabel = "snapshot";
+        long longestMs = snapshotMs;
+        long longestPct = snapshotPct;
+        if (computeMs >= longestMs) {
+            longestLabel = "compute";
+            longestMs = computeMs;
+            longestPct = computePct;
+        }
+        if (applyMs >= longestMs) {
+            longestLabel = "apply";
+            longestMs = applyMs;
+            longestPct = applyPct;
+        }
+
+        plugin.getLogger().info("Market recal took: " + formatDuration(totalMs) +
+                " (snapshot " + formatDuration(snapshotMs) + " " + snapshotPct + "%, " +
+                "compute " + formatDuration(computeMs) + " " + computePct + "%, " +
+                "apply " + formatDuration(applyMs) + " " + applyPct + "%). " +
+                "Longest: " + longestLabel + " " + formatDuration(longestMs) + " (" + longestPct + "%).");
+    }
+
+    private String formatDuration(long millis) {
+        if (millis >= 1000L) {
+            return String.format(Locale.US, "%.2fs", millis / 1000.0);
+        }
+        return millis + "ms";
     }
 
     private static final class RecalculationSnapshot {
@@ -783,6 +844,7 @@ public class MarketManager {
         private final double minPrice;
         private final double commodityCap;
         private final boolean debug;
+        private final RecalculationTiming timing;
 
         private RecalculationSnapshot(List<MarketItem> listings,
                                       Map<String, BigInteger> demandMetrics,
@@ -793,7 +855,8 @@ public class MarketManager {
                                       double maxPrice,
                                       double minPrice,
                                       double commodityCap,
-                                      boolean debug) {
+                                      boolean debug,
+                                      RecalculationTiming timing) {
             this.listings = listings;
             this.demandMetrics = demandMetrics;
             this.commodityNames = commodityNames;
@@ -804,7 +867,15 @@ public class MarketManager {
             this.minPrice = minPrice;
             this.commodityCap = commodityCap;
             this.debug = debug;
+            this.timing = timing;
         }
+    }
+
+    private static final class RecalculationTiming {
+        private volatile long startNs;
+        private volatile long snapshotEndNs;
+        private volatile long computeEndNs;
+        private volatile long applyEndNs;
     }
 
     private static final class AggregateComputation {
