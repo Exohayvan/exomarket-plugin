@@ -146,13 +146,31 @@ public final class OreFamilyList {
                 "TIN"
         ));
         families.add(new OreFamily(
-                "tin",
+                "raw_tin",
                 null,
                 "raw_tin",
                 "raw_tin_block",
                 BigInteger.valueOf(9),
                 BigInteger.valueOf(9),
                 "RAW TIN"
+        ));
+        families.add(new OreFamily(
+                "cobalt",
+                null,
+                "cobalt_ingot",
+                "cobalt_block",
+                BigInteger.valueOf(9),
+                BigInteger.valueOf(9),
+                "COBALT"
+        ));
+        families.add(new OreFamily(
+                "raw_cobalt",
+                null,
+                "raw_cobalt",
+                "raw_cobalt_block",
+                BigInteger.valueOf(9),
+                BigInteger.valueOf(9),
+                "RAW COBALT"
         ));
         FAMILIES = Collections.unmodifiableList(families);
     }
