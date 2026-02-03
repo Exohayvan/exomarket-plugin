@@ -37,10 +37,15 @@ import java.math.BigInteger;
 import org.bukkit.configuration.file.FileConfiguration;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class StarhavenSMPCore extends JavaPlugin {
 
@@ -64,6 +69,14 @@ public class StarhavenSMPCore extends JavaPlugin {
     private double maxPricePercent;
     private double minPrice;
     private static final int WEB_PORT = 6969;
+    private static final long SUGGESTION_CACHE_MS = 5_000L;
+
+    private volatile List<String> marketItemSuggestionCache = Collections.emptyList();
+    private volatile long marketItemSuggestionLastRefresh = 0L;
+    private final AtomicBoolean marketItemSuggestionRefreshing = new AtomicBoolean(false);
+    private final Map<UUID, List<String>> ownedItemSuggestionCache = new ConcurrentHashMap<>();
+    private final Map<UUID, Long> ownedItemSuggestionLastRefresh = new ConcurrentHashMap<>();
+    private final Map<UUID, AtomicBoolean> ownedItemSuggestionRefreshing = new ConcurrentHashMap<>();
 
     public DatabaseManager getDatabaseManager() {
         return this.databaseManager;
@@ -336,13 +349,10 @@ public class StarhavenSMPCore extends JavaPlugin {
     }
 
     private List<String> getMarketItemSuggestions(String prefix) {
+        refreshMarketItemSuggestionCache();
         List<String> suggestions = new ArrayList<>();
-        for (MarketItem item : databaseManager.getMarketItems()) {
-            if (OreBreakdown.isOreFamilyNugget(item.getItemStack())) {
-                continue;
-            }
-            String name = item.getType().toString().toLowerCase();
-            if (name.startsWith(prefix) && !suggestions.contains(name)) {
+        for (String name : marketItemSuggestionCache) {
+            if (name.startsWith(prefix)) {
                 suggestions.add(name);
             }
         }
@@ -350,11 +360,17 @@ public class StarhavenSMPCore extends JavaPlugin {
     }
 
     private List<String> getOwnedItemSuggestions(Player player, String prefix) {
+        if (player == null) {
+            return Collections.emptyList();
+        }
+        refreshOwnedItemSuggestionCache(player);
+        List<String> cached = ownedItemSuggestionCache.get(player.getUniqueId());
+        if (cached == null || cached.isEmpty()) {
+            return Collections.emptyList();
+        }
         List<String> suggestions = new ArrayList<>();
-        List<MarketItem> listings = databaseManager.getMarketItemsByOwner(player.getUniqueId().toString());
-        for (MarketItem item : listings) {
-            String name = item.getType().toString().toLowerCase();
-            if (name.startsWith(prefix) && !suggestions.contains(name)) {
+        for (String name : cached) {
+            if (name.startsWith(prefix)) {
                 suggestions.add(name);
             }
         }
@@ -362,75 +378,144 @@ public class StarhavenSMPCore extends JavaPlugin {
     }
 
     private void openMarketWithRecalculation(Player player, String filter) {
-        boolean willRecalculate = marketManager.recalculatePricesIfNeeded(
+        if (player == null) {
+            return;
+        }
+        marketManager.recalculatePricesIfNeededAsync(
                 () -> guiManager.openMarketGUI(player, filter),
                 () -> player.sendMessage(ChatColor.RED + "There was an error recalculating market prices. " +
-                        "Please contact ExoHayvan on Discord or report an issue on GitHub.")
+                        "Please contact ExoHayvan on Discord or report an issue on GitHub."),
+                willRecalculate -> {
+                    if (willRecalculate) {
+                        player.sendMessage(ChatColor.YELLOW + "Recalculating market prices...");
+                    }
+                }
         );
-        if (willRecalculate) {
-            player.sendMessage(ChatColor.YELLOW + "Recalculating market prices...");
-        }
     }
 
     private void sendMarketInfo(Player player) {
-        List<MarketItem> items = databaseManager.getMarketItems();
-        int totalListings = 0;
-        BigInteger totalQuantity = BigInteger.ZERO;
-        double totalValue = 0d;
-        Set<String> uniqueItems = new HashSet<>();
-        for (MarketItem item : items) {
-            if (OreBreakdown.isOreFamilyNugget(item.getItemStack())) {
-                continue;
-            }
-            totalListings++;
-            BigInteger qty = item.getQuantity().max(BigInteger.ZERO);
-            totalQuantity = totalQuantity.add(qty);
-            totalValue += item.getPrice() * toDoubleCapped(qty);
-            uniqueItems.add(item.getItemData());
+        if (player == null) {
+            return;
         }
-
-        DatabaseManager.Stats global = databaseManager.getStats("global");
-
-        player.sendMessage(ChatColor.GOLD + "Market Totals");
-        player.sendMessage(ChatColor.GRAY + "Listings: " + totalListings +
-                " | Unique items: " + uniqueItems.size());
-        player.sendMessage(ChatColor.GRAY + "Supply listed: " + QuantityFormatter.format(totalQuantity));
-        player.sendMessage(ChatColor.GRAY + "Listed value: " + CurrencyFormatter.format(totalValue));
-        player.sendMessage(ChatColor.GRAY + "Items traded: " + QuantityFormatter.format(global.itemsSold) +
-                " | Value traded: " + CurrencyFormatter.format(global.moneyEarned));
-        DatabaseManager.DemandStats demandTotals = databaseManager.getDemandTotals();
-        player.sendMessage(ChatColor.GRAY + "Demand 1h: " + QuantityFormatter.format(demandTotals.hour) +
-                " | 1d: " + QuantityFormatter.format(demandTotals.day) +
-                " | 1mo: " + QuantityFormatter.format(demandTotals.month) +
-                " | 1y: " + QuantityFormatter.format(demandTotals.year));
-
-        List<MarketItem> owned = databaseManager.getMarketItemsByOwner(player.getUniqueId().toString());
-        int ownedListings = 0;
-        BigInteger ownedQuantity = BigInteger.ZERO;
-        double ownedValue = 0d;
-        Set<String> ownedUnique = new HashSet<>();
-        for (MarketItem item : owned) {
-            if (OreBreakdown.isOreFamilyNugget(item.getItemStack())) {
-                continue;
+        databaseManager.runOnDbThread(() -> {
+            List<MarketItem> items = databaseManager.getMarketItems();
+            int totalListings = 0;
+            BigInteger totalQuantity = BigInteger.ZERO;
+            double totalValue = 0d;
+            Set<String> uniqueItems = new HashSet<>();
+            for (MarketItem item : items) {
+                if (OreBreakdown.isOreFamilyNugget(item.getItemStack())) {
+                    continue;
+                }
+                totalListings++;
+                BigInteger qty = item.getQuantity().max(BigInteger.ZERO);
+                totalQuantity = totalQuantity.add(qty);
+                totalValue += item.getPrice() * toDoubleCapped(qty);
+                uniqueItems.add(item.getItemData());
             }
-            ownedListings++;
-            BigInteger qty = item.getQuantity().max(BigInteger.ZERO);
-            ownedQuantity = ownedQuantity.add(qty);
-            ownedValue += item.getPrice() * toDoubleCapped(qty);
-            ownedUnique.add(item.getItemData());
+
+            DatabaseManager.Stats global = databaseManager.getStats("global");
+            DatabaseManager.DemandStats demandTotals = databaseManager.getDemandTotals();
+
+            List<MarketItem> owned = databaseManager.getMarketItemsByOwner(player.getUniqueId().toString());
+            int ownedListings = 0;
+            BigInteger ownedQuantity = BigInteger.ZERO;
+            double ownedValue = 0d;
+            Set<String> ownedUnique = new HashSet<>();
+            for (MarketItem item : owned) {
+                if (OreBreakdown.isOreFamilyNugget(item.getItemStack())) {
+                    continue;
+                }
+                ownedListings++;
+                BigInteger qty = item.getQuantity().max(BigInteger.ZERO);
+                ownedQuantity = ownedQuantity.add(qty);
+                ownedValue += item.getPrice() * toDoubleCapped(qty);
+                ownedUnique.add(item.getItemData());
+            }
+
+            DatabaseManager.Stats personal = databaseManager.getStats(player.getUniqueId().toString());
+
+            int finalTotalListings = totalListings;
+            BigInteger finalTotalQuantity = totalQuantity;
+            double finalTotalValue = totalValue;
+            Set<String> finalUniqueItems = new HashSet<>(uniqueItems);
+            DatabaseManager.Stats finalGlobal = global;
+            DatabaseManager.DemandStats finalDemandTotals = demandTotals;
+            int finalOwnedListings = ownedListings;
+            BigInteger finalOwnedQuantity = ownedQuantity;
+            double finalOwnedValue = ownedValue;
+            Set<String> finalOwnedUnique = new HashSet<>(ownedUnique);
+            DatabaseManager.Stats finalPersonal = personal;
+
+            getServer().getScheduler().runTask(this, () -> {
+                player.sendMessage(ChatColor.GOLD + "Market Totals");
+                player.sendMessage(ChatColor.GRAY + "Listings: " + finalTotalListings +
+                        " | Unique items: " + finalUniqueItems.size());
+                player.sendMessage(ChatColor.GRAY + "Supply listed: " + QuantityFormatter.format(finalTotalQuantity));
+                player.sendMessage(ChatColor.GRAY + "Listed value: " + CurrencyFormatter.format(finalTotalValue));
+                player.sendMessage(ChatColor.GRAY + "Items traded: " + QuantityFormatter.format(finalGlobal.itemsSold) +
+                        " | Value traded: " + CurrencyFormatter.format(finalGlobal.moneyEarned));
+                player.sendMessage(ChatColor.GRAY + "Demand 1h: " + QuantityFormatter.format(finalDemandTotals.hour) +
+                        " | 1d: " + QuantityFormatter.format(finalDemandTotals.day) +
+                        " | 1mo: " + QuantityFormatter.format(finalDemandTotals.month) +
+                        " | 1y: " + QuantityFormatter.format(finalDemandTotals.year));
+
+                player.sendMessage(ChatColor.GOLD + "Your Market Stats");
+                player.sendMessage(ChatColor.GRAY + "Listings: " + finalOwnedListings +
+                        " | Unique items: " + finalOwnedUnique.size());
+                player.sendMessage(ChatColor.GRAY + "Supply listed: " + QuantityFormatter.format(finalOwnedQuantity));
+                player.sendMessage(ChatColor.GRAY + "Listed value: " + CurrencyFormatter.format(finalOwnedValue));
+                player.sendMessage(ChatColor.GRAY + "Items sold: " + QuantityFormatter.format(finalPersonal.itemsSold) +
+                        " | Earned: " + CurrencyFormatter.format(finalPersonal.moneyEarned));
+                player.sendMessage(ChatColor.GRAY + "Items bought: " + QuantityFormatter.format(finalPersonal.itemsBought) +
+                        " | Spent: " + CurrencyFormatter.format(finalPersonal.moneySpent));
+            });
+        });
+    }
+
+    private void refreshMarketItemSuggestionCache() {
+        long now = System.currentTimeMillis();
+        if (now - marketItemSuggestionLastRefresh < SUGGESTION_CACHE_MS) {
+            return;
         }
+        if (!marketItemSuggestionRefreshing.compareAndSet(false, true)) {
+            return;
+        }
+        databaseManager.runOnDbThread(() -> {
+            Set<String> unique = new LinkedHashSet<>();
+            for (MarketItem item : databaseManager.getMarketItems()) {
+                if (OreBreakdown.isOreFamilyNugget(item.getItemStack())) {
+                    continue;
+                }
+                unique.add(item.getType().toString().toLowerCase());
+            }
+            marketItemSuggestionCache = new ArrayList<>(unique);
+            marketItemSuggestionLastRefresh = System.currentTimeMillis();
+            marketItemSuggestionRefreshing.set(false);
+        });
+    }
 
-        DatabaseManager.Stats personal = databaseManager.getStats(player.getUniqueId().toString());
-
-        player.sendMessage(ChatColor.GOLD + "Your Market Stats");
-        player.sendMessage(ChatColor.GRAY + "Listings: " + ownedListings +
-                " | Unique items: " + ownedUnique.size());
-        player.sendMessage(ChatColor.GRAY + "Supply listed: " + QuantityFormatter.format(ownedQuantity));
-        player.sendMessage(ChatColor.GRAY + "Listed value: " + CurrencyFormatter.format(ownedValue));
-        player.sendMessage(ChatColor.GRAY + "Items sold: " + QuantityFormatter.format(personal.itemsSold) +
-                " | Earned: " + CurrencyFormatter.format(personal.moneyEarned));
-        player.sendMessage(ChatColor.GRAY + "Items bought: " + QuantityFormatter.format(personal.itemsBought) +
-                " | Spent: " + CurrencyFormatter.format(personal.moneySpent));
+    private void refreshOwnedItemSuggestionCache(Player player) {
+        UUID ownerId = player.getUniqueId();
+        long now = System.currentTimeMillis();
+        long last = ownedItemSuggestionLastRefresh.getOrDefault(ownerId, 0L);
+        if (now - last < SUGGESTION_CACHE_MS) {
+            return;
+        }
+        AtomicBoolean refreshing = ownedItemSuggestionRefreshing.computeIfAbsent(ownerId, ignored -> new AtomicBoolean(false));
+        if (!refreshing.compareAndSet(false, true)) {
+            return;
+        }
+        databaseManager.runOnDbThread(() -> {
+            Set<String> unique = new LinkedHashSet<>();
+            List<MarketItem> listings = databaseManager.getMarketItemsByOwner(ownerId.toString());
+            for (MarketItem item : listings) {
+                unique.add(item.getType().toString().toLowerCase());
+            }
+            ownedItemSuggestionCache.put(ownerId, new ArrayList<>(unique));
+            ownedItemSuggestionLastRefresh.put(ownerId, System.currentTimeMillis());
+            refreshing.set(false);
+        });
     }
 
     private void sendMarketDebugItem(Player player, boolean full) {

@@ -393,11 +393,20 @@ public class MarketManager {
     }
 
     public void recalculatePrices() {
-        recalculatePricesIfNeeded(null, null);
+        databaseManager.runOnDbThread(() -> recalculatePricesIfNeeded(null, null));
     }
 
     public void forceRecalculatePrices() {
         scheduleRecalculation(true);
+    }
+
+    public void recalculatePricesIfNeededAsync(Runnable onSuccess, Runnable onFailure, java.util.function.Consumer<Boolean> onQueued) {
+        databaseManager.runOnDbThread(() -> {
+            boolean willRecalculate = recalculatePricesIfNeeded(onSuccess, onFailure);
+            if (onQueued != null) {
+                plugin.getServer().getScheduler().runTask(plugin, () -> onQueued.accept(willRecalculate));
+            }
+        });
     }
 
     public boolean recalculatePricesIfNeeded(Runnable onSuccess, Runnable onFailure) {

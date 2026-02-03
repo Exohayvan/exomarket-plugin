@@ -28,6 +28,7 @@ import org.bukkit.inventory.InventoryView;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class GUIManager implements Listener {
 
@@ -41,6 +42,10 @@ public class GUIManager implements Listener {
     private Map<Player, Integer> selectedOreOutputMultiplier = new HashMap<>();
     private Map<Player, ItemStack> selectedOreTemplate = new HashMap<>();
     private Map<Player, OreUnitOptions> selectedOreUnitOptions = new HashMap<>();
+    private static final long QUEUED_NUGGET_CACHE_MS = 2_000L;
+    private final Map<UUID, Map<String, BigInteger>> queuedNuggetCache = new ConcurrentHashMap<>();
+    private final Map<UUID, Long> queuedNuggetCacheLastRefresh = new ConcurrentHashMap<>();
+    private final Set<UUID> queuedNuggetRefreshing = ConcurrentHashMap.newKeySet();
 
     private static class AggregatedListing {
         private final String itemData;
@@ -324,18 +329,46 @@ public class GUIManager implements Listener {
     }
 
     private BigInteger getQueuedNuggets(Player player, ItemStack nuggetItem) {
-        if (player == null) {
+        if (player == null || nuggetItem == null) {
             return BigInteger.ZERO;
         }
-        List<MarketItem> listings = plugin.getDatabaseManager()
-                .getMarketItemsByOwner(player.getUniqueId().toString());
-        BigInteger total = BigInteger.ZERO;
-        for (MarketItem listing : listings) {
-            if (matchesTemplate(listing.getItemStack(), nuggetItem)) {
-                total = total.add(listing.getQuantity().max(BigInteger.ZERO));
-            }
+        refreshQueuedNuggetCache(player);
+        Map<String, BigInteger> cached = queuedNuggetCache.get(player.getUniqueId());
+        if (cached == null || cached.isEmpty()) {
+            return BigInteger.ZERO;
         }
-        return total;
+        String key = ItemSanitizer.serializeToString(nuggetItem);
+        return cached.getOrDefault(key, BigInteger.ZERO);
+    }
+
+    private void refreshQueuedNuggetCache(Player player) {
+        if (player == null || player.getUniqueId() == null) {
+            return;
+        }
+        UUID playerId = player.getUniqueId();
+        long now = System.currentTimeMillis();
+        Long lastRefresh = queuedNuggetCacheLastRefresh.get(playerId);
+        if (lastRefresh != null && now - lastRefresh < QUEUED_NUGGET_CACHE_MS) {
+            return;
+        }
+        if (!queuedNuggetRefreshing.add(playerId)) {
+            return;
+        }
+        plugin.getDatabaseManager().runOnDbThread(() -> {
+            List<MarketItem> listings = plugin.getDatabaseManager()
+                    .getMarketItemsByOwner(playerId.toString());
+            Map<String, BigInteger> totals = new HashMap<>();
+            for (MarketItem listing : listings) {
+                String itemData = listing.getItemData();
+                if (itemData == null || itemData.isEmpty()) {
+                    continue;
+                }
+                totals.merge(itemData, listing.getQuantity().max(BigInteger.ZERO), BigInteger::add);
+            }
+            queuedNuggetCache.put(playerId, totals);
+            queuedNuggetCacheLastRefresh.put(playerId, System.currentTimeMillis());
+            queuedNuggetRefreshing.remove(playerId);
+        });
     }
 
     private boolean matchesTemplate(ItemStack item, ItemStack template) {

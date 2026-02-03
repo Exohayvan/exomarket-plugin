@@ -68,8 +68,34 @@ public class MarketItemsGUI implements Listener {
     private void openListings(Player player, int requestedPage) {
         selectedItem.remove(player.getUniqueId());
         selectedEnchantLevel.remove(player.getUniqueId());
-        List<MarketItem> listings = databaseManager.getMarketItemsByOwner(player.getUniqueId().toString());
-        String filter = currentFilter.get(player.getUniqueId());
+        UUID playerId = player.getUniqueId();
+        String filter = currentFilter.get(playerId);
+        databaseManager.runOnDbThread(() -> {
+            List<MarketItem> listings = databaseManager.getMarketItemsByOwner(playerId.toString());
+            Map<String, DatabaseManager.DemandStats> demandMap = new HashMap<>();
+            for (MarketItem listing : listings) {
+                String itemData = listing.getItemData();
+                if (itemData == null || itemData.isEmpty()) {
+                    continue;
+                }
+                if (!demandMap.containsKey(itemData)) {
+                    demandMap.put(itemData, databaseManager.getDemandForItem(itemData));
+                }
+            }
+            plugin.getServer().getScheduler().runTask(plugin, () ->
+                    renderListings(playerId, requestedPage, filter, listings, demandMap));
+        });
+    }
+
+    private void renderListings(UUID playerId,
+                                int requestedPage,
+                                String filter,
+                                List<MarketItem> listings,
+                                Map<String, DatabaseManager.DemandStats> demandMap) {
+        Player player = Bukkit.getPlayer(playerId);
+        if (player == null || !player.isOnline()) {
+            return;
+        }
         if (filter != null) {
             listings.removeIf(listing -> !matchesFilter(listing, filter));
         }
@@ -79,15 +105,15 @@ public class MarketItemsGUI implements Listener {
             } else {
                 player.sendMessage(ChatColor.YELLOW + "No listings match \"" + filter + "\".");
             }
-            pageItems.remove(player.getUniqueId());
-            currentPage.remove(player.getUniqueId());
+            pageItems.remove(playerId);
+            currentPage.remove(playerId);
             player.closeInventory();
             return;
         }
 
         int totalPages = Math.max(1, (int) Math.ceil(listings.size() / 45.0));
         int page = Math.min(Math.max(1, requestedPage), totalPages);
-        currentPage.put(player.getUniqueId(), page);
+        currentPage.put(playerId, page);
 
         Inventory inventory = Bukkit.createInventory(null, 54, LIST_TITLE_PREFIX + " - Page " + page + "/" + totalPages);
         Map<Integer, MarketItem> slotMapping = new HashMap<>();
@@ -122,7 +148,10 @@ public class MarketItemsGUI implements Listener {
                 if (!meta.hasDisplayName()) {
                     meta.setDisplayName(ChatColor.GOLD + ItemDisplayNameFormatter.format(display));
                 }
-                DatabaseManager.DemandStats demand = databaseManager.getDemandForItem(listing.getItemData());
+                DatabaseManager.DemandStats demand = demandMap.getOrDefault(
+                        listing.getItemData(),
+                        new DatabaseManager.DemandStats()
+                );
                 List<String> lore = meta.hasLore() ? new ArrayList<>(meta.getLore()) : new ArrayList<>();
                 if (!lore.isEmpty()) {
                     lore.add(ChatColor.DARK_GRAY + "" + ChatColor.STRIKETHROUGH + "----------------");
@@ -156,7 +185,7 @@ public class MarketItemsGUI implements Listener {
             inventory.setItem(50, createNavigationItem(Material.BARRIER, ChatColor.RED + "No Next Page"));
         }
 
-        pageItems.put(player.getUniqueId(), slotMapping);
+        pageItems.put(playerId, slotMapping);
         player.openInventory(inventory);
     }
 
@@ -359,11 +388,13 @@ public class MarketItemsGUI implements Listener {
         }
 
         listing.setQuantity(listing.getQuantity().subtract(BigInteger.valueOf(quantity)));
-        if (listing.getQuantity().signum() <= 0) {
-            databaseManager.removeMarketItem(listing);
-        } else {
-            databaseManager.updateMarketItem(listing);
-        }
+        databaseManager.runOnDbThread(() -> {
+            if (listing.getQuantity().signum() <= 0) {
+                databaseManager.removeMarketItem(listing);
+            } else {
+                databaseManager.updateMarketItem(listing);
+            }
+        });
 
         ItemStack item = listing.getItemStack();
         item.setAmount(quantity);
@@ -385,7 +416,7 @@ public class MarketItemsGUI implements Listener {
                 .min(BigInteger.valueOf(maxDurability))
                 .max(BigInteger.ZERO)
                 .intValue();
-        databaseManager.removeMarketItem(listing);
+        databaseManager.runOnDbThread(() -> databaseManager.removeMarketItem(listing));
 
         ItemStack item = DurabilityQueue.applyRemainingDurability(
                 DurabilityQueue.stripQueueMarker(plugin, listing.getItemStack()),
@@ -421,11 +452,13 @@ public class MarketItemsGUI implements Listener {
         }
 
         listing.setQuantity(listing.getQuantity().subtract(removeUnits));
-        if (listing.getQuantity().signum() <= 0) {
-            databaseManager.removeMarketItem(listing);
-        } else {
-            databaseManager.updateMarketItem(listing);
-        }
+        databaseManager.runOnDbThread(() -> {
+            if (listing.getQuantity().signum() <= 0) {
+                databaseManager.removeMarketItem(listing);
+            } else {
+                databaseManager.updateMarketItem(listing);
+            }
+        });
 
         ItemStack item = buildEnchantedBook(listing.getItemStack(), level, quantity);
         Map<Integer, ItemStack> leftovers = player.getInventory().addItem(item);
