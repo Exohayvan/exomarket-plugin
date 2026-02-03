@@ -442,64 +442,74 @@ public class GUIManager implements Listener {
     }
 
     public void openMarketPage(Player player) {
+        if (player == null) {
+            return;
+        }
         selectedMarketItem.remove(player);
         selectedEnchantLevel.remove(player);
         selectedOreUnitSize.remove(player);
         selectedOreOutputMultiplier.remove(player);
         selectedOreTemplate.remove(player);
         selectedOreUnitOptions.remove(player);
-        DatabaseManager databaseManager = plugin.getDatabaseManager();
-        List<MarketItem> marketItems = databaseManager.getMarketItems();
-        marketItems.removeIf(this::shouldHideFromMarket);
-        marketItems = normalizeRawBlockListingsForDisplay(marketItems);
-        Map<String, AggregatedListing> aggregatedMap = new LinkedHashMap<>();
-        for (MarketItem marketItem : marketItems) {
-            AggregatedListing listing = aggregatedMap.computeIfAbsent(
-                    marketItem.getItemData(),
-                    key -> new AggregatedListing(key, marketItem.getItemStack(), marketItem.getPrice())
-            );
-            listing.incorporate(marketItem);
-        }
-
-        List<AggregatedListing> aggregatedListings = new ArrayList<>(aggregatedMap.values());
         String filter = currentFilter.get(player);
-        if (filter != null) {
-            aggregatedListings.removeIf(listing -> !matchesFilter(listing, filter));
-        }
-        aggregatedListings.sort(Comparator.comparing(AggregatedListing::getSortKey, String.CASE_INSENSITIVE_ORDER));
-        int totalListings = aggregatedListings.size();
-        int maxPage = Math.max(1, (int) Math.ceil(totalListings / 45.0));
-        int pageNumber = currentPage.getOrDefault(player, 1);
-        if (pageNumber > maxPage) {
-            pageNumber = maxPage;
-            currentPage.put(player, pageNumber);
-        } else if (pageNumber < 1) {
-            pageNumber = 1;
-            currentPage.put(player, pageNumber);
-        }
-
-        Inventory inventory = Bukkit.createInventory(null, 54, "Market Page " + pageNumber);
-        int startIndex = (pageNumber - 1) * 45;
-        Map<Integer, AggregatedListing> slotsToItems = new HashMap<>();
-        for (int slot = 0; slot < 45; slot++) {
-            int listIndex = startIndex + slot;
-            if (listIndex >= aggregatedListings.size()) {
-                break;
+        int requestedPage = currentPage.getOrDefault(player, 1);
+        DatabaseManager databaseManager = plugin.getDatabaseManager();
+        databaseManager.runOnDbThread(() -> {
+            List<MarketItem> marketItems = databaseManager.getMarketItems();
+            marketItems.removeIf(this::shouldHideFromMarket);
+            marketItems = normalizeRawBlockListingsForDisplay(marketItems);
+            Map<String, AggregatedListing> aggregatedMap = new LinkedHashMap<>();
+            for (MarketItem marketItem : marketItems) {
+                AggregatedListing listing = aggregatedMap.computeIfAbsent(
+                        marketItem.getItemData(),
+                        key -> new AggregatedListing(key, marketItem.getItemStack(), marketItem.getPrice())
+                );
+                listing.incorporate(marketItem);
             }
 
-            AggregatedListing listing = aggregatedListings.get(listIndex);
-            listing.setDemand(databaseManager.getDemandForItem(listing.getItemData()));
+            List<AggregatedListing> aggregatedListings = new ArrayList<>(aggregatedMap.values());
+            if (filter != null) {
+                aggregatedListings.removeIf(listing -> !matchesFilter(listing, filter));
+            }
+            aggregatedListings.sort(Comparator.comparing(AggregatedListing::getSortKey, String.CASE_INSENSITIVE_ORDER));
+            int totalListings = aggregatedListings.size();
+            int maxPage = Math.max(1, (int) Math.ceil(totalListings / 45.0));
+            int pageNumber = Math.min(Math.max(1, requestedPage), maxPage);
+            int startIndex = (pageNumber - 1) * 45;
+            List<AggregatedListing> pageListings = new ArrayList<>();
+            for (int index = startIndex; index < aggregatedListings.size() && pageListings.size() < 45; index++) {
+                AggregatedListing listing = aggregatedListings.get(index);
+                listing.setDemand(databaseManager.getDemandForItem(listing.getItemData()));
+                pageListings.add(listing);
+            }
+
+            plugin.getServer().getScheduler().runTask(plugin, () ->
+                    renderMarketPage(player, pageNumber, maxPage, pageListings));
+        });
+    }
+
+    private void renderMarketPage(Player player, int pageNumber, int maxPage, List<AggregatedListing> listings) {
+        if (player == null || !player.isOnline()) {
+            return;
+        }
+        currentPage.put(player, pageNumber);
+
+        Inventory inventory = Bukkit.createInventory(null, 54, "Market Page " + pageNumber);
+        Map<Integer, AggregatedListing> slotsToItems = new HashMap<>();
+        int slot = 0;
+        for (AggregatedListing listing : listings) {
+            if (slot >= 45) {
+                break;
+            }
             ItemStack displayItem = listing.createDisplayItem();
             inventory.setItem(slot, displayItem);
             slotsToItems.put(slot, listing);
+            slot++;
         }
         pageItems.put(player, slotsToItems);
 
-        // Always add navigation arrows
         inventory.setItem(48, createNavigationItem(Material.ARROW, ChatColor.GREEN + "Previous Page"));
         inventory.setItem(50, createNavigationItem(Material.ARROW, ChatColor.GREEN + "Next Page"));
-
-        // Disable arrows if necessary
         if (pageNumber <= 1) {
             inventory.setItem(48, createNavigationItem(Material.BARRIER, ChatColor.RED + "No Previous Page"));
         }
