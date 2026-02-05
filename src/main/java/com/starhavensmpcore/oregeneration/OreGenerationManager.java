@@ -11,9 +11,12 @@ import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.Chunk;
+import org.bukkit.command.CommandSender;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.world.ChunkLoadEvent;
+import org.bukkit.block.data.BlockData;
+import org.bukkit.scheduler.BukkitRunnable;
 
 import java.io.File;
 import java.sql.Connection;
@@ -23,11 +26,14 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class OreGenerationManager implements Listener {
     private static final String DB_NAME = "ore_generation.db";
@@ -46,6 +52,8 @@ public class OreGenerationManager implements Listener {
     private final CustomBlockRegistry customBlockRegistry;
     private final Random random = new Random();
     private Connection connection;
+    private final AtomicBoolean repairRunning = new AtomicBoolean(false);
+    private static final int REPAIR_CHUNKS_PER_TICK = 2;
 
     public OreGenerationManager(StarhavenSMPCore plugin, CustomBlockRegistry customBlockRegistry) {
         this.plugin = plugin;
@@ -81,10 +89,10 @@ public class OreGenerationManager implements Listener {
                 if (!shouldGenerate) {
                     continue;
                 }
-            Bukkit.getScheduler().runTask(plugin, () -> generateOre(chunk, definition));
-        }
-    });
-}
+                Bukkit.getScheduler().runTask(plugin, () -> generateOre(chunk, definition));
+            }
+        });
+    }
 
     private void initDatabase() {
         File dataDir = plugin.getDataFolder();
@@ -133,6 +141,251 @@ public class OreGenerationManager implements Listener {
             return false;
         }
         return insertGenerated(oreId, worldId, chunkX, chunkZ);
+    }
+
+    public void repairOreGeneration(CommandSender sender, BlockDefinition definition) {
+        if (sender == null || definition == null) {
+            return;
+        }
+        GenerationRules rules = definition.getGenerationRules();
+        if (rules == null) {
+            sender.sendMessage("That block does not have generation rules.");
+            return;
+        }
+        String noteState = definition.getNoteBlockState();
+        if (noteState == null || noteState.isEmpty()) {
+            sender.sendMessage("That block does not have a note block state.");
+            return;
+        }
+        if (!repairRunning.compareAndSet(false, true)) {
+            sender.sendMessage("Ore repair is already running.");
+            return;
+        }
+
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            List<ChunkEntry> entries = loadGeneratedChunks(definition.getId());
+            Bukkit.getScheduler().runTask(plugin, () ->
+                    runRepairScan(sender, definition, rules, entries));
+        });
+    }
+
+    private void runRepairScan(CommandSender sender,
+                               BlockDefinition definition,
+                               GenerationRules rules,
+                               List<ChunkEntry> entries) {
+        if (sender == null) {
+            repairRunning.set(false);
+            return;
+        }
+        if (entries == null || entries.isEmpty()) {
+            sender.sendMessage("Ore generation fix complete: no generated chunks found for " + definition.getId() + ".");
+            repairRunning.set(false);
+            return;
+        }
+
+        BlockData targetData;
+        try {
+            targetData = Bukkit.createBlockData(definition.getNoteBlockState());
+        } catch (IllegalArgumentException ex) {
+            sender.sendMessage("Invalid note block state for " + definition.getId() + ".");
+            repairRunning.set(false);
+            return;
+        }
+
+        Map<String, BlockDefinition> noteStateMap = buildNoteStateMap();
+        List<ChunkEntry> chunksToRemove = new ArrayList<>();
+        RepairStats stats = new RepairStats();
+
+        debug("Ore repair started for " + definition.getId() + ". Entries: " + entries.size());
+        sender.sendMessage("Ore repair started for " + definition.getId() + ". Entries: " + entries.size() + ".");
+
+        new BukkitRunnable() {
+            int index = 0;
+
+            @Override
+            public void run() {
+                int processed = 0;
+                while (processed < REPAIR_CHUNKS_PER_TICK && index < entries.size()) {
+                    ChunkEntry entry = entries.get(index++);
+                    processed++;
+
+                    UUID worldId;
+                    try {
+                        worldId = UUID.fromString(entry.worldId);
+                    } catch (IllegalArgumentException ex) {
+                        stats.missingWorld++;
+                        continue;
+                    }
+                    World world = Bukkit.getWorld(worldId);
+                    if (world == null) {
+                        stats.missingWorld++;
+                        continue;
+                    }
+
+                    boolean wasLoaded = world.isChunkLoaded(entry.chunkX, entry.chunkZ);
+                    if (!wasLoaded) {
+                        stats.forcedLoaded++;
+                    }
+                    Chunk chunk = world.getChunkAt(entry.chunkX, entry.chunkZ);
+                    stats.checked++;
+                    debug("Repair scanning chunk " + world.getName() + " " + entry.chunkX + "," + entry.chunkZ);
+
+                    RepairScanResult scan = scanChunkForRepair(chunk, targetData, rules, noteStateMap);
+                    if (scan.registeredBlocks > 0) {
+                        stats.registeredBlocks += scan.registeredBlocks;
+                        debug("Re-registered " + scan.registeredBlocks + " custom blocks in chunk " +
+                                entry.chunkX + "," + entry.chunkZ);
+                    } else {
+                        debug("No custom blocks to re-register in chunk " + entry.chunkX + "," + entry.chunkZ);
+                    }
+
+                    if (scan.targetMatches > 0) {
+                        debug("Found " + scan.targetMatches + " target ore blocks in chunk " +
+                                entry.chunkX + "," + entry.chunkZ);
+                    } else {
+                        stats.removedChunks++;
+                        chunksToRemove.add(entry);
+                        debug("No target ore blocks found; cleared generated chunk " + entry.chunkX + "," + entry.chunkZ);
+                    }
+
+                    if (!wasLoaded) {
+                        world.unloadChunkRequest(entry.chunkX, entry.chunkZ);
+                    }
+                }
+
+                if (index >= entries.size()) {
+                    if (!chunksToRemove.isEmpty()) {
+                        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+                            for (ChunkEntry entry : chunksToRemove) {
+                                removeGenerated(definition.getId(), entry.worldId, entry.chunkX, entry.chunkZ);
+                            }
+                        });
+                    }
+                    sender.sendMessage("Ore generation fix complete.");
+                    sender.sendMessage("Removed generated chunks: " + stats.removedChunks + ".");
+                    sender.sendMessage("Re-registered ore blocks: " + stats.registeredBlocks + ".");
+                    sender.sendMessage("Removed note blocks: " + stats.removedNoteBlocks + ".");
+                    sender.sendMessage("Checked chunks: " + stats.checked + " | Forced loads: " + stats.forcedLoaded +
+                            " | Missing worlds: " + stats.missingWorld + ".");
+                    debug("Ore repair finished. Removed chunks=" + stats.removedChunks +
+                            ", re-registered=" + stats.registeredBlocks +
+                            ", removed note blocks=" + stats.removedNoteBlocks);
+                    repairRunning.set(false);
+                    cancel();
+                }
+            }
+        }.runTaskTimer(plugin, 1L, 1L);
+    }
+
+    private RepairScanResult scanChunkForRepair(Chunk chunk,
+                                                BlockData targetData,
+                                                GenerationRules rules,
+                                                Map<String, BlockDefinition> noteStateMap) {
+        if (chunk == null || targetData == null) {
+            return new RepairScanResult();
+        }
+        World world = chunk.getWorld();
+        int minY = rules == null ? world.getMinHeight() : rules.getMinY();
+        int maxY = rules == null ? world.getMaxHeight() - 1 : rules.getMaxY();
+        int worldMin = world.getMinHeight();
+        int worldMax = world.getMaxHeight() - 1;
+        if (minY == -1) {
+            minY = worldMin;
+        }
+        if (maxY == -1) {
+            maxY = worldMax;
+        }
+        minY = Math.max(worldMin, minY);
+        maxY = Math.min(worldMax, maxY);
+        if (minY > maxY) {
+            return new RepairScanResult();
+        }
+
+        RepairScanResult result = new RepairScanResult();
+        for (int y = worldMin; y <= worldMax; y++) {
+            for (int x = 0; x < 16; x++) {
+                for (int z = 0; z < 16; z++) {
+                    Block block = chunk.getBlock(x, y, z);
+                    if (block.getType() != Material.NOTE_BLOCK) {
+                        continue;
+                    }
+                    BlockData data = block.getBlockData();
+                    if (data == null) {
+                        continue;
+                    }
+                    if (y >= minY && y <= maxY && data.matches(targetData)) {
+                        result.targetMatches++;
+                    }
+
+                    if (noteStateMap != null) {
+                        BlockDefinition definition = noteStateMap.get(data.getAsString());
+                        if (definition != null && data instanceof org.bukkit.block.data.type.NoteBlock) {
+                            CustomBlockRegistry.CustomBlockData existing = customBlockRegistry.getBlockData(block);
+                            if (existing == null || existing.getDefinition() != definition) {
+                                customBlockRegistry.mark(block, definition, (org.bukkit.block.data.type.NoteBlock) data);
+                                result.registeredBlocks++;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return result;
+    }
+
+    private Map<String, BlockDefinition> buildNoteStateMap() {
+        Map<String, BlockDefinition> map = new HashMap<>();
+        for (BlockDefinition definition : ItemList.customBlocks()) {
+            String state = definition.getNoteBlockState();
+            if (state == null || state.isEmpty()) {
+                continue;
+            }
+            try {
+                BlockData data = Bukkit.createBlockData(state);
+                map.put(data.getAsString(), definition);
+            } catch (IllegalArgumentException ex) {
+                debug("Invalid note block state for " + definition.getId() + ": " + ex.getMessage());
+            }
+        }
+        return map;
+    }
+
+    private List<ChunkEntry> loadGeneratedChunks(String oreId) {
+        List<ChunkEntry> entries = new ArrayList<>();
+        if (connection == null || oreId == null || oreId.isEmpty()) {
+            return entries;
+        }
+        try (PreparedStatement select = connection.prepareStatement(
+                "SELECT world, chunk_x, chunk_z FROM " + ORE_TABLE + " WHERE ore_id = ?")) {
+            select.setString(1, oreId);
+            try (ResultSet rs = select.executeQuery()) {
+                while (rs.next()) {
+                    entries.add(new ChunkEntry(
+                            rs.getString("world"),
+                            rs.getInt("chunk_x"),
+                            rs.getInt("chunk_z")));
+                }
+            }
+        } catch (SQLException e) {
+            plugin.getLogger().warning("Failed to query ore generation database: " + e.getMessage());
+        }
+        return entries;
+    }
+
+    private synchronized void removeGenerated(String oreId, String worldId, int chunkX, int chunkZ) {
+        if (connection == null || oreId == null || oreId.isEmpty() || worldId == null) {
+            return;
+        }
+        try (PreparedStatement delete = connection.prepareStatement(
+                "DELETE FROM " + ORE_TABLE + " WHERE world = ? AND chunk_x = ? AND chunk_z = ? AND ore_id = ?")) {
+            delete.setString(1, worldId);
+            delete.setInt(2, chunkX);
+            delete.setInt(3, chunkZ);
+            delete.setString(4, oreId);
+            delete.executeUpdate();
+        } catch (SQLException e) {
+            plugin.getLogger().warning("Failed to remove ore generation entry: " + e.getMessage());
+        }
     }
 
     private boolean isGenerated(String oreId, UUID worldId, int chunkX, int chunkZ) {
@@ -417,6 +670,32 @@ public class OreGenerationManager implements Listener {
         if (plugin.isDebugOreGeneration()) {
             plugin.getLogger().info("[OreGen] " + message);
         }
+    }
+
+    private static final class ChunkEntry {
+        private final String worldId;
+        private final int chunkX;
+        private final int chunkZ;
+
+        private ChunkEntry(String worldId, int chunkX, int chunkZ) {
+            this.worldId = worldId;
+            this.chunkX = chunkX;
+            this.chunkZ = chunkZ;
+        }
+    }
+
+    private static final class RepairStats {
+        private int checked;
+        private int removedChunks;
+        private int registeredBlocks;
+        private int removedNoteBlocks;
+        private int forcedLoaded;
+        private int missingWorld;
+    }
+
+    private static final class RepairScanResult {
+        private int targetMatches;
+        private int registeredBlocks;
     }
 
     private static String locationString(Block block) {

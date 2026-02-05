@@ -19,6 +19,9 @@ commands:
   autosell:
     description: Configure automatic selling of items
     usage: /autosell
+  ore:
+    description: Ore generation repair tools
+    usage: /ore repair <custom_ore>
   starhavengive:
     description: Give Starhaven custom items
     usage: /starhavengive <player> <starhaven:item> [amount]

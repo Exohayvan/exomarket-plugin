@@ -16,9 +16,11 @@ import com.starhavensmpcore.team.TeamService;
 import com.starhavensmpcore.placeholderapi.Placeholders;
 import com.starhavensmpcore.placeholderapi.PlaceholdersSh;
 import com.starhavensmpcore.market.web.MarketWebServer;
+import com.starhavensmpcore.items.BlockDefinition;
 import com.starhavensmpcore.items.CustomBlockRegistry;
 import com.starhavensmpcore.items.CustomItemManager;
 import com.starhavensmpcore.items.CraftingList;
+import com.starhavensmpcore.items.ItemList;
 import com.starhavensmpcore.items.SmeltingList;
 import com.starhavensmpcore.oregeneration.OreGenerationManager;
 import com.starhavensmpcore.resourcepack.NoteBlockGuard;
@@ -292,6 +294,22 @@ public class StarhavenSMPCore extends JavaPlugin {
             return true;
         } else if (command.getName().equalsIgnoreCase("autosell")) {
             return autoSellManager.onCommand(sender, command, label, args);
+        } else if (command.getName().equalsIgnoreCase("ore")) {
+            if (args.length >= 2 && args[0].equalsIgnoreCase("repair")) {
+                if (oreGenerationManager == null) {
+                    sender.sendMessage(ChatColor.RED + "Ore generation is not available.");
+                    return true;
+                }
+                BlockDefinition definition = ItemList.fromArgument(args[1]);
+                if (definition == null) {
+                    sender.sendMessage(ChatColor.RED + "Unknown custom ore: " + args[1]);
+                    return true;
+                }
+                oreGenerationManager.repairOreGeneration(sender, definition);
+                return true;
+            }
+            sender.sendMessage(ChatColor.RED + "Usage: /ore repair <custom_ore>");
+            return true;
         }
     
         return false;
@@ -334,6 +352,21 @@ public class StarhavenSMPCore extends JavaPlugin {
                     Player player = (Player) sender;
                     for (String suggestion : getOwnedItemSuggestions(player, prefix)) {
                         completions.add(suggestion);
+                    }
+                }
+            }
+        } else if (command.getName().equalsIgnoreCase("ore")) {
+            if (args.length == 1) {
+                String prefix = args[0].toLowerCase();
+                if ("repair".startsWith(prefix)) {
+                    completions.add("repair");
+                }
+            } else if (args.length == 2 && args[0].equalsIgnoreCase("repair")) {
+                String prefix = args[1].toLowerCase();
+                for (BlockDefinition definition : ItemList.generationBlocks()) {
+                    String id = definition.getId();
+                    if (id != null && id.toLowerCase().startsWith(prefix)) {
+                        completions.add(id);
                     }
                 }
             }
