@@ -25,6 +25,7 @@ import com.starhavensmpcore.items.SmeltingList;
 import com.starhavensmpcore.oregeneration.OreGenerationManager;
 import com.starhavensmpcore.resourcepack.NoteBlockGuard;
 import com.starhavensmpcore.resourcepack.ResourcePackManager;
+import com.starhavensmpcore.waypoint.WaypointManager;
 import org.bukkit.NamespacedKey;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
@@ -67,6 +68,7 @@ public class StarhavenSMPCore extends JavaPlugin {
     private NoteBlockGuard noteBlockGuard;
     private CustomBlockRegistry customBlockRegistry;
     private OreGenerationManager oreGenerationManager;
+    private WaypointManager waypointManager;
     private double marketValueMultiplier;
     private double maxPricePercent;
     private double minPrice;
@@ -133,6 +135,7 @@ public class StarhavenSMPCore extends JavaPlugin {
         OreBreakdown.setCustomItemManager(customItemManager);
         noteBlockGuard = new NoteBlockGuard(this, customBlockRegistry, customItemManager);
         oreGenerationManager = new OreGenerationManager(this, customBlockRegistry);
+        waypointManager = new WaypointManager(this);
 
         getServer().getPluginManager().registerEvents(guiManager, this);
         getServer().getPluginManager().registerEvents(autoSellManager, this);
@@ -142,6 +145,7 @@ public class StarhavenSMPCore extends JavaPlugin {
         getServer().getPluginManager().registerEvents(customItemManager, this);
         getServer().getPluginManager().registerEvents(noteBlockGuard, this);
         getServer().getPluginManager().registerEvents(oreGenerationManager, this);
+        getServer().getPluginManager().registerEvents(waypointManager, this);
         
         // Register commands and set tab completers
         getCommand("market").setExecutor(this);
