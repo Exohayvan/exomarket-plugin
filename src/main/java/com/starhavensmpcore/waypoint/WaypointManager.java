@@ -775,7 +775,7 @@ public class WaypointManager implements Listener {
         if (player == null) {
             return;
         }
-        List<KnownWaypointEntry> entries = buildKnownWaypoints(player.getUniqueId());
+        List<KnownWaypointEntry> entries = buildKnownWaypoints(player);
         int totalPages = Math.max(1, (entries.size() + LIST_PAGE_SIZE - 1) / LIST_PAGE_SIZE);
         int page = Math.max(0, Math.min(requestedPage, totalPages - 1));
         WaypointListView view = new WaypointListView(entries, page, totalPages);
@@ -796,8 +796,12 @@ public class WaypointManager implements Listener {
         player.openInventory(inventory);
     }
 
-    private List<KnownWaypointEntry> buildKnownWaypoints(UUID playerId) {
+    private List<KnownWaypointEntry> buildKnownWaypoints(Player player) {
         List<KnownWaypointEntry> entries = new ArrayList<>();
+        if (player == null) {
+            return entries;
+        }
+        UUID playerId = player.getUniqueId();
         if (playerId == null) {
             return entries;
         }
@@ -809,7 +813,7 @@ public class WaypointManager implements Listener {
                 database.deleteKnownWaypoint(playerId, record.worldId, record.x, record.y, record.z);
                 continue;
             }
-            entries.add(new KnownWaypointEntry(key, entry, record.name, entry.category == WaystoneCategory.SERVER));
+            entries.add(buildKnownEntry(key, entry, record.name, player));
             seen.add(key);
         }
         for (Map.Entry<LocationKey, WaypointEntry> entry : waypoints.entrySet()) {
@@ -821,12 +825,71 @@ public class WaypointManager implements Listener {
             if (seen.contains(key)) {
                 continue;
             }
-            entries.add(new KnownWaypointEntry(key, value, value.name, true));
+            entries.add(buildKnownEntry(key, value, value.name, player));
         }
         entries.sort(Comparator
-                .comparing((KnownWaypointEntry entry) -> entry.type == WaypointType.IRON ? 0 : 1)
+                .comparing((KnownWaypointEntry entry) -> entry.relationPriority)
+                .thenComparingInt(entry -> entry.categoryOrder)
                 .thenComparing(entry -> entry.sortName, String.CASE_INSENSITIVE_ORDER));
         return entries;
+    }
+
+    private int categoryOrder(WaystoneCategory category) {
+        if (category == null) {
+            return Integer.MAX_VALUE;
+        }
+        switch (category) {
+            case HOME:
+                return 0;
+            case RESOURCE:
+                return 1;
+            case TRAVEL:
+                return 2;
+            case UTILITY:
+                return 3;
+            case DANGER:
+                return 4;
+            case COMMUNITY:
+                return 5;
+            case EVENT:
+                return 6;
+            case SERVER:
+                return 7;
+            case OTHER:
+            default:
+                return 8;
+        }
+    }
+
+    private KnownWaypointEntry buildKnownEntry(LocationKey key, WaypointEntry entry, String name, Player player) {
+        boolean isServer = entry.category == WaystoneCategory.SERVER;
+        boolean isOwner = entry.ownerId != null && entry.ownerId.equals(player.getUniqueId());
+        String ownerName = resolveOwnerName(entry.ownerId, player);
+        String ownerLabel = isServer ? "Server Waypoint" : (ownerName == null ? "Unknown's Waypoint" : ownerName + "'s Waypoint");
+        int relationPriority = isServer ? 0 : (isOwner ? 1 : 2);
+        return new KnownWaypointEntry(
+                key,
+                entry,
+                name,
+                isServer,
+                ownerLabel,
+                relationPriority,
+                categoryOrder(entry.category)
+        );
+    }
+
+    private String resolveOwnerName(UUID ownerId, Player viewer) {
+        if (ownerId == null) {
+            return null;
+        }
+        if (viewer != null && ownerId.equals(viewer.getUniqueId())) {
+            return viewer.getName();
+        }
+        try {
+            return Bukkit.getOfflinePlayer(ownerId).getName();
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     private ItemStack createKnownWaypointItem(KnownWaypointEntry entry) {
@@ -838,7 +901,9 @@ public class WaypointManager implements Listener {
             List<String> lore = new ArrayList<>();
             lore.add(ChatColor.GRAY + "Category: " + entry.categoryDisplay);
             if (entry.server) {
-                lore.add(ChatColor.AQUA + "Server Waystone");
+                lore.add(ChatColor.AQUA + entry.ownerLabel);
+            } else if (entry.ownerLabel != null) {
+                lore.add(ChatColor.GRAY + entry.ownerLabel);
             }
             String worldName = "unknown";
             World world = plugin.getServer().getWorld(entry.key.worldId);
@@ -1180,8 +1245,11 @@ public class WaypointManager implements Listener {
         private final String categoryDisplay;
         private final String typeDisplay;
         private final boolean server;
+        private final String ownerLabel;
+        private final int relationPriority;
+        private final int categoryOrder;
 
-        private KnownWaypointEntry(LocationKey key, WaypointEntry entry, String name, boolean server) {
+        private KnownWaypointEntry(LocationKey key, WaypointEntry entry, String name, boolean server, String ownerLabel, int relationPriority, int categoryOrder) {
             this.key = key;
             this.type = entry.type;
             String resolvedName = name == null || name.trim().isEmpty() ? "Unnamed" : name.trim();
@@ -1190,6 +1258,9 @@ public class WaypointManager implements Listener {
             this.categoryDisplay = entry.category.display;
             this.typeDisplay = entry.type == WaypointType.IRON ? "Iron" : "Obsidian";
             this.server = server;
+            this.ownerLabel = ownerLabel;
+            this.relationPriority = relationPriority;
+            this.categoryOrder = categoryOrder;
         }
     }
 
