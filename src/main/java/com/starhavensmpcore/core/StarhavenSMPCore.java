@@ -13,6 +13,7 @@ import com.starhavensmpcore.market.gui.MarketSellGUI;
 import com.starhavensmpcore.market.items.ItemSanitizer;
 import com.starhavensmpcore.market.items.OreBreakdown;
 import com.starhavensmpcore.team.TeamService;
+import com.starhavensmpcore.help.HelpMenu;
 import com.starhavensmpcore.notifier.NotifierManager;
 import com.starhavensmpcore.placeholderapi.Placeholders;
 import com.starhavensmpcore.placeholderapi.PlaceholdersSh;
@@ -62,6 +63,7 @@ public class StarhavenSMPCore extends JavaPlugin {
     private MarketItemsGUI marketItemsGUI;
     private MarketWebServer marketWebServer;
     private TeamService teamService;
+    private HelpMenu helpMenu;
     private Placeholders placeholders;
     private PlaceholdersSh placeholdersSh;
     private ResourcePackManager resourcePackManager;
@@ -120,6 +122,7 @@ public class StarhavenSMPCore extends JavaPlugin {
         marketItemsGUI = new MarketItemsGUI(this, marketManager, databaseManager);
         marketWebServer = new MarketWebServer(this, databaseManager, WEB_PORT);
         teamService = new TeamService(this, databaseManager, economyManager);
+        helpMenu = new HelpMenu();
         if (getServer().getPluginManager().isPluginEnabled("PlaceholderAPI")) {
             try {
                 placeholders = new Placeholders(this, databaseManager);
@@ -142,6 +145,7 @@ public class StarhavenSMPCore extends JavaPlugin {
         notifierManager = new NotifierManager(this);
 
         getServer().getPluginManager().registerEvents(guiManager, this);
+        getServer().getPluginManager().registerEvents(helpMenu, this);
         getServer().getPluginManager().registerEvents(autoSellManager, this);
         getServer().getPluginManager().registerEvents(marketSellGUI, this);
         getServer().getPluginManager().registerEvents(marketItemsGUI, this);
@@ -159,6 +163,8 @@ public class StarhavenSMPCore extends JavaPlugin {
         getCommand("sellhand").setTabCompleter(this);
         getCommand("marketreload").setExecutor(this);
         getCommand("marketreload").setTabCompleter(this);
+        getCommand("help").setExecutor(this);
+        getCommand("help").setTabCompleter(this);
         getCommand("autosell").setExecutor(autoSellManager);
         getCommand("autosell").setTabCompleter(this);
         getCommand("starhavengive").setExecutor(customItemManager);
@@ -246,6 +252,15 @@ public class StarhavenSMPCore extends JavaPlugin {
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        if (command.getName().equalsIgnoreCase("help")) {
+            if (!(sender instanceof Player)) {
+                sender.sendMessage("This command can only be executed by a player.");
+                return true;
+            }
+            Player player = (Player) sender;
+            helpMenu.openRoot(player);
+            return true;
+        }
         if (command.getName().equalsIgnoreCase("market")) {
             if (!(sender instanceof Player)) {
                 sender.sendMessage("This command can only be executed by a player.");
@@ -395,6 +410,8 @@ public class StarhavenSMPCore extends JavaPlugin {
             // No arguments for sell hand command
         } else if (command.getName().equalsIgnoreCase("marketreload")) {
             // No arguments for marketreload command
+        } else if (command.getName().equalsIgnoreCase("help")) {
+            // No arguments for help command
         } else if (command.getName().equalsIgnoreCase("autosell")) {
             // No arguments for autosell command
         }

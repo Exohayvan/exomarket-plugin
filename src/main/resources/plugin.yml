@@ -28,6 +28,9 @@ commands:
   new:
     description: Add a what's new announcement
     usage: /new <message>
+  help:
+    description: Open the help menu
+    usage: /help
 
 permissions:
   Starhaven.Admin:
