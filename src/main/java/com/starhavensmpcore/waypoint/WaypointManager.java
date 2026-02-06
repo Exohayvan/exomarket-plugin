@@ -580,7 +580,7 @@ public class WaypointManager implements Listener {
             inventory.setItem(i, createCategoryItem(category));
             slotToCategory.put(i, category);
         }
-        PendingSelection pending = new PendingSelection(key, type, slotToCategory);
+        PendingSelection pending = new PendingSelection(key, slotToCategory);
         pendingSelections.put(player.getUniqueId(), pending);
         player.openInventory(inventory);
     }
@@ -631,7 +631,7 @@ public class WaypointManager implements Listener {
                 () -> handleNameTimeout(player.getUniqueId()),
                 NAME_TIMEOUT_TICKS
         );
-        PendingName pending = new PendingName(key, reason, player.getUniqueId(), entry.type, task);
+        PendingName pending = new PendingName(key, reason, task);
         pendingNames.put(player.getUniqueId(), pending);
         player.sendMessage(ChatColor.AQUA + "Enter a name for this waystone in chat. (60 seconds)");
         player.sendMessage(ChatColor.GRAY + "Type \"cancel\" to abort.");
@@ -1189,13 +1189,11 @@ public class WaypointManager implements Listener {
 
     private static final class PendingSelection {
         private final LocationKey key;
-        private final WaypointType type;
         private final Map<Integer, WaystoneCategory> slotToCategory;
         private boolean selected;
 
-        private PendingSelection(LocationKey key, WaypointType type, Map<Integer, WaystoneCategory> slotToCategory) {
+        private PendingSelection(LocationKey key, Map<Integer, WaystoneCategory> slotToCategory) {
             this.key = key;
-            this.type = type;
             this.slotToCategory = slotToCategory;
         }
     }
@@ -1208,15 +1206,11 @@ public class WaypointManager implements Listener {
     private static final class PendingName {
         private final LocationKey key;
         private final NamePromptReason reason;
-        private final UUID playerId;
-        private final WaypointType type;
         private final BukkitTask timeoutTask;
 
-        private PendingName(LocationKey key, NamePromptReason reason, UUID playerId, WaypointType type, BukkitTask timeoutTask) {
+        private PendingName(LocationKey key, NamePromptReason reason, BukkitTask timeoutTask) {
             this.key = key;
             this.reason = reason;
-            this.playerId = playerId;
-            this.type = type;
             this.timeoutTask = timeoutTask;
         }
     }
@@ -1243,7 +1237,6 @@ public class WaypointManager implements Listener {
         private final String displayName;
         private final String sortName;
         private final String categoryDisplay;
-        private final String typeDisplay;
         private final boolean server;
         private final String ownerLabel;
         private final int relationPriority;
@@ -1256,7 +1249,6 @@ public class WaypointManager implements Listener {
             this.displayName = resolvedName;
             this.sortName = resolvedName;
             this.categoryDisplay = entry.category.display;
-            this.typeDisplay = entry.type == WaypointType.IRON ? "Iron" : "Obsidian";
             this.server = server;
             this.ownerLabel = ownerLabel;
             this.relationPriority = relationPriority;
@@ -1267,12 +1259,10 @@ public class WaypointManager implements Listener {
     private static final class WaypointListView {
         private final List<KnownWaypointEntry> entries;
         private final int page;
-        private final int totalPages;
 
         private WaypointListView(List<KnownWaypointEntry> entries, int page, int totalPages) {
             this.entries = entries;
             this.page = page;
-            this.totalPages = totalPages;
         }
     }
 
