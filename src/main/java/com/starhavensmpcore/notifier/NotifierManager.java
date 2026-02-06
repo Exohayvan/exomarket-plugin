@@ -13,6 +13,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 
 import java.math.BigInteger;
 import java.sql.Connection;
@@ -31,6 +32,7 @@ public class NotifierManager implements Listener, CommandExecutor {
     private static final String ADMIN_PERMISSION = "Starhaven.Admin";
     private static final int MAX_NEWS = 8;
     private static final int MAX_LINES = 10;
+    private static final long SNAPSHOT_REFRESH_TICKS = 20L * 60L * 5L;
 
     private final StarhavenSMPCore plugin;
     private final DatabaseManager databaseManager;
@@ -40,6 +42,7 @@ public class NotifierManager implements Listener, CommandExecutor {
         this.plugin = plugin;
         this.databaseManager = plugin.getDatabaseManager();
         setupDatabase();
+        startSnapshotRefreshTask();
     }
 
     private void setupDatabase() {
@@ -70,6 +73,12 @@ public class NotifierManager implements Listener, CommandExecutor {
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
         plugin.getServer().getScheduler().runTaskLater(plugin, () -> sendNotifier(player), 20L * 10L);
+    }
+
+    @EventHandler
+    public void onPlayerQuit(PlayerQuitEvent event) {
+        Player player = event.getPlayer();
+        refreshSnapshot(player);
     }
 
     @Override
@@ -154,6 +163,23 @@ public class NotifierManager implements Listener, CommandExecutor {
         }
 
         updateSnapshot(player.getUniqueId(), stats.itemsSold, stats.moneyEarned, maxSeen);
+    }
+
+    private void startSnapshotRefreshTask() {
+        plugin.getServer().getScheduler().runTaskTimer(plugin, () -> {
+            for (Player player : Bukkit.getOnlinePlayers()) {
+                refreshSnapshot(player);
+            }
+        }, SNAPSHOT_REFRESH_TICKS, SNAPSHOT_REFRESH_TICKS);
+    }
+
+    private void refreshSnapshot(Player player) {
+        if (player == null || !player.isOnline() || connection == null || databaseManager == null) {
+            return;
+        }
+        DatabaseManager.Stats stats = databaseManager.getStats(player.getUniqueId().toString());
+        PlayerSnapshot snapshot = getSnapshot(player.getUniqueId());
+        updateSnapshot(player.getUniqueId(), stats.itemsSold, stats.moneyEarned, snapshot.lastSeenNewsId);
     }
 
     private long addNewsItem(String message) {
