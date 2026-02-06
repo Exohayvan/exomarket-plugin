@@ -103,6 +103,7 @@ public class StarhavenSMPCore extends JavaPlugin {
     private boolean debugMarket;
     private boolean debugCustomBlocks;
     private boolean debugOreGeneration;
+    private boolean debugWaystone;
 
     @Override
     public void onEnable() {
@@ -135,7 +136,7 @@ public class StarhavenSMPCore extends JavaPlugin {
         OreBreakdown.setCustomItemManager(customItemManager);
         noteBlockGuard = new NoteBlockGuard(this, customBlockRegistry, customItemManager);
         oreGenerationManager = new OreGenerationManager(this, customBlockRegistry);
-        waypointManager = new WaypointManager(this);
+        waypointManager = new WaypointManager(this, customItemManager);
 
         getServer().getPluginManager().registerEvents(guiManager, this);
         getServer().getPluginManager().registerEvents(autoSellManager, this);
@@ -190,6 +191,9 @@ public class StarhavenSMPCore extends JavaPlugin {
         if (oreGenerationManager != null) {
             oreGenerationManager.shutdown();
         }
+        if (waypointManager != null) {
+            waypointManager.shutdown();
+        }
     }
 
     public void reloadConfig() {
@@ -213,6 +217,7 @@ public class StarhavenSMPCore extends JavaPlugin {
         debugMarket = config.getBoolean("Debug.Market", false);
         debugCustomBlocks = config.getBoolean("Debug.CustomBlocks", false);
         debugOreGeneration = config.getBoolean("Debug.OreGeneration", false);
+        debugWaystone = config.getBoolean("Debug.Waystone", false);
     }
 
     public boolean isDebugMarket() {
@@ -225,6 +230,10 @@ public class StarhavenSMPCore extends JavaPlugin {
 
     public boolean isDebugOreGeneration() {
         return debugOreGeneration;
+    }
+
+    public boolean isDebugWaystone() {
+        return debugWaystone;
     }
 
     @Override

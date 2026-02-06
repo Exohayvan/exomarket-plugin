@@ -397,6 +397,34 @@ public final class ItemList {
                 null
         ));
 
+        register(all, customBlocks, generationBlocks, byId, new BlockDefinition(
+                "waystone_obsidian",
+                Material.STONE,
+                69022,
+                "Obsidian Waystone",
+                null,
+                null,
+                null,
+                null,
+                0,
+                0,
+                null
+        ));
+
+        register(all, customBlocks, generationBlocks, byId, new BlockDefinition(
+                "waystone_iron",
+                Material.STONE,
+                69023,
+                "Iron Waystone",
+                null,
+                null,
+                null,
+                null,
+                0,
+                0,
+                null
+        ));
+
         ALL = Collections.unmodifiableList(all);
         CUSTOM_BLOCKS = Collections.unmodifiableList(customBlocks);
         GENERATION_BLOCKS = Collections.unmodifiableList(generationBlocks);

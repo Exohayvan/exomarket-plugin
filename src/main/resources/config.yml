@@ -9,6 +9,7 @@ Debug:
   Market: false
   CustomBlocks: false
   OreGeneration: false
+  Waystone: false
 
 ResourcePack:
   Enabled: false

@@ -100,6 +100,19 @@ public final class CraftingList implements Listener {
                 RecipeIngredient.custom("raw_cobalt_block")
         ));
 
+        Map<Character, RecipeIngredient> waystoneObsidian = new HashMap<>();
+        waystoneObsidian.put('O', RecipeIngredient.material(Material.OBSIDIAN));
+        waystoneObsidian.put('C', RecipeIngredient.material(Material.CRYING_OBSIDIAN));
+        waystoneObsidian.put('Q', RecipeIngredient.material(Material.QUARTZ));
+        recipes.add(CraftingRecipeDefinition.shaped(
+                "waystone_obsidian",
+                "waystone_obsidian",
+                1,
+                new String[]{"OCO", "OQO", "OCO"},
+                waystoneObsidian,
+                RecipeIngredient.material(Material.QUARTZ)
+        ));
+
         RECIPES = Collections.unmodifiableList(recipes);
     }
 
