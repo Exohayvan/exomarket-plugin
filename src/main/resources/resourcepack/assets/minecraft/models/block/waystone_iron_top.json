@@ -1,0 +1,75 @@
+{
+  "ambientocclusion": false,
+  "textures": {
+    "1": "block/waystone_iron_block",
+    "2": "block/waystone_glowstone",
+    "particle": "block/waystone_glowstone"
+  },
+  "elements": [
+    {
+      "name": "top middle",
+      "from": [4, 0, 4],
+      "to": [12, 7, 12],
+      "faces": {
+        "north": {"uv": [4, 0, 12, 7], "texture": "#2"},
+        "east": {"uv": [4, 0, 12, 7], "texture": "#2"},
+        "south": {"uv": [4, 0, 12, 7], "texture": "#2"},
+        "west": {"uv": [4, 0, 12, 7], "texture": "#2"},
+        "up": {"uv": [4, 4, 13, 13], "texture": "#1"},
+        "down": {"uv": [4, 4, 13, 13], "texture": "#1"}
+      }
+    },
+    {
+      "name": "+1 layer 4",
+      "from": [3, 7, 3],
+      "to": [13, 8, 13],
+      "faces": {
+        "north": {"uv": [3, 15, 13, 16], "texture": "#1"},
+        "east": {"uv": [3, 15, 13, 16], "texture": "#1"},
+        "south": {"uv": [3, 15, 13, 16], "texture": "#1"},
+        "west": {"uv": [3, 15, 13, 16], "texture": "#1"},
+        "up": {"uv": [3, 3, 13, 13], "texture": "#1"},
+        "down": {"uv": [3, 3, 13, 13], "texture": "#1"}
+      }
+    },
+    {
+      "name": "+2 layer 3",
+      "from": [2, 8, 2],
+      "to": [14, 10, 14],
+      "faces": {
+        "north": {"uv": [2, 5, 14, 7], "texture": "#1"},
+        "east": {"uv": [2, 5, 14, 7], "texture": "#1"},
+        "south": {"uv": [2, 5, 14, 7], "texture": "#1"},
+        "west": {"uv": [2, 5, 14, 7], "texture": "#1"},
+        "up": {"uv": [2, 2, 14, 14], "texture": "#1"},
+        "down": {"uv": [2, 2, 14, 14], "texture": "#1"}
+      }
+    },
+    {
+      "name": "+2 layer 2",
+      "from": [3, 10, 3],
+      "to": [13, 11, 13],
+      "faces": {
+        "north": {"uv": [3, 11, 13, 12], "texture": "#1"},
+        "east": {"uv": [3, 11, 13, 12], "texture": "#1"},
+        "south": {"uv": [3, 11, 13, 12], "texture": "#1"},
+        "west": {"uv": [3, 11, 13, 12], "texture": "#1"},
+        "up": {"uv": [3, 3, 13, 13], "texture": "#1"},
+        "down": {"uv": [3, 3, 13, 13], "texture": "#1"}
+      }
+    },
+    {
+      "name": "+2 layer 1",
+      "from": [4, 11, 4],
+      "to": [12, 13, 12],
+      "faces": {
+        "north": {"uv": [4, 5, 12, 7], "texture": "#1"},
+        "east": {"uv": [4, 5, 12, 7], "texture": "#1"},
+        "south": {"uv": [4, 5, 12, 7], "texture": "#1"},
+        "west": {"uv": [4, 5, 12, 7], "texture": "#1"},
+        "up": {"uv": [4, 4, 12, 12], "texture": "#1"},
+        "down": {"uv": [4, 4, 12, 12], "texture": "#1"}
+      }
+    }
+  ]
+}
