@@ -25,6 +25,14 @@ commands:
   starhavengive:
     description: Give Starhaven custom items
     usage: /starhavengive <player> <starhaven:item> [amount]
+  new:
+    description: Add a what's new announcement
+    usage: /new <message>
+
+permissions:
+  Starhaven.Admin:
+    description: Allows adding what's new announcements
+    default: op
 
 default-config:
   MarketManager:

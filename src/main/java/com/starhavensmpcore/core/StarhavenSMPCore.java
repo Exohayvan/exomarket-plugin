@@ -13,6 +13,7 @@ import com.starhavensmpcore.market.gui.MarketSellGUI;
 import com.starhavensmpcore.market.items.ItemSanitizer;
 import com.starhavensmpcore.market.items.OreBreakdown;
 import com.starhavensmpcore.team.TeamService;
+import com.starhavensmpcore.notifier.NotifierManager;
 import com.starhavensmpcore.placeholderapi.Placeholders;
 import com.starhavensmpcore.placeholderapi.PlaceholdersSh;
 import com.starhavensmpcore.market.web.MarketWebServer;
@@ -69,6 +70,7 @@ public class StarhavenSMPCore extends JavaPlugin {
     private CustomBlockRegistry customBlockRegistry;
     private OreGenerationManager oreGenerationManager;
     private WaypointManager waypointManager;
+    private NotifierManager notifierManager;
     private double marketValueMultiplier;
     private double maxPricePercent;
     private double minPrice;
@@ -137,6 +139,7 @@ public class StarhavenSMPCore extends JavaPlugin {
         noteBlockGuard = new NoteBlockGuard(this, customBlockRegistry, customItemManager);
         oreGenerationManager = new OreGenerationManager(this, customBlockRegistry);
         waypointManager = new WaypointManager(this, customItemManager);
+        notifierManager = new NotifierManager(this);
 
         getServer().getPluginManager().registerEvents(guiManager, this);
         getServer().getPluginManager().registerEvents(autoSellManager, this);
@@ -147,6 +150,7 @@ public class StarhavenSMPCore extends JavaPlugin {
         getServer().getPluginManager().registerEvents(noteBlockGuard, this);
         getServer().getPluginManager().registerEvents(oreGenerationManager, this);
         getServer().getPluginManager().registerEvents(waypointManager, this);
+        getServer().getPluginManager().registerEvents(notifierManager, this);
         
         // Register commands and set tab completers
         getCommand("market").setExecutor(this);
@@ -158,6 +162,7 @@ public class StarhavenSMPCore extends JavaPlugin {
         getCommand("autosell").setExecutor(autoSellManager);
         getCommand("autosell").setTabCompleter(this);
         getCommand("starhavengive").setExecutor(customItemManager);
+        getCommand("new").setExecutor(notifierManager);
 
         marketWebServer.start();
 
@@ -193,6 +198,9 @@ public class StarhavenSMPCore extends JavaPlugin {
         }
         if (waypointManager != null) {
             waypointManager.shutdown();
+        }
+        if (notifierManager != null) {
+            notifierManager.shutdown();
         }
     }
 
