@@ -142,6 +142,20 @@
           "type": "minecraft:model",
           "model": "minecraft:block/raw_cobalt_block"
         }
+      },
+      {
+        "threshold": 69022,
+        "model": {
+          "type": "minecraft:model",
+          "model": "minecraft:item/waystone_obsidian_item"
+        }
+      },
+      {
+        "threshold": 69023,
+        "model": {
+          "type": "minecraft:model",
+          "model": "minecraft:item/waystone_glowstone_item"
+        }
       }
     ],
     "fallback": {
