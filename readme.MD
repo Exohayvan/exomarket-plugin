@@ -1,4 +1,6 @@
 # StarhavenSMP Core
+![Files](https://img.shields.io/badge/dynamic/json?style=for-the-badge&label=Files&url=https%3A%2F%2Fapi.codetabs.com%2Fv1%2Floc%3Fgithub%3DExoHayvan%2FStarhavenSMP-Core&query=%24%5B5%5D.files)
+![LoC](https://img.shields.io/badge/dynamic/json?style=for-the-badge&label=LoC&url=https%3A%2F%2Fapi.codetabs.com%2Fv1%2Floc%3Fgithub%3DExoHayvan%2FStarhavenSMP-Core&query=%24%5B5%5D.linesOfCode)
 
 StarhavenSMP Core is the main SMP plugin for Starhaven. It includes the dynamic market system, auto-sell, web analytics, resource pack delivery, custom items/blocks, and custom ore generation.
 
