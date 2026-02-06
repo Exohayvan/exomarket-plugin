@@ -137,13 +137,19 @@ public class WaypointManager implements Listener {
     @EventHandler(ignoreCancelled = true)
     public void onWaypointBreak(BlockBreakEvent event) {
         Block block = event.getBlock();
-        if (!isWaypointBlock(block) && !isWaypointBlock(block.getRelative(BlockFace.DOWN)) && !isWaypointBlock(block.getRelative(BlockFace.UP))) {
+        boolean isWaypoint = isWaypointBlock(block);
+        boolean isSupport = !isWaypoint && isWaypointBlock(block.getRelative(BlockFace.UP));
+        if (!isWaypoint && !isSupport) {
             return;
         }
         Block bottom = block;
-        Block below = block.getRelative(BlockFace.DOWN);
-        if (isWaypointBlock(below)) {
-            bottom = below;
+        if (isSupport) {
+            bottom = block.getRelative(BlockFace.UP);
+        } else {
+            Block below = block.getRelative(BlockFace.DOWN);
+            if (isWaypointBlock(below)) {
+                bottom = below;
+            }
         }
         Block top = bottom.getRelative(BlockFace.UP);
         if (isWaypointBlock(top)) {
