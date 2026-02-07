@@ -51,20 +51,23 @@ public class CustomBlockRegistry {
 
         @Override
         public boolean equals(Object o) {
-            if (this == o) {
-                return true;
-            }
-            if (o == null || getClass() != o.getClass()) {
+            if (!(o instanceof BlockKey)) {
                 return false;
             }
-            BlockKey blockKey = (BlockKey) o;
-            return x == blockKey.x && y == blockKey.y && z == blockKey.z
-                    && Objects.equals(worldId, blockKey.worldId);
+            return matches((BlockKey) o);
         }
 
         @Override
         public int hashCode() {
             return Objects.hash(worldId, x, y, z);
+        }
+
+        private boolean matches(BlockKey other) {
+            return other != null
+                    && x == other.x
+                    && y == other.y
+                    && z == other.z
+                    && Objects.equals(worldId, other.worldId);
         }
     }
 
