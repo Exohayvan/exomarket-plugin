@@ -13,7 +13,9 @@
 ![RELIABILITY](https://img.shields.io/endpoint?style=for-the-badge&logo=sonarqubecloud&logoColor=126ED3&url=https%3A%2F%2Fraw.githubusercontent.com%2FExoHayvan%2FStarhavenSMP-Core%2Fmain%2F.badges%2Freliability.json)
 ![MAINTAINABILITY](https://img.shields.io/endpoint?style=for-the-badge&logo=sonarqubecloud&logoColor=126ED3&url=https%3A%2F%2Fraw.githubusercontent.com%2FExoHayvan%2FStarhavenSMP-Core%2Fmain%2F.badges%2Fmaintainability.json)
 ![SECURITY](https://img.shields.io/endpoint?style=for-the-badge&logo=sonarqubecloud&logoColor=126ED3&url=https%3A%2F%2Fraw.githubusercontent.com%2FExoHayvan%2FStarhavenSMP-Core%2Fmain%2F.badges%2Fsecurity.json)
+
 ![VULNERABILITIES](https://img.shields.io/endpoint?style=for-the-badge&logo=sonarqubecloud&logoColor=126ED3&url=https%3A%2F%2Fraw.githubusercontent.com%2FExoHayvan%2FStarhavenSMP-Core%2Fmain%2F.badges%2Fvulnerabilities.json)
+![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/ExoHayvan/StarhavenSMP-Core/main/.badges/coverage.json)
 
 StarhavenSMP Core is the main SMP plugin for Starhaven. It includes the dynamic market system, auto-sell, web analytics, resource pack delivery, custom items/blocks, and custom ore generation.
 
