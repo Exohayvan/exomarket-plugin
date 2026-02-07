@@ -88,6 +88,9 @@ public class DatabaseManager {
         if (isDbThread()) {
             try {
                 return task.call();
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+                throw new RuntimeException(ex);
             } catch (Exception ex) {
                 throw new RuntimeException(ex);
             }
@@ -95,6 +98,9 @@ public class DatabaseManager {
         Future<T> future = dbExecutor.submit(task);
         try {
             return future.get();
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException(ex);
         } catch (Exception ex) {
             throw new RuntimeException(ex);
         }
