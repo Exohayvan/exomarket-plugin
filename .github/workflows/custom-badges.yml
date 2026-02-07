@@ -222,6 +222,43 @@ jobs:
           badge_content="$(printf '{"schemaVersion":1,"label":"SECURITY","message":"%s","color":"%s"}' "$grade" "$color")"
           write_badge "$badge_path" "$badge_content"
 
+      - name: Update coverage badge
+        run: |
+          set -euo pipefail
+
+          SVG_URL="https://sonarcloud.io/api/project_badges/measure?project=Exohayvan_StarhavenSMP-Core&metric=coverage"
+          svg="$(curl -fsSL "$SVG_URL")"
+
+          # Extract coverage percentage (e.g. 72.4%)
+          coverage="$(printf '%s' "$svg" \
+            | grep -oE '<text[^>]*>[0-9]+(\.[0-9]+)?%</text>' \
+            | head -n1 \
+            | sed -E 's/.*>([0-9.]+%).*/\1/')"
+
+          # Strip % for numeric comparison
+          value="${coverage%\%}"
+
+          # Map percentage → color
+          awk -v v="$value" 'BEGIN {
+            if (v >= 80) print "brightgreen";
+            else if (v >= 70) print "green";
+            else if (v >= 50) print "yellow";
+            else if (v >= 30) print "orange";
+            else print "red";
+          }' > /tmp/coverage_color
+
+          color="$(cat /tmp/coverage_color)"
+
+          mkdir -p .badges
+          cat > .badges/coverage.json <<EOF
+          {
+            "schemaVersion": 1,
+            "label": "COVERAGE",
+            "message": "$coverage",
+            "color": "$color"
+          }
+          EOF
+
       - name: CodeTabs - Totals (Total files + Total linesOfCode)
         run: |
           set -euo pipefail
