@@ -13,38 +13,131 @@ permissions:
   contents: write
 
 jobs:
-  reliability:
+  sonarcloud-badges:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Fetch SonarCloud reliability grade
+      - name: Update SonarCloud badges
         run: |
           set -euo pipefail
-          SVG_URL="https://sonarcloud.io/api/project_badges/measure?project=Exohayvan_StarhavenSMP-Core&metric=reliability_rating"
-          svg="$(curl -fsSL "$SVG_URL")"
-          grade="$(printf '%s' "$svg" | grep -oE '<text[^>]*>[A-E]</text>' | head -n1 | sed -E 's/.*>([A-E])<.*/\1/')"
 
-          case "$grade" in
-            A) color="brightgreen" ;;
-            B) color="green" ;;
-            C) color="yellow" ;;
-            D) color="orange" ;;
-            E) color="red" ;;
-            *) color="lightgrey"; grade="?" ;;
-          esac
+          project="Exohayvan_StarhavenSMP-Core"
+          base="https://sonarcloud.io/api/project_badges/measure?project=${project}&metric="
 
           mkdir -p .badges
-          cat > .badges/reliability.json <<EOF
-          {"schemaVersion":1,"label":"RELIABILITY","message":"$grade","color":"$color"}
-          EOF
+
+          # Extract first single-letter grade (A–E) from an SVG
+          extract_grade() {
+            printf '%s' "$1" \
+              | grep -oE '<text[^>]*>[A-E]</text>' \
+              | head -n1 \
+              | sed -E 's/.*>([A-E])<.*/\1/'
+          }
+
+          # Extract integer after the label (best effort)
+          extract_int_after_label() {
+            # $1 = svg, $2 = label text (e.g. "vulnerabilities")
+            printf '%s' "$1" \
+              | tr '\n' ' ' \
+              | sed -E "s/.*${2}<\/text>[[:space:]]*<text[^>]*>${2}<\/text>[[:space:]]*<text[^>]*>[0-9]+<\/text>[[:space:]]*<text[^>]*>([0-9]+)<\/text>.*/\1/" \
+              | grep -E '^[0-9]+$' || true
+          }
+
+          color_for_grade() {
+            case "$1" in
+              A) echo "brightgreen" ;;
+              B) echo "green" ;;
+              C) echo "yellow" ;;
+              D) echo "orange" ;;
+              E) echo "red" ;;
+              *) echo "lightgrey" ;;
+            esac
+          }
+
+          color_for_vulns() {
+            n="$1"
+            if [ "$n" -eq 0 ]; then echo "brightgreen"
+            elif [ "$n" -le 5 ]; then echo "yellow"
+            else echo "red"
+            fi
+          }
+
+          # -------------------------
+          # RELIABILITY (reliability_rating) -> letter A–E
+          # -------------------------
+          rel_svg="$(curl -fsSL "${base}reliability_rating")"
+          rel_grade="$(extract_grade "$rel_svg")"
+          [ -n "$rel_grade" ] || rel_grade="?"
+          rel_color="$(color_for_grade "$rel_grade")"
+          printf '{"schemaVersion":1,"label":"RELIABILITY","message":"%s","color":"%s"}\n' "$rel_grade" "$rel_color" > .badges/reliability.json
+
+          # -------------------------
+          # MAINTAINABILITY (sqale_rating) -> letter A–E
+          # -------------------------
+          main_svg="$(curl -fsSL "${base}sqale_rating")"
+          main_grade="$(extract_grade "$main_svg")"
+          [ -n "$main_grade" ] || main_grade="?"
+          main_color="$(color_for_grade "$main_grade")"
+          printf '{"schemaVersion":1,"label":"MAINTAINABILITY","message":"%s","color":"%s"}\n' "$main_grade" "$main_color" > .badges/maintainability.json
+
+          # -------------------------
+          # VULNERABILITIES (vulnerabilities) -> integer
+          # -------------------------
+          vul_svg="$(curl -fsSL "${base}vulnerabilities")"
+          vul_count="$(extract_int_after_label "$vul_svg" "vulnerabilities")"
+
+          # Fallback: first integer <text>…</text>
+          if [ -z "${vul_count:-}" ]; then
+            vul_count="$(printf '%s' "$vul_svg" | grep -oE '<text[^>]*>[0-9]+</text>' | head -n1 | sed -E 's/.*>([0-9]+)<.*/\1/' || true)"
+          fi
+
+          [ -n "${vul_count:-}" ] || vul_count="?"
+          if [ "$vul_count" = "?" ]; then
+            vul_color="lightgrey"
+          else
+            vul_color="$(color_for_vulns "$vul_count")"
+          fi
+          printf '{"schemaVersion":1,"label":"VULNERABILITIES","message":"%s","color":"%s"}\n' "$vul_count" "$vul_color" > .badges/vulnerabilities.json
+
+          # -------------------------
+          # DUPLICATED LINES (duplicated_lines_density) -> percent (e.g. 2.2%)
+          # -------------------------
+          dup_svg="$(curl -fsSL "${base}duplicated_lines_density")"
+
+          dup_pct="$(printf '%s' "$dup_svg" | tr '\n' ' ' \
+            | sed -E 's/.*duplicated lines<\/text>[[:space:]]*<text[^>]*>duplicated lines<\/text>[[:space:]]*<text[^>]*>[0-9.]+%<\/text>[[:space:]]*<text[^>]*>([0-9.]+%)<\/text>.*/\1/' \
+            | grep -E '^[0-9]+(\.[0-9]+)?%$' || true)"
+
+          if [ -z "${dup_pct:-}" ]; then
+            dup_pct="$(printf '%s' "$dup_svg" | grep -oE '<text[^>]*>[0-9]+(\.[0-9]+)?%</text>' | head -n1 | sed -E 's/.*>([0-9]+(\.[0-9]+)?%)<.*/\1/' || true)"
+          fi
+
+          if [ -z "${dup_pct:-}" ]; then
+            dup_pct="?"
+            dup_color="lightgrey"
+          else
+            dup_num="$(printf '%s' "$dup_pct" | sed 's/%//')"
+
+            # 0–3%: green, 3–7%: yellow, 7–15%: orange, 15%+: red
+            band="$(awk -v n="$dup_num" 'BEGIN{ if(n<3) print 1; else if(n<7) print 2; else if(n<15) print 3; else print 4 }')"
+            case "$band" in
+              1) dup_color="brightgreen" ;;
+              2) dup_color="yellow" ;;
+              3) dup_color="orange" ;;
+              4) dup_color="red" ;;
+              *) dup_color="lightgrey" ;;
+            esac
+          fi
+
+          printf '{"schemaVersion":1,"label":"DUPLICATED LINES","message":"%s","color":"%s"}\n' "$dup_pct" "$dup_color" > .badges/duplicated_lines.json
 
       - name: Commit badge JSON
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add .badges/reliability.json
-          git commit -m "chore: update reliability badge" || exit 0
+          git add .badges/*.json
+          git commit -m "chore: update sonarcloud badges" || exit 0
           git push
