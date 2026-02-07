@@ -1,16 +1,19 @@
 # StarhavenSMP Core
+
 ![Website](https://img.shields.io/website?url=http%3A%2F%2Fstarhavensmp.mcserver.us%3A8000&up_message=Online&down_message=Offline&style=for-the-badge&label=Minecraft%20Sever&link=https%3A%2F%2Fstarhavensmp.mcserver.us%3A8000)
 
 ![FILES](https://img.shields.io/endpoint?style=for-the-badge&url=https%3A%2F%2Fraw.githubusercontent.com%2FExoHayvan%2FStarhavenSMP-Core%2Fmain%2F.badges%2Ffiles.json)
 ![LINES%20OF%20CODE](https://img.shields.io/endpoint?style=for-the-badge&url=https%3A%2F%2Fraw.githubusercontent.com%2FExoHayvan%2FStarhavenSMP-Core%2Fmain%2F.badges%2Flines_of_code.json)
+![DUPLICATED%20LINES](https://img.shields.io/endpoint?style=for-the-badge&url=https%3A%2F%2Fraw.githubusercontent.com%2FExoHayvan%2FStarhavenSMP-Core%2Fmain%2F.badges%2Fduplicated_lines.json)
+
 ![GitHub repo size](https://img.shields.io/github/repo-size/ExoHayvan/StarhavenSMP-Core?style=for-the-badge)
 ![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/ExoHayvan/StarhavenSMP-Core/total?style=for-the-badge)
 ![GitHub last commit](https://img.shields.io/github/last-commit/ExoHayvan/StarhavenSMP-Core?style=for-the-badge)
 
 ![RELIABILITY](https://img.shields.io/endpoint?style=for-the-badge&url=https%3A%2F%2Fraw.githubusercontent.com%2FExoHayvan%2FStarhavenSMP-Core%2Fmain%2F.badges%2Freliability.json)
-![VULNERABILITIES](https://img.shields.io/endpoint?style=for-the-badge&url=https%3A%2F%2Fraw.githubusercontent.com%2FExoHayvan%2FStarhavenSMP-Core%2Fmain%2F.badges%2Fvulnerabilities.json)
 ![MAINTAINABILITY](https://img.shields.io/endpoint?style=for-the-badge&url=https%3A%2F%2Fraw.githubusercontent.com%2FExoHayvan%2FStarhavenSMP-Core%2Fmain%2F.badges%2Fmaintainability.json)
-![DUPLICATED%20LINES](https://img.shields.io/endpoint?style=for-the-badge&url=https%3A%2F%2Fraw.githubusercontent.com%2FExoHayvan%2FStarhavenSMP-Core%2Fmain%2F.badges%2Fduplicated_lines.json)
+![SECURITY](https://img.shields.io/endpoint?style=for-the-badge&url=https%3A%2F%2Fraw.githubusercontent.com%2FExoHayvan%2FStarhavenSMP-Core%2Fmain%2F.badges%2Fsecurity.json)
+![VULNERABILITIES](https://img.shields.io/endpoint?style=for-the-badge&url=https%3A%2F%2Fraw.githubusercontent.com%2FExoHayvan%2FStarhavenSMP-Core%2Fmain%2F.badges%2Fvulnerabilities.json)
 
 StarhavenSMP Core is the main SMP plugin for Starhaven. It includes the dynamic market system, auto-sell, web analytics, resource pack delivery, custom items/blocks, and custom ore generation.
 
