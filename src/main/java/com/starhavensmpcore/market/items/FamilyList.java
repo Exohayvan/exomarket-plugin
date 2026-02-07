@@ -318,6 +318,17 @@ public final class FamilyList {
                 "warped_log",
                 BigInteger.valueOf(4)
         ));
+        families.add(new Family(
+                "mangrove_planks",
+                "MANGROVE",
+                "Mangrove Planks",
+                "Mangrove Slabs",
+                "mangrove_slab",
+                BigInteger.valueOf(2),
+                "Mangrove Logs",
+                "mangrove_log",
+                BigInteger.valueOf(4)
+        ));
         FAMILIES = Collections.unmodifiableList(families);
     }
 
