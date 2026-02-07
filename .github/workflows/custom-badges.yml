@@ -124,6 +124,28 @@ jobs:
 
           printf '{"schemaVersion":1,"label":"DUPLICATED LINES","message":"%s","color":"%s"}\n' "$pct" "$color" \
             > .badges/duplicated_lines.json
+  
+      - name: SonarCloud - Security (security_rating)
+        run: |
+          set -euo pipefail
+          project="Exohayvan_StarhavenSMP-Core"
+          url="https://sonarcloud.io/api/project_badges/measure?project=${project}&metric=security_rating"
+          svg="$(curl -fsSL "$url")"
+
+          grade="$(printf '%s' "$svg" | grep -oE '<text[^>]*>[A-E]</text>' | head -n1 | sed -E 's/.*>([A-E])<.*/\1/' || true)"
+          [ -n "${grade:-}" ] || grade="?"
+
+          case "$grade" in
+            A) color="brightgreen" ;;
+            B) color="green" ;;
+            C) color="yellow" ;;
+            D) color="orange" ;;
+            E) color="red" ;;
+            *) color="lightgrey" ;;
+          esac
+
+          printf '{"schemaVersion":1,"label":"SECURITY","message":"%s","color":"%s"}\n' "$grade" "$color" \
+            > .badges/security.json
 
       - name: CodeTabs - Totals (Total files + Total linesOfCode)
         run: |
