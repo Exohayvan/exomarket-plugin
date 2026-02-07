@@ -1,5 +1,6 @@
 package com.starhavensmpcore.market.items;
 
+import com.starhavensmpcore.market.util.QuantityNormalizer;
 import org.bukkit.Material;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.inventory.ItemStack;
@@ -28,7 +29,7 @@ public final class EnchantedBookSplitter {
             return entries;
         }
 
-        BigInteger safeAmount = normalizeQuantity(amount);
+        BigInteger safeAmount = QuantityNormalizer.normalize(amount);
         if (safeAmount.signum() <= 0) {
             return entries;
         }
@@ -82,7 +83,7 @@ public final class EnchantedBookSplitter {
             return entries;
         }
 
-        BigInteger safeAmount = normalizeQuantity(amount);
+        BigInteger safeAmount = QuantityNormalizer.normalize(amount);
         if (safeAmount.signum() <= 0) {
             return entries;
         }
@@ -129,20 +130,13 @@ public final class EnchantedBookSplitter {
         return BigInteger.ONE.shiftLeft(safeLevel - 1);
     }
 
-    private static BigInteger normalizeQuantity(BigInteger value) {
-        if (value == null) {
-            return BigInteger.ZERO;
-        }
-        return value.max(BigInteger.ZERO);
-    }
-
     public static final class SplitEntry {
         private final ItemStack itemStack;
         private final BigInteger quantity;
 
         private SplitEntry(ItemStack itemStack, BigInteger quantity) {
             this.itemStack = itemStack;
-            this.quantity = normalizeQuantity(quantity);
+            this.quantity = QuantityNormalizer.normalize(quantity);
         }
 
         public ItemStack getItemStack() {

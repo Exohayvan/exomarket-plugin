@@ -2,6 +2,7 @@ package com.starhavensmpcore.market;
 
 import com.starhavensmpcore.market.items.ItemDisplayNameFormatter;
 import com.starhavensmpcore.market.items.ItemSanitizer;
+import com.starhavensmpcore.market.util.QuantityNormalizer;
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 
@@ -26,7 +27,7 @@ public class MarketItem {
         ItemStack sanitized = ItemSanitizer.sanitize(itemStack);
         this.itemStack = sanitized;
         this.itemData = ItemSanitizer.serializeToString(sanitized);
-        this.quantity = normalizeQuantity(quantity);
+        this.quantity = QuantityNormalizer.normalize(quantity);
         this.price = price;
         this.sellerUUID = sellerUUID;
     }
@@ -35,7 +36,7 @@ public class MarketItem {
         ItemStack sanitized = ItemSanitizer.sanitize(itemStack);
         this.itemStack = sanitized;
         this.itemData = itemData != null && !itemData.isEmpty() ? itemData : ItemSanitizer.serializeToString(sanitized);
-        this.quantity = normalizeQuantity(quantity);
+        this.quantity = QuantityNormalizer.normalize(quantity);
         this.price = price;
         this.sellerUUID = sellerUUID;
     }
@@ -69,21 +70,14 @@ public class MarketItem {
     }
 
     public void addQuantity(BigInteger amount) {
-        this.quantity = normalizeQuantity(this.quantity.add(normalizeQuantity(amount)));
+        this.quantity = QuantityNormalizer.normalize(this.quantity.add(QuantityNormalizer.normalize(amount)));
     }
 
     public void setQuantity(BigInteger quantity) {
-        this.quantity = normalizeQuantity(quantity);
+        this.quantity = QuantityNormalizer.normalize(quantity);
     }
 
     public void setPrice(double price) {
         this.price = price;
-    }
-
-    private BigInteger normalizeQuantity(BigInteger value) {
-        if (value == null) {
-            return BigInteger.ZERO;
-        }
-        return value.max(BigInteger.ZERO);
     }
 }
