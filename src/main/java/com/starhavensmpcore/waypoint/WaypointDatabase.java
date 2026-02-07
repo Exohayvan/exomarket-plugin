@@ -287,22 +287,23 @@ public class WaypointDatabase {
         if (Thread.currentThread() == dbThread) {
             try {
                 return task.call();
-            } catch (InterruptedException ex) {
-                Thread.currentThread().interrupt();
-                throw new RuntimeException(ex);
             } catch (Exception ex) {
-                throw new RuntimeException(ex);
+                throw wrapDbException(ex);
             }
         }
         Future<T> future = dbExecutor.submit(task);
         try {
             return future.get();
-        } catch (InterruptedException ex) {
-            Thread.currentThread().interrupt();
-            throw new RuntimeException(ex);
         } catch (Exception ex) {
-            throw new RuntimeException(ex);
+            throw wrapDbException(ex);
         }
+    }
+
+    private RuntimeException wrapDbException(Exception ex) {
+        if (ex instanceof InterruptedException) {
+            Thread.currentThread().interrupt();
+        }
+        return new RuntimeException(ex);
     }
 
     private void connect() {
