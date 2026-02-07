@@ -4,7 +4,7 @@
 
     <groupId>com.starhavensmpcore</groupId>
     <artifactId>StarhavenSMPCore</artifactId>
-    <version>4.7.11</version>
+    <version>4.7.13</version>
     <packaging>jar</packaging>
 
     <name>StarhavenSMPCore</name>
