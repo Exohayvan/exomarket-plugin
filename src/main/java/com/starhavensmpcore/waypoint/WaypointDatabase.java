@@ -36,22 +36,22 @@ public class WaypointDatabase {
         connect();
     }
 
-    public void saveWaypoint(UUID worldId, int x, int y, int z, String type, String category, String name, UUID ownerId) {
-        if (connection == null || worldId == null || type == null) {
+    public void saveWaypoint(WaypointSaveRequest request) {
+        if (connection == null || request == null || request.worldId == null || request.type == null) {
             return;
         }
         runOnDbThread(() -> {
             try (PreparedStatement statement = connection.prepareStatement(
                     "INSERT OR REPLACE INTO waypoints (world, x, y, z, type, category, name, owner, created_at) " +
                             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")) {
-                statement.setString(1, worldId.toString());
-                statement.setInt(2, x);
-                statement.setInt(3, y);
-                statement.setInt(4, z);
-                statement.setString(5, type);
-                statement.setString(6, category);
-                statement.setString(7, name);
-                statement.setString(8, ownerId == null ? null : ownerId.toString());
+                statement.setString(1, request.worldId.toString());
+                statement.setInt(2, request.x);
+                statement.setInt(3, request.y);
+                statement.setInt(4, request.z);
+                statement.setString(5, request.type);
+                statement.setString(6, request.category);
+                statement.setString(7, request.name);
+                statement.setString(8, request.ownerId == null ? null : request.ownerId.toString());
                 statement.setLong(9, System.currentTimeMillis());
                 statement.executeUpdate();
             } catch (SQLException e) {
@@ -407,6 +407,28 @@ public class WaypointDatabase {
             this.category = category;
             this.name = name;
             this.owner = owner;
+        }
+    }
+
+    public static final class WaypointSaveRequest {
+        public final UUID worldId;
+        public final int x;
+        public final int y;
+        public final int z;
+        public final String type;
+        public final String category;
+        public final String name;
+        public final UUID ownerId;
+
+        public WaypointSaveRequest(UUID worldId, int x, int y, int z, String type, String category, String name, UUID ownerId) {
+            this.worldId = worldId;
+            this.x = x;
+            this.y = y;
+            this.z = z;
+            this.type = type;
+            this.category = category;
+            this.name = name;
+            this.ownerId = ownerId;
         }
     }
 

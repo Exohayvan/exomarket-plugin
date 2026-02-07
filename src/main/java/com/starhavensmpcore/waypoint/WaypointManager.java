@@ -118,7 +118,7 @@ public class WaypointManager implements Listener {
         WaystoneCategory defaultCategory = WaystoneCategory.OTHER;
         UUID ownerId = event.getPlayer() == null ? null : event.getPlayer().getUniqueId();
         waypoints.put(key, new WaypointEntry(type, defaultCategory, ownerId, null));
-        database.saveWaypoint(
+        database.saveWaypoint(new WaypointDatabase.WaypointSaveRequest(
                 block.getWorld().getUID(),
                 block.getX(),
                 block.getY(),
@@ -127,7 +127,7 @@ public class WaypointManager implements Listener {
                 defaultCategory.id,
                 null,
                 ownerId
-        );
+        ));
         if (event.getPlayer() != null) {
             Player player = event.getPlayer();
             plugin.getServer().getScheduler().runTask(plugin, () -> openTypeMenu(player, key, type));
