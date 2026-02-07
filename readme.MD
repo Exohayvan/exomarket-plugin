@@ -1,5 +1,5 @@
 # StarhavenSMP Core
-![Website](https://img.shields.io/website?url=http%3A%2F%2Fstarhavensmp.mcserver.us%3A8000&up_message=Online&down_message=Offline&style=for-the-badge&label=Minecraft%20Sever)
+![Website](https://img.shields.io/website?url=http%3A%2F%2Fstarhavensmp.mcserver.us%3A8000&up_message=Online&down_message=Offline&style=for-the-badge&label=Minecraft%20Severlink=http%3A%2F%2Fstarhavensmp.mcserver.us%3A8000)
 
 ![FILES](https://img.shields.io/endpoint?style=for-the-badge&url=https%3A%2F%2Fraw.githubusercontent.com%2FExoHayvan%2FStarhavenSMP-Core%2Fmain%2F.badges%2Ffiles.json)
 ![LINES%20OF%20CODE](https://img.shields.io/endpoint?style=for-the-badge&url=https%3A%2F%2Fraw.githubusercontent.com%2FExoHayvan%2FStarhavenSMP-Core%2Fmain%2F.badges%2Flines_of_code.json)
