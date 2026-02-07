@@ -457,25 +457,30 @@ public class MarketItemsGUI implements Listener {
             }
         }
 
-        if (!stack.getEnchantments().isEmpty()) {
-            for (Map.Entry<org.bukkit.enchantments.Enchantment, Integer> entry : stack.getEnchantments().entrySet()) {
-                String key = entry.getKey().getKey().getKey().toLowerCase(Locale.ROOT);
-                if (key.contains(filter)) {
-                    return true;
-                }
-            }
+        if (hasEnchantKeyMatch(stack.getEnchantments(), filter)) {
+            return true;
         }
 
         if (meta instanceof EnchantmentStorageMeta) {
             EnchantmentStorageMeta storageMeta = (EnchantmentStorageMeta) meta;
-            for (Map.Entry<org.bukkit.enchantments.Enchantment, Integer> entry : storageMeta.getStoredEnchants().entrySet()) {
-                String key = entry.getKey().getKey().getKey().toLowerCase(Locale.ROOT);
-                if (key.contains(filter)) {
-                    return true;
-                }
+            if (hasEnchantKeyMatch(storageMeta.getStoredEnchants(), filter)) {
+                return true;
             }
         }
 
+        return false;
+    }
+
+    private boolean hasEnchantKeyMatch(Map<org.bukkit.enchantments.Enchantment, Integer> enchants, String filter) {
+        if (enchants == null || enchants.isEmpty()) {
+            return false;
+        }
+        for (Map.Entry<org.bukkit.enchantments.Enchantment, Integer> entry : enchants.entrySet()) {
+            String key = entry.getKey().getKey().getKey().toLowerCase(Locale.ROOT);
+            if (key.contains(filter)) {
+                return true;
+            }
+        }
         return false;
     }
 
@@ -490,19 +495,9 @@ public class MarketItemsGUI implements Listener {
         }
         BigInteger safeUnitSize = unitSize == null || unitSize.signum() <= 0 ? BigInteger.ONE : unitSize;
         BigInteger removeUnits = BigInteger.valueOf(quantity).multiply(safeUnitSize);
-        if (listing.getQuantity().compareTo(removeUnits) < 0) {
-            player.sendMessage(ChatColor.RED + "You do not have that many items listed.");
+        if (!applyListingRemoval(player, listing, removeUnits, "You do not have that many items listed.")) {
             return;
         }
-
-        listing.setQuantity(listing.getQuantity().subtract(removeUnits));
-        databaseManager.runOnDbThread(() -> {
-            if (listing.getQuantity().signum() <= 0) {
-                databaseManager.removeMarketItem(listing);
-            } else {
-                databaseManager.updateMarketItem(listing);
-            }
-        });
 
         ItemStack item = unitTemplate == null ? listing.getItemStack() : unitTemplate.clone();
         item.setAmount(quantity);
@@ -554,19 +549,9 @@ public class MarketItemsGUI implements Listener {
             return;
         }
         BigInteger removeUnits = required.multiply(BigInteger.valueOf(quantity));
-        if (listing.getQuantity().compareTo(removeUnits) < 0) {
-            player.sendMessage(ChatColor.RED + "You do not have that many books listed.");
+        if (!applyListingRemoval(player, listing, removeUnits, "You do not have that many books listed.")) {
             return;
         }
-
-        listing.setQuantity(listing.getQuantity().subtract(removeUnits));
-        databaseManager.runOnDbThread(() -> {
-            if (listing.getQuantity().signum() <= 0) {
-                databaseManager.removeMarketItem(listing);
-            } else {
-                databaseManager.updateMarketItem(listing);
-            }
-        });
 
         ItemStack item = buildEnchantedBook(listing.getItemStack(), level, quantity);
         Map<Integer, ItemStack> leftovers = player.getInventory().addItem(item);
@@ -736,16 +721,7 @@ public class MarketItemsGUI implements Listener {
 
     private ItemStack createEnchantLevelItem(ItemStack template, int level, BigInteger required) {
         ItemStack book = new ItemStack(Material.ENCHANTED_BOOK);
-        ItemMeta meta = book.getItemMeta();
-        if (meta instanceof EnchantmentStorageMeta) {
-            EnchantmentStorageMeta storageMeta = (EnchantmentStorageMeta) meta;
-            ItemMeta templateMeta = template.getItemMeta();
-            if (templateMeta instanceof EnchantmentStorageMeta) {
-                ((EnchantmentStorageMeta) templateMeta).getStoredEnchants()
-                        .forEach((enchant, ignored) -> storageMeta.addStoredEnchant(enchant, level, true));
-            }
-            book.setItemMeta(storageMeta);
-        }
+        applyStoredEnchants(book, template, level);
 
         ItemMeta displayMeta = book.getItemMeta();
         if (displayMeta != null) {
@@ -758,6 +734,25 @@ public class MarketItemsGUI implements Listener {
         }
 
         return book;
+    }
+
+    private void applyStoredEnchants(ItemStack target, ItemStack template, int level) {
+        if (target == null || template == null) {
+            return;
+        }
+        ItemMeta targetMeta = target.getItemMeta();
+        if (!(targetMeta instanceof EnchantmentStorageMeta)) {
+            return;
+        }
+        ItemMeta templateMeta = template.getItemMeta();
+        if (!(templateMeta instanceof EnchantmentStorageMeta)) {
+            return;
+        }
+        EnchantmentStorageMeta targetStorage = (EnchantmentStorageMeta) targetMeta;
+        EnchantmentStorageMeta templateStorage = (EnchantmentStorageMeta) templateMeta;
+        templateStorage.getStoredEnchants()
+                .forEach((enchant, ignored) -> targetStorage.addStoredEnchant(enchant, level, true));
+        target.setItemMeta(targetStorage);
     }
 
     private Integer extractLevelFromItem(ItemStack item) {
@@ -781,16 +776,25 @@ public class MarketItemsGUI implements Listener {
 
     private ItemStack buildEnchantedBook(ItemStack template, int level, int amount) {
         ItemStack book = new ItemStack(Material.ENCHANTED_BOOK);
-        EnchantmentStorageMeta meta = (EnchantmentStorageMeta) book.getItemMeta();
-        ItemMeta templateMeta = template.getItemMeta();
-        if (meta != null && templateMeta instanceof EnchantmentStorageMeta) {
-            EnchantmentStorageMeta templateStorage = (EnchantmentStorageMeta) templateMeta;
-            templateStorage.getStoredEnchants().forEach((enchant, ignored) ->
-                    meta.addStoredEnchant(enchant, level, true));
-            book.setItemMeta(meta);
-        }
+        applyStoredEnchants(book, template, level);
         ItemStack sanitized = ItemSanitizer.sanitize(book);
         sanitized.setAmount(amount);
         return sanitized;
+    }
+
+    private boolean applyListingRemoval(Player player, MarketItem listing, BigInteger removeUnits, String insufficientMessage) {
+        if (listing.getQuantity().compareTo(removeUnits) < 0) {
+            player.sendMessage(ChatColor.RED + insufficientMessage);
+            return false;
+        }
+        listing.setQuantity(listing.getQuantity().subtract(removeUnits));
+        databaseManager.runOnDbThread(() -> {
+            if (listing.getQuantity().signum() <= 0) {
+                databaseManager.removeMarketItem(listing);
+            } else {
+                databaseManager.updateMarketItem(listing);
+            }
+        });
+        return true;
     }
 }
