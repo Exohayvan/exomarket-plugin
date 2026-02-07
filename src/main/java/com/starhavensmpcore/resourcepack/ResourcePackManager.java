@@ -199,7 +199,11 @@ public class ResourcePackManager implements Listener {
             if (!cacheDir.exists() && !cacheDir.mkdirs()) {
                 plugin.getLogger().warning("Unable to create resource pack cache directory.");
             }
-            File target = new File(cacheDir, assetName == null ? "resourcepack.zip" : assetName);
+            File target = resolveCacheTarget(cacheDir, assetName);
+            if (target == null) {
+                plugin.getLogger().warning("Rejected resource pack asset name: " + assetName);
+                return null;
+            }
 
             HttpURLConnection connection = openConnection(new URL(downloadUrl), "application/octet-stream");
             int code = connection.getResponseCode();
@@ -224,6 +228,35 @@ public class ResourcePackManager implements Listener {
             plugin.getLogger().warning("Failed to download resource pack asset: " + e.getMessage());
             return null;
         }
+    }
+
+    private File resolveCacheTarget(File cacheDir, String assetName) throws IOException {
+        String safeName = sanitizeAssetName(assetName);
+        if (safeName == null) {
+            return null;
+        }
+        File target = new File(cacheDir, safeName);
+        String canonicalDir = cacheDir.getCanonicalPath();
+        String canonicalTarget = target.getCanonicalPath();
+        if (!canonicalTarget.startsWith(canonicalDir + File.separator)) {
+            return null;
+        }
+        return target;
+    }
+
+    private String sanitizeAssetName(String assetName) {
+        if (assetName == null || assetName.trim().isEmpty()) {
+            return "resourcepack.zip";
+        }
+        String trimmed = assetName.trim();
+        String nameOnly = new File(trimmed).getName();
+        if (nameOnly.isEmpty()) {
+            return "resourcepack.zip";
+        }
+        if (nameOnly.contains("..") || nameOnly.contains("/") || nameOnly.contains("\\") || nameOnly.contains("\0")) {
+            return null;
+        }
+        return nameOnly;
     }
 
     private void deleteOtherPacks(File cacheDir, String keepName) {
