@@ -37,17 +37,14 @@ public class WaypointDatabase {
     }
 
     public void saveWaypoint(WaypointSaveRequest request) {
-        if (connection == null || request == null || request.worldId == null || request.type == null) {
+        if (connection == null || request == null || request.key == null || request.key.worldId == null || request.type == null) {
             return;
         }
         runOnDbThread(() -> {
             try (PreparedStatement statement = connection.prepareStatement(
                     "INSERT OR REPLACE INTO waypoints (world, x, y, z, type, category, name, owner, created_at) " +
                             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")) {
-                statement.setString(1, request.worldId.toString());
-                statement.setInt(2, request.x);
-                statement.setInt(3, request.y);
-                statement.setInt(4, request.z);
+                bindWaypointKey(statement, request.key, 1);
                 statement.setString(5, request.type);
                 statement.setString(6, request.category);
                 statement.setString(7, request.name);
@@ -94,21 +91,22 @@ public class WaypointDatabase {
     }
 
     public void deleteWaypoint(UUID worldId, int x, int y, int z) {
-        if (connection == null || worldId == null) {
+        deleteWaypoint(new WaypointKey(worldId, x, y, z));
+    }
+
+    public void deleteWaypoint(WaypointKey key) {
+        if (connection == null || key == null || key.worldId == null) {
             return;
         }
         runOnDbThread(() -> {
             try (PreparedStatement statement = connection.prepareStatement(
                     "DELETE FROM waypoints WHERE world = ? AND x = ? AND y = ? AND z = ?")) {
-                statement.setString(1, worldId.toString());
-                statement.setInt(2, x);
-                statement.setInt(3, y);
-                statement.setInt(4, z);
+                bindWaypointKey(statement, key, 1);
                 statement.executeUpdate();
             } catch (SQLException e) {
                 plugin.getLogger().warning("Failed to delete waypoint: " + e.getMessage());
             }
-            deleteKnownForWaypoint(worldId, x, y, z);
+            deleteKnownForWaypoint(key.worldId, key.x, key.y, key.z);
         });
     }
 
@@ -116,14 +114,12 @@ public class WaypointDatabase {
         if (connection == null || worldId == null) {
             return;
         }
+        WaypointKey key = new WaypointKey(worldId, x, y, z);
         runOnDbThread(() -> {
             try (PreparedStatement statement = connection.prepareStatement(
                     "UPDATE waypoints SET category = ? WHERE world = ? AND x = ? AND y = ? AND z = ?")) {
                 statement.setString(1, category);
-                statement.setString(2, worldId.toString());
-                statement.setInt(3, x);
-                statement.setInt(4, y);
-                statement.setInt(5, z);
+                bindWaypointKey(statement, key, 2);
                 statement.executeUpdate();
             } catch (SQLException e) {
                 plugin.getLogger().warning("Failed to update waypoint category: " + e.getMessage());
@@ -135,14 +131,12 @@ public class WaypointDatabase {
         if (connection == null || worldId == null) {
             return;
         }
+        WaypointKey key = new WaypointKey(worldId, x, y, z);
         runOnDbThread(() -> {
             try (PreparedStatement statement = connection.prepareStatement(
                     "UPDATE waypoints SET name = ? WHERE world = ? AND x = ? AND y = ? AND z = ?")) {
                 statement.setString(1, name);
-                statement.setString(2, worldId.toString());
-                statement.setInt(3, x);
-                statement.setInt(4, y);
-                statement.setInt(5, z);
+                bindWaypointKey(statement, key, 2);
                 statement.executeUpdate();
             } catch (SQLException e) {
                 plugin.getLogger().warning("Failed to update waypoint name: " + e.getMessage());
@@ -394,6 +388,27 @@ public class WaypointDatabase {
         }
     }
 
+    private void bindWaypointKey(PreparedStatement statement, WaypointKey key, int startIndex) throws SQLException {
+        statement.setString(startIndex, key.worldId.toString());
+        statement.setInt(startIndex + 1, key.x);
+        statement.setInt(startIndex + 2, key.y);
+        statement.setInt(startIndex + 3, key.z);
+    }
+
+    public static final class WaypointKey {
+        public final UUID worldId;
+        public final int x;
+        public final int y;
+        public final int z;
+
+        public WaypointKey(UUID worldId, int x, int y, int z) {
+            this.worldId = worldId;
+            this.x = x;
+            this.y = y;
+            this.z = z;
+        }
+    }
+
     public static final class WaypointRecord {
         public final UUID worldId;
         public final int x;
@@ -417,20 +432,18 @@ public class WaypointDatabase {
     }
 
     public static final class WaypointSaveRequest {
-        public final UUID worldId;
-        public final int x;
-        public final int y;
-        public final int z;
+        public final WaypointKey key;
         public final String type;
         public final String category;
         public final String name;
         public final UUID ownerId;
 
         public WaypointSaveRequest(UUID worldId, int x, int y, int z, String type, String category, String name, UUID ownerId) {
-            this.worldId = worldId;
-            this.x = x;
-            this.y = y;
-            this.z = z;
+            this(new WaypointKey(worldId, x, y, z), type, category, name, ownerId);
+        }
+
+        public WaypointSaveRequest(WaypointKey key, String type, String category, String name, UUID ownerId) {
+            this.key = key;
             this.type = type;
             this.category = category;
             this.name = name;
