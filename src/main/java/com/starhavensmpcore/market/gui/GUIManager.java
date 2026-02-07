@@ -142,26 +142,20 @@ public class GUIManager implements Listener {
         private final ItemStack large;
         private final BigInteger largeRatio;
         private final String displayName;
-        private final String baseLabel;
         private final String smallLabel;
-        private final String largeLabel;
 
         private FamilyUnitOptions(ItemStack small,
                                   ItemStack base,
                                   ItemStack large,
                                   BigInteger largeRatio,
                                   String displayName,
-                                  String baseLabel,
-                                  String smallLabel,
-                                  String largeLabel) {
+                                  String smallLabel) {
             this.small = small;
             this.base = base;
             this.large = large;
             this.largeRatio = largeRatio;
             this.displayName = displayName;
-            this.baseLabel = baseLabel;
             this.smallLabel = smallLabel;
-            this.largeLabel = largeLabel;
         }
     }
 
@@ -334,9 +328,7 @@ public class GUIManager implements Listener {
                 largeItem,
                 family.getLargeRatio(),
                 displayName,
-                baseLabel,
-                smallLabel,
-                largeLabel));
+                smallLabel));
 
         populateIngotUnitMenu(
                 inventory,

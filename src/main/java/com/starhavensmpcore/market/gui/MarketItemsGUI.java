@@ -55,22 +55,13 @@ public class MarketItemsGUI implements Listener {
         private final ItemStack base;
         private final ItemStack large;
         private final BigInteger largeRatio;
-        private final String displayName;
-        private final String baseLabel;
-        private final String largeLabel;
 
         private RemoveUnitOptions(ItemStack base,
                                   ItemStack large,
-                                  BigInteger largeRatio,
-                                  String displayName,
-                                  String baseLabel,
-                                  String largeLabel) {
+                                  BigInteger largeRatio) {
             this.base = base;
             this.large = large;
             this.largeRatio = largeRatio;
-            this.displayName = displayName;
-            this.baseLabel = baseLabel;
-            this.largeLabel = largeLabel;
         }
     }
 
@@ -285,10 +276,7 @@ public class MarketItemsGUI implements Listener {
         selectedRemoveUnitOptions.put(player.getUniqueId(), new RemoveUnitOptions(
                 baseItem,
                 largeItem,
-                family.getLargeRatio(),
-                displayName,
-                baseLabel,
-                largeLabel));
+                family.getLargeRatio()));
         selectedRemoveUnitSize.remove(player.getUniqueId());
         selectedRemoveUnitTemplate.remove(player.getUniqueId());
         player.openInventory(inventory);
