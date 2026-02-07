@@ -27,6 +27,7 @@ import java.util.Map;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.BiPredicate;
 
 public class AutoSellManager implements Listener, CommandExecutor {
 
@@ -331,20 +332,9 @@ public class AutoSellManager implements Listener, CommandExecutor {
 
     private void removeItemsFromInventory(Player player, ItemStack template, int amount) {
         Inventory inventory = player.getInventory();
-        int remainingAmount = amount;
         ItemStack[] contents = inventory.getContents();
-        for (int slot = 0; slot < contents.length && remainingAmount > 0; slot++) {
-            ItemStack item = contents[slot];
-            if (item != null && ItemSanitizer.matches(item, template)) {
-                if (item.getAmount() <= remainingAmount) {
-                    remainingAmount -= item.getAmount();
-                    inventory.clear(slot);
-                } else {
-                    item.setAmount(item.getAmount() - remainingAmount);
-                    remainingAmount = 0;
-                }
-            }
-        }
+        removeMatchingItems(contents, template, amount);
+        inventory.setContents(contents);
         player.updateInventory();
     
         // Refresh the AutoSell GUI
@@ -357,13 +347,47 @@ public class AutoSellManager implements Listener, CommandExecutor {
     }
 
     private int getAmountInInventory(Player player, ItemStack template) {
+        return countMatchingItems(player.getInventory().getContents(), template);
+    }
+
+    static int countMatchingItems(ItemStack[] contents, ItemStack template) {
+        return countMatchingItems(contents, template, ItemSanitizer::matches);
+    }
+
+    static int countMatchingItems(ItemStack[] contents, ItemStack template, BiPredicate<ItemStack, ItemStack> matcher) {
+        if (contents == null || template == null || matcher == null) {
+            return 0;
+        }
         int amount = 0;
-        for (ItemStack item : player.getInventory().getContents()) {
-            if (item != null && ItemSanitizer.matches(item, template)) {
+        for (ItemStack item : contents) {
+            if (item != null && matcher.test(item, template)) {
                 amount += item.getAmount();
             }
         }
         return amount;
+    }
+
+    static void removeMatchingItems(ItemStack[] contents, ItemStack template, int amount) {
+        removeMatchingItems(contents, template, amount, ItemSanitizer::matches);
+    }
+
+    static void removeMatchingItems(ItemStack[] contents, ItemStack template, int amount, BiPredicate<ItemStack, ItemStack> matcher) {
+        if (contents == null || template == null || amount <= 0 || matcher == null) {
+            return;
+        }
+        int remainingAmount = amount;
+        for (int slot = 0; slot < contents.length && remainingAmount > 0; slot++) {
+            ItemStack item = contents[slot];
+            if (item != null && matcher.test(item, template)) {
+                if (item.getAmount() <= remainingAmount) {
+                    remainingAmount -= item.getAmount();
+                    contents[slot] = null;
+                } else {
+                    item.setAmount(item.getAmount() - remainingAmount);
+                    remainingAmount = 0;
+                }
+            }
+        }
     }
 
     private ItemStack createNavigationItem(Material material, String name) {
