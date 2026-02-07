@@ -33,6 +33,20 @@ jobs:
       - name: SonarCloud - Reliability (reliability_rating)
         run: |
           set -euo pipefail
+          write_badge() {
+            local path="$1"
+            local content="$2"
+            local tmp
+            tmp="$(mktemp)"
+            printf '%s\n' "$content" > "$tmp"
+            if [ -f "$path" ] && cmp -s "$tmp" "$path"; then
+              echo "Badge unchanged: $path"
+              rm "$tmp"
+              return 0
+            fi
+            mv "$tmp" "$path"
+            echo "Badge updated: $path"
+          }
           project="Exohayvan_StarhavenSMP-Core"
           url="https://sonarcloud.io/api/project_badges/measure?project=${project}&metric=reliability_rating"
           svg="$(curl -fsSL "$url")"
@@ -49,12 +63,27 @@ jobs:
             *) color="lightgrey" ;;
           esac
 
-          printf '{"schemaVersion":1,"label":"RELIABILITY","message":"%s","color":"%s"}\n' "$grade" "$color" \
-            > .badges/reliability.json
+          badge_path=".badges/reliability.json"
+          badge_content="$(printf '{"schemaVersion":1,"label":"RELIABILITY","message":"%s","color":"%s"}' "$grade" "$color")"
+          write_badge "$badge_path" "$badge_content"
 
       - name: SonarCloud - Maintainability (sqale_rating)
         run: |
           set -euo pipefail
+          write_badge() {
+            local path="$1"
+            local content="$2"
+            local tmp
+            tmp="$(mktemp)"
+            printf '%s\n' "$content" > "$tmp"
+            if [ -f "$path" ] && cmp -s "$tmp" "$path"; then
+              echo "Badge unchanged: $path"
+              rm "$tmp"
+              return 0
+            fi
+            mv "$tmp" "$path"
+            echo "Badge updated: $path"
+          }
           project="Exohayvan_StarhavenSMP-Core"
           url="https://sonarcloud.io/api/project_badges/measure?project=${project}&metric=sqale_rating"
           svg="$(curl -fsSL "$url")"
@@ -71,12 +100,27 @@ jobs:
             *) color="lightgrey" ;;
           esac
 
-          printf '{"schemaVersion":1,"label":"MAINTAINABILITY","message":"%s","color":"%s"}\n' "$grade" "$color" \
-            > .badges/maintainability.json
+          badge_path=".badges/maintainability.json"
+          badge_content="$(printf '{"schemaVersion":1,"label":"MAINTAINABILITY","message":"%s","color":"%s"}' "$grade" "$color")"
+          write_badge "$badge_path" "$badge_content"
 
       - name: SonarCloud - Vulnerabilities (vulnerabilities)
         run: |
           set -euo pipefail
+          write_badge() {
+            local path="$1"
+            local content="$2"
+            local tmp
+            tmp="$(mktemp)"
+            printf '%s\n' "$content" > "$tmp"
+            if [ -f "$path" ] && cmp -s "$tmp" "$path"; then
+              echo "Badge unchanged: $path"
+              rm "$tmp"
+              return 0
+            fi
+            mv "$tmp" "$path"
+            echo "Badge updated: $path"
+          }
           project="Exohayvan_StarhavenSMP-Core"
           url="https://sonarcloud.io/api/project_badges/measure?project=${project}&metric=vulnerabilities"
           svg="$(curl -fsSL "$url")"
@@ -95,12 +139,27 @@ jobs:
             color="red"
           fi
 
-          printf '{"schemaVersion":1,"label":"VULNERABILITIES","message":"%s","color":"%s"}\n' "$count" "$color" \
-            > .badges/vulnerabilities.json
+          badge_path=".badges/vulnerabilities.json"
+          badge_content="$(printf '{"schemaVersion":1,"label":"VULNERABILITIES","message":"%s","color":"%s"}' "$count" "$color")"
+          write_badge "$badge_path" "$badge_content"
 
       - name: SonarCloud - Duplicated Lines (duplicated_lines_density)
         run: |
           set -euo pipefail
+          write_badge() {
+            local path="$1"
+            local content="$2"
+            local tmp
+            tmp="$(mktemp)"
+            printf '%s\n' "$content" > "$tmp"
+            if [ -f "$path" ] && cmp -s "$tmp" "$path"; then
+              echo "Badge unchanged: $path"
+              rm "$tmp"
+              return 0
+            fi
+            mv "$tmp" "$path"
+            echo "Badge updated: $path"
+          }
           project="Exohayvan_StarhavenSMP-Core"
           url="https://sonarcloud.io/api/project_badges/measure?project=${project}&metric=duplicated_lines_density"
           svg="$(curl -fsSL "$url")"
@@ -122,12 +181,27 @@ jobs:
             esac
           fi
 
-          printf '{"schemaVersion":1,"label":"DUPLICATED LINES","message":"%s","color":"%s"}\n' "$pct" "$color" \
-            > .badges/duplicated_lines.json
+          badge_path=".badges/duplicated_lines.json"
+          badge_content="$(printf '{"schemaVersion":1,"label":"DUPLICATED LINES","message":"%s","color":"%s"}' "$pct" "$color")"
+          write_badge "$badge_path" "$badge_content"
   
       - name: SonarCloud - Security (security_rating)
         run: |
           set -euo pipefail
+          write_badge() {
+            local path="$1"
+            local content="$2"
+            local tmp
+            tmp="$(mktemp)"
+            printf '%s\n' "$content" > "$tmp"
+            if [ -f "$path" ] && cmp -s "$tmp" "$path"; then
+              echo "Badge unchanged: $path"
+              rm "$tmp"
+              return 0
+            fi
+            mv "$tmp" "$path"
+            echo "Badge updated: $path"
+          }
           project="Exohayvan_StarhavenSMP-Core"
           url="https://sonarcloud.io/api/project_badges/measure?project=${project}&metric=security_rating"
           svg="$(curl -fsSL "$url")"
@@ -144,12 +218,27 @@ jobs:
             *) color="lightgrey" ;;
           esac
 
-          printf '{"schemaVersion":1,"label":"SECURITY","message":"%s","color":"%s"}\n' "$grade" "$color" \
-            > .badges/security.json
+          badge_path=".badges/security.json"
+          badge_content="$(printf '{"schemaVersion":1,"label":"SECURITY","message":"%s","color":"%s"}' "$grade" "$color")"
+          write_badge "$badge_path" "$badge_content"
 
       - name: CodeTabs - Totals (Total files + Total linesOfCode)
         run: |
           set -euo pipefail
+          write_badge() {
+            local path="$1"
+            local content="$2"
+            local tmp
+            tmp="$(mktemp)"
+            printf '%s\n' "$content" > "$tmp"
+            if [ -f "$path" ] && cmp -s "$tmp" "$path"; then
+              echo "Badge unchanged: $path"
+              rm "$tmp"
+              return 0
+            fi
+            mv "$tmp" "$path"
+            echo "Badge updated: $path"
+          }
           api="https://api.codetabs.com/v1/loc/?github=ExoHayvan/StarhavenSMP-Core"
           json="$(curl -fsSL "$api" | tr '\n' ' ')"
 
@@ -162,10 +251,13 @@ jobs:
           [ -n "${files:-}" ] || files="?"
           [ -n "${loc:-}" ] || loc="?"
 
-          printf '{"schemaVersion":1,"label":"FILES","message":"%s","color":"blue"}\n' "$files" \
-            > .badges/files.json
-          printf '{"schemaVersion":1,"label":"LINES OF CODE","message":"%s","color":"blue"}\n' "$loc" \
-            > .badges/lines_of_code.json
+          files_path=".badges/files.json"
+          files_content="$(printf '{"schemaVersion":1,"label":"FILES","message":"%s","color":"blue"}' "$files")"
+          write_badge "$files_path" "$files_content"
+
+          loc_path=".badges/lines_of_code.json"
+          loc_content="$(printf '{"schemaVersion":1,"label":"LINES OF CODE","message":"%s","color":"blue"}' "$loc")"
+          write_badge "$loc_path" "$loc_content"
 
       - name: Commit & push badges (only if changed)
         run: |
