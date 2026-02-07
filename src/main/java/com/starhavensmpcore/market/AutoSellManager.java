@@ -175,7 +175,7 @@ public class AutoSellManager implements Listener, CommandExecutor {
                     removeAutoSellItem(playerUUID, clickedItem);
                     player.sendMessage(ChatColor.RED + "Removed " + clickedItem.getType().toString() + " from auto-sell list.");
                 } else {
-                    if (ItemSanitizer.isDamaged(clickedItem)) {
+                    if (isDamaged(clickedItem)) {
                         player.sendMessage(ChatColor.RED + "Damaged items cannot be added to auto-sell.");
                     } else {
                         // Add the clicked item to the auto-sell list
@@ -207,18 +207,49 @@ public class AutoSellManager implements Listener, CommandExecutor {
     }
     
     private void removeAutoSellItem(UUID playerUUID, ItemStack item) {
+        int removed = 0;
         try {
             PreparedStatement stmt = connection.prepareStatement("DELETE FROM autosell_items WHERE uuid = ? AND item = ?");
             stmt.setString(1, playerUUID.toString());
             stmt.setString(2, serializeItemTemplate(item));
-            stmt.executeUpdate();
+            removed = stmt.executeUpdate();
             stmt.close();
         } catch (SQLException e) {
             e.printStackTrace();
         }
 
+        if (removed == 0) {
+            removeAutoSellItemByMatch(playerUUID, item);
+        }
+
         // Schedule an update to the AutoSell GUI
         updateAutoSellInventory(playerUUID);
+    }
+
+    private void removeAutoSellItemByMatch(UUID playerUUID, ItemStack item) {
+        if (item == null) {
+            return;
+        }
+        try (PreparedStatement select = connection.prepareStatement(
+                "SELECT rowid, item FROM autosell_items WHERE uuid = ?")) {
+            select.setString(1, playerUUID.toString());
+            try (ResultSet rs = select.executeQuery()) {
+                while (rs.next()) {
+                    long rowId = rs.getLong("rowid");
+                    String storedItem = rs.getString("item");
+                    ItemStack stored = ItemSanitizer.deserializeFromString(storedItem);
+                    if (ItemSanitizer.matches(stored, item)) {
+                        try (PreparedStatement delete = connection.prepareStatement(
+                                "DELETE FROM autosell_items WHERE rowid = ?")) {
+                            delete.setLong(1, rowId);
+                            delete.executeUpdate();
+                        }
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
     }
 
     private void addAutoSellItem(UUID playerUUID, ItemStack item) {
@@ -264,38 +295,42 @@ public class AutoSellManager implements Listener, CommandExecutor {
         new BukkitRunnable() {
             @Override
             public void run() {
-                for (Player player : Bukkit.getOnlinePlayers()) {
-                    UUID playerUUID = player.getUniqueId();
-                    List<ItemStack> autoSellItems = getAutoSellItemsFromDatabase(playerUUID);
-                    
-                    if (autoSellItems.isEmpty()) {
-                        continue; // Skip if player has no auto-sell items
-                    }
-
-                    for (ItemStack template : autoSellItems) {
-                        if (ItemSanitizer.isDamaged(template)) {
-                            removeAutoSellItem(playerUUID, template);
-                            String display = template.hasItemMeta() && template.getItemMeta().hasDisplayName()
-                                    ? template.getItemMeta().getDisplayName()
-                                    : template.getType().toString();
-                            player.sendMessage(ChatColor.RED + "Removed damaged item from auto-sell list: " + display);
-                            continue;
-                        }
-
-                        int amountInInventory = getAmountInInventory(player, template);
-                        
-                        if (amountInInventory > 0) {
-                            plugin.getDatabaseManager().sellItemsDirectly(playerUUID, template, amountInInventory);
-                            removeItemsFromInventory(player, template, amountInInventory);
-                            String display = template.hasItemMeta() && template.getItemMeta().hasDisplayName()
-                                    ? template.getItemMeta().getDisplayName()
-                                    : template.getType().toString();
-                            player.sendMessage(ChatColor.GREEN + "AutoSold " + amountInInventory + " " + display);
-                        }
-                    }
-                }
+                runAutoSellTick();
             }
         }.runTaskTimer(plugin, 20, 40); // Run every 2 seconds
+    }
+
+    void runAutoSellTick() {
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            UUID playerUUID = player.getUniqueId();
+            List<ItemStack> autoSellItems = getAutoSellItemsFromDatabase(playerUUID);
+
+            if (autoSellItems.isEmpty()) {
+                continue; // Skip if player has no auto-sell items
+            }
+
+            for (ItemStack template : autoSellItems) {
+                if (isDamaged(template)) {
+                    removeAutoSellItem(playerUUID, template);
+                    String display = template.hasItemMeta() && template.getItemMeta().hasDisplayName()
+                            ? template.getItemMeta().getDisplayName()
+                            : template.getType().toString();
+                    player.sendMessage(ChatColor.RED + "Removed damaged item from auto-sell list: " + display);
+                    continue;
+                }
+
+                int amountInInventory = getAmountInInventory(player, template);
+
+                if (amountInInventory > 0) {
+                    plugin.getDatabaseManager().sellItemsDirectly(playerUUID, template, amountInInventory);
+                    removeItemsFromInventory(player, template, amountInInventory);
+                    String display = template.hasItemMeta() && template.getItemMeta().hasDisplayName()
+                            ? template.getItemMeta().getDisplayName()
+                            : template.getType().toString();
+                    player.sendMessage(ChatColor.GREEN + "AutoSold " + amountInInventory + " " + display);
+                }
+            }
+        }
     }
     
     private List<ItemStack> getAutoSellItemsFromDatabase(UUID playerUUID) {
@@ -344,6 +379,10 @@ public class AutoSellManager implements Listener, CommandExecutor {
             renderAutoSellInventory(playerUUID, autoSellInventory);
             player.updateInventory();
         }
+    }
+
+    protected boolean isDamaged(ItemStack item) {
+        return ItemSanitizer.isDamaged(item);
     }
 
     private int getAmountInInventory(Player player, ItemStack template) {

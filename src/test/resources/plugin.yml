@@ -1,0 +1,4 @@
+name: StarhavenSMPCoreTest
+version: 0.0.0-test
+main: com.starhavensmpcore.market.StarhavenSMPCoreTestPlugin
+api-version: "1.21"
