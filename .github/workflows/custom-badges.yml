@@ -1,0 +1,45 @@
+name: Update badges
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"   # every 6 hours
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  reliability:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch SonarCloud reliability grade
+        run: |
+          set -euo pipefail
+          SVG_URL="https://sonarcloud.io/api/project_badges/measure?project=Exohayvan_StarhavenSMP-Core&metric=reliability_rating"
+          svg="$(curl -fsSL "$SVG_URL")"
+          grade="$(printf '%s' "$svg" | grep -oE '<text[^>]*>[A-E]</text>' | head -n1 | sed -E 's/.*>([A-E])<.*/\1/')"
+
+          # Map grade -> color
+          case "$grade" in
+            A) color="brightgreen" ;;
+            B) color="green" ;;
+            C) color="yellow" ;;
+            D) color="orange" ;;
+            E) color="red" ;;
+            *) color="lightgrey"; grade="?" ;;
+          esac
+
+          mkdir -p .badges
+          cat > .badges/reliability.json <<EOF
+          {"schemaVersion":1,"label":"RELIABILITY","message":"$grade","color":"$color"}
+          EOF
+
+      - name: Commit badge JSON
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .badges/reliability.json
+          git commit -m "chore: update reliability badge" || exit 0
+          git push
