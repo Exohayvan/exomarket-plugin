@@ -6,14 +6,14 @@
 ![LINES%20OF%20CODE](https://img.shields.io/endpoint?style=for-the-badge&url=https%3A%2F%2Fraw.githubusercontent.com%2FExoHayvan%2FStarhavenSMP-Core%2Fmain%2F.badges%2Flines_of_code.json)
 ![DUPLICATED%20LINES](https://img.shields.io/endpoint?style=for-the-badge&url=https%3A%2F%2Fraw.githubusercontent.com%2FExoHayvan%2FStarhavenSMP-Core%2Fmain%2F.badges%2Fduplicated_lines.json)
 
-![GitHub repo size](https://img.shields.io/github/repo-size/ExoHayvan/StarhavenSMP-Core?style=for-the-badge)
-![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/ExoHayvan/StarhavenSMP-Core/total?style=for-the-badge)
-![GitHub last commit](https://img.shields.io/github/last-commit/ExoHayvan/StarhavenSMP-Core?style=for-the-badge)
+![GitHub repo size](https://img.shields.io/github/repo-size/ExoHayvan/StarhavenSMP-Core?style=for-the-badge&logo=github&logoColor=181717)
+![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/ExoHayvan/StarhavenSMP-Core/total?style=for-the-badge&logo=github&logoColor=181717)
+![GitHub last commit](https://img.shields.io/github/last-commit/ExoHayvan/StarhavenSMP-Core?style=for-the-badge&logo=github&logoColor=181717)
 
-![RELIABILITY](https://img.shields.io/endpoint?style=for-the-badge&logo=sonarqubecloud&url=https%3A%2F%2Fraw.githubusercontent.com%2FExoHayvan%2FStarhavenSMP-Core%2Fmain%2F.badges%2Freliability.json)
-![MAINTAINABILITY](https://img.shields.io/endpoint?style=for-the-badge&logo=sonarqubecloud&url=https%3A%2F%2Fraw.githubusercontent.com%2FExoHayvan%2FStarhavenSMP-Core%2Fmain%2F.badges%2Fmaintainability.json)
-![SECURITY](https://img.shields.io/endpoint?style=for-the-badge&logo=sonarqubecloud&url=https%3A%2F%2Fraw.githubusercontent.com%2FExoHayvan%2FStarhavenSMP-Core%2Fmain%2F.badges%2Fsecurity.json)
-![VULNERABILITIES](https://img.shields.io/endpoint?style=for-the-badge&logo=sonarqubecloud&url=https%3A%2F%2Fraw.githubusercontent.com%2FExoHayvan%2FStarhavenSMP-Core%2Fmain%2F.badges%2Fvulnerabilities.json)
+![RELIABILITY](https://img.shields.io/endpoint?style=for-the-badge&logo=sonarqubecloud&logoColor=126ED3&url=https%3A%2F%2Fraw.githubusercontent.com%2FExoHayvan%2FStarhavenSMP-Core%2Fmain%2F.badges%2Freliability.json)
+![MAINTAINABILITY](https://img.shields.io/endpoint?style=for-the-badge&logo=sonarqubecloud&logoColor=126ED3&url=https%3A%2F%2Fraw.githubusercontent.com%2FExoHayvan%2FStarhavenSMP-Core%2Fmain%2F.badges%2Fmaintainability.json)
+![SECURITY](https://img.shields.io/endpoint?style=for-the-badge&logo=sonarqubecloud&logoColor=126ED3&url=https%3A%2F%2Fraw.githubusercontent.com%2FExoHayvan%2FStarhavenSMP-Core%2Fmain%2F.badges%2Fsecurity.json)
+![VULNERABILITIES](https://img.shields.io/endpoint?style=for-the-badge&logo=sonarqubecloud&logoColor=126ED3&url=https%3A%2F%2Fraw.githubusercontent.com%2FExoHayvan%2FStarhavenSMP-Core%2Fmain%2F.badges%2Fvulnerabilities.json)
 
 StarhavenSMP Core is the main SMP plugin for Starhaven. It includes the dynamic market system, auto-sell, web analytics, resource pack delivery, custom items/blocks, and custom ore generation.
 
