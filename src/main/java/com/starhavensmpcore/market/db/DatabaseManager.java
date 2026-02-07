@@ -6,7 +6,7 @@ import com.starhavensmpcore.market.MarketItem;
 import com.starhavensmpcore.market.items.DurabilityQueue;
 import com.starhavensmpcore.market.items.EnchantedBookSplitter;
 import com.starhavensmpcore.market.items.ItemSanitizer;
-import com.starhavensmpcore.market.items.OreBreakdown;
+import com.starhavensmpcore.market.items.FamilyBreakdown;
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 
@@ -415,9 +415,9 @@ public class DatabaseManager {
         toSplit.setAmount(quantity);
         List<EnchantedBookSplitter.SplitEntry> entries = EnchantedBookSplitter.splitWithEnchantmentBooks(toSplit, BigInteger.valueOf(quantity));
         for (EnchantedBookSplitter.SplitEntry entry : entries) {
-            List<OreBreakdown.SplitEntry> oreEntries = OreBreakdown.split(entry.getItemStack(), entry.getQuantity());
-            for (OreBreakdown.SplitEntry oreEntry : oreEntries) {
-                BigInteger amount = oreEntry.getQuantity();
+            List<FamilyBreakdown.SplitEntry> familyEntries = FamilyBreakdown.split(entry.getItemStack(), entry.getQuantity());
+            for (FamilyBreakdown.SplitEntry familyEntry : familyEntries) {
+                BigInteger amount = familyEntry.getQuantity();
                 if (amount.signum() <= 0) {
                     continue;
                 }
@@ -425,13 +425,13 @@ public class DatabaseManager {
                         plugin,
                         this,
                         sellerId,
-                        oreEntry.getItemStack(),
+                        familyEntry.getItemStack(),
                         amount
                 );
                 if (durabilityResult.isQueued()) {
                     continue;
                 }
-                ItemStack template = ItemSanitizer.sanitize(oreEntry.getItemStack());
+                ItemStack template = ItemSanitizer.sanitize(familyEntry.getItemStack());
                 MarketItem existingItem = getMarketItem(template, sellerId);
                 if (existingItem == null) {
                     MarketItem newItem = new MarketItem(template, amount, 0, sellerId);
@@ -824,7 +824,7 @@ public class DatabaseManager {
         }
         BigInteger total = BigInteger.ZERO;
         for (MarketItem item : getMarketItems()) {
-            if (OreBreakdown.isOreFamilyNugget(item.getItemStack())
+            if (FamilyBreakdown.isFamilySmall(item.getItemStack())
                     || DurabilityQueue.isQueueItem(plugin, item.getItemStack())) {
                 continue;
             }
@@ -842,7 +842,7 @@ public class DatabaseManager {
         }
         BigInteger total = BigInteger.ZERO;
         for (MarketItem item : getMarketItemsByOwner(sellerUuid)) {
-            if (OreBreakdown.isOreFamilyNugget(item.getItemStack())
+            if (FamilyBreakdown.isFamilySmall(item.getItemStack())
                     || DurabilityQueue.isQueueItem(plugin, item.getItemStack())) {
                 continue;
             }

@@ -7,8 +7,8 @@ import com.starhavensmpcore.market.economy.CurrencyFormatter;
 import com.starhavensmpcore.market.economy.QuantityFormatter;
 import com.starhavensmpcore.market.items.ItemDisplayNameFormatter;
 import com.starhavensmpcore.market.items.DurabilityQueue;
-import com.starhavensmpcore.market.items.OreBreakdown;
-import com.starhavensmpcore.market.items.OreFamilyList;
+import com.starhavensmpcore.market.items.FamilyBreakdown;
+import com.starhavensmpcore.market.items.FamilyList;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import org.bukkit.OfflinePlayer;
@@ -225,7 +225,7 @@ public class MarketWebServer {
     private Map<String, Aggregate> aggregate(List<MarketItem> items) {
         Map<String, Aggregate> aggregates = new LinkedHashMap<>();
         for (MarketItem item : items) {
-            if (OreBreakdown.isOreFamilyNugget(item.getItemStack())
+            if (FamilyBreakdown.isFamilySmall(item.getItemStack())
                     || DurabilityQueue.isQueueItem(plugin, item.getItemStack())) {
                 continue;
             }
@@ -331,9 +331,9 @@ public class MarketWebServer {
         private double lowestPrice = Double.MAX_VALUE;
 
         Aggregate(ItemStack stack, String itemData) {
-            OreFamilyList.OreFamily family = OreBreakdown.getFamilyForBase(stack);
-            if (family != null && family.getLabel() != null && !family.getLabel().isEmpty()) {
-                this.displayName = family.getLabel();
+            FamilyList.Family family = FamilyBreakdown.getFamilyForBase(stack);
+            if (family != null && family.getDisplayName() != null && !family.getDisplayName().isEmpty()) {
+                this.displayName = family.getDisplayName();
             } else {
                 this.displayName = ItemDisplayNameFormatter.format(stack);
             }
