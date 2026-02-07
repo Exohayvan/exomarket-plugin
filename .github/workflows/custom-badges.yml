@@ -1,8 +1,12 @@
 name: Update badges
 
 on:
+  push:
+    branches: [ main ]
+    paths-ignore:
+      - ".badges/**"
   schedule:
-    - cron: "0 */6 * * *"   # every 6 hours
+    - cron: "0 */6 * * *"
   workflow_dispatch:
 
 permissions:
@@ -10,7 +14,9 @@ permissions:
 
 jobs:
   reliability:
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
 
@@ -21,7 +27,6 @@ jobs:
           svg="$(curl -fsSL "$SVG_URL")"
           grade="$(printf '%s' "$svg" | grep -oE '<text[^>]*>[A-E]</text>' | head -n1 | sed -E 's/.*>([A-E])<.*/\1/')"
 
-          # Map grade -> color
           case "$grade" in
             A) color="brightgreen" ;;
             B) color="green" ;;
