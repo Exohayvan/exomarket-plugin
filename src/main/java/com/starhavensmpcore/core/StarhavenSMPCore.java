@@ -11,7 +11,7 @@ import com.starhavensmpcore.market.gui.GUIManager;
 import com.starhavensmpcore.market.gui.MarketItemsGUI;
 import com.starhavensmpcore.market.gui.MarketSellGUI;
 import com.starhavensmpcore.market.items.ItemSanitizer;
-import com.starhavensmpcore.market.items.OreBreakdown;
+import com.starhavensmpcore.market.items.FamilyBreakdown;
 import com.starhavensmpcore.team.TeamService;
 import com.starhavensmpcore.help.HelpMenu;
 import com.starhavensmpcore.notifier.NotifierManager;
@@ -138,7 +138,7 @@ public class StarhavenSMPCore extends JavaPlugin {
         resourcePackManager = new ResourcePackManager(this);
         customBlockRegistry = new CustomBlockRegistry();
         customItemManager = new CustomItemManager(this, customBlockRegistry);
-        OreBreakdown.setCustomItemManager(customItemManager);
+        FamilyBreakdown.setCustomItemManager(customItemManager);
         noteBlockGuard = new NoteBlockGuard(this, customBlockRegistry, customItemManager);
         oreGenerationManager = new OreGenerationManager(this, customBlockRegistry);
         waypointManager = new WaypointManager(this, customItemManager);
@@ -475,7 +475,7 @@ public class StarhavenSMPCore extends JavaPlugin {
             double totalValue = 0d;
             Set<String> uniqueItems = new HashSet<>();
             for (MarketItem item : items) {
-                if (OreBreakdown.isOreFamilyNugget(item.getItemStack())) {
+                if (FamilyBreakdown.isFamilySmall(item.getItemStack())) {
                     continue;
                 }
                 totalListings++;
@@ -494,7 +494,7 @@ public class StarhavenSMPCore extends JavaPlugin {
             double ownedValue = 0d;
             Set<String> ownedUnique = new HashSet<>();
             for (MarketItem item : owned) {
-                if (OreBreakdown.isOreFamilyNugget(item.getItemStack())) {
+                if (FamilyBreakdown.isFamilySmall(item.getItemStack())) {
                     continue;
                 }
                 ownedListings++;
@@ -555,7 +555,7 @@ public class StarhavenSMPCore extends JavaPlugin {
         databaseManager.runOnDbThread(() -> {
             Set<String> unique = new LinkedHashSet<>();
             for (MarketItem item : databaseManager.getMarketItems()) {
-                if (OreBreakdown.isOreFamilyNugget(item.getItemStack())) {
+                if (FamilyBreakdown.isFamilySmall(item.getItemStack())) {
                     continue;
                 }
                 unique.add(item.getType().toString().toLowerCase());

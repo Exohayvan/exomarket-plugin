@@ -9,8 +9,8 @@ import com.starhavensmpcore.market.economy.QuantityFormatter;
 import com.starhavensmpcore.market.items.DurabilityQueue;
 import com.starhavensmpcore.market.items.ItemDisplayNameFormatter;
 import com.starhavensmpcore.market.items.ItemSanitizer;
-import com.starhavensmpcore.market.items.OreBreakdown;
-import com.starhavensmpcore.market.items.OreFamilyList;
+import com.starhavensmpcore.market.items.FamilyBreakdown;
+import com.starhavensmpcore.market.items.FamilyList;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
@@ -38,10 +38,10 @@ public class GUIManager implements Listener {
     private Map<Player, Map<Integer, AggregatedListing>> pageItems = new HashMap<>();
     private Map<Player, String> currentFilter = new HashMap<>();
     private Map<Player, Integer> selectedEnchantLevel = new HashMap<>();
-    private Map<Player, Integer> selectedOreUnitSize = new HashMap<>();
-    private Map<Player, Integer> selectedOreOutputMultiplier = new HashMap<>();
-    private Map<Player, ItemStack> selectedOreTemplate = new HashMap<>();
-    private Map<Player, OreUnitOptions> selectedOreUnitOptions = new HashMap<>();
+    private Map<Player, Integer> selectedFamilyUnitSize = new HashMap<>();
+    private Map<Player, Integer> selectedFamilyOutputMultiplier = new HashMap<>();
+    private Map<Player, ItemStack> selectedFamilyTemplate = new HashMap<>();
+    private Map<Player, FamilyUnitOptions> selectedFamilyUnitOptions = new HashMap<>();
     private static final long QUEUED_NUGGET_CACHE_MS = 2_000L;
     private final Map<UUID, Map<String, BigInteger>> queuedNuggetCache = new ConcurrentHashMap<>();
     private final Map<UUID, Long> queuedNuggetCacheLastRefresh = new ConcurrentHashMap<>();
@@ -93,9 +93,9 @@ public class GUIManager implements Listener {
         }
 
         String getTypeName() {
-            OreFamilyList.OreFamily family = OreBreakdown.getFamilyForBase(template);
-            if (family != null && family.getLabel() != null && !family.getLabel().isEmpty()) {
-                return family.getLabel();
+            FamilyList.Family family = FamilyBreakdown.getFamilyForBase(template);
+            if (family != null && family.getDisplayName() != null && !family.getDisplayName().isEmpty()) {
+                return family.getDisplayName();
             }
             return ItemDisplayNameFormatter.format(template);
         }
@@ -136,18 +136,47 @@ public class GUIManager implements Listener {
         }
     }
 
-    private static final class OreUnitOptions {
-        private final ItemStack nugget;
+    private static final class FamilyUnitOptions {
+        private final ItemStack small;
         private final ItemStack base;
-        private final ItemStack block;
-        private final BigInteger blockRatio;
+        private final ItemStack large;
+        private final BigInteger largeRatio;
+        private final String displayName;
+        private final String smallLabel;
 
-        private OreUnitOptions(ItemStack nugget, ItemStack base, ItemStack block, BigInteger blockRatio) {
-            this.nugget = nugget;
+        private FamilyUnitOptions(ItemStack small,
+                                  ItemStack base,
+                                  ItemStack large,
+                                  BigInteger largeRatio,
+                                  String displayName,
+                                  String smallLabel) {
+            this.small = small;
             this.base = base;
-            this.block = block;
-            this.blockRatio = blockRatio;
+            this.large = large;
+            this.largeRatio = largeRatio;
+            this.displayName = displayName;
+            this.smallLabel = smallLabel;
         }
+    }
+
+    private static String resolveLabel(String value, String fallback) {
+        if (value == null) {
+            return fallback;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? fallback : trimmed;
+    }
+
+    private static String combineLabel(String displayName, String unitLabel) {
+        String name = resolveLabel(displayName, "");
+        String unit = resolveLabel(unitLabel, "");
+        if (!name.isEmpty() && !unit.isEmpty()) {
+            if (unit.toLowerCase(Locale.ROOT).contains(name.toLowerCase(Locale.ROOT))) {
+                return unit;
+            }
+            return name + " " + unit;
+        }
+        return unit.isEmpty() ? name : unit;
     }
     public GUIManager(StarhavenSMPCore plugin) {
         this.plugin = plugin;
@@ -166,10 +195,10 @@ public class GUIManager implements Listener {
             currentFilter.put(player, normalized);
         }
         selectedEnchantLevel.remove(player);
-        selectedOreUnitSize.remove(player);
-        selectedOreOutputMultiplier.remove(player);
-        selectedOreTemplate.remove(player);
-        selectedOreUnitOptions.remove(player);
+        selectedFamilyUnitSize.remove(player);
+        selectedFamilyOutputMultiplier.remove(player);
+        selectedFamilyTemplate.remove(player);
+        selectedFamilyUnitOptions.remove(player);
         openMarketPage(player);
     }
 
@@ -178,8 +207,8 @@ public class GUIManager implements Listener {
             openEnchantLevelMenu(player, listing);
             return;
         }
-        if (OreBreakdown.getFamilyForBase(listing.getTemplate()) != null) {
-            openOreUnitMenu(player, listing);
+        if (FamilyBreakdown.getFamilyForBase(listing.getTemplate()) != null) {
+            openFamilyUnitMenu(player, listing);
             return;
         }
 
@@ -211,115 +240,137 @@ public class GUIManager implements Listener {
 
         selectedMarketItem.put(player, listing);
         selectedEnchantLevel.remove(player);
-        selectedOreUnitSize.remove(player);
-        selectedOreOutputMultiplier.remove(player);
-        selectedOreTemplate.remove(player);
-        selectedOreUnitOptions.remove(player);
+        selectedFamilyUnitSize.remove(player);
+        selectedFamilyOutputMultiplier.remove(player);
+        selectedFamilyTemplate.remove(player);
+        selectedFamilyUnitOptions.remove(player);
         if (unitSize.compareTo(BigInteger.ONE) > 0 || outputMultiplier != 1 || unitTemplate.getType() != listing.getTemplate().getType()) {
-            selectedOreUnitSize.put(player, unitSize.intValue());
-            selectedOreOutputMultiplier.put(player, outputMultiplier);
+            selectedFamilyUnitSize.put(player, unitSize.intValue());
+            selectedFamilyOutputMultiplier.put(player, outputMultiplier);
             ItemStack template = unitTemplate.clone();
             template.setAmount(1);
-            selectedOreTemplate.put(player, template);
+            selectedFamilyTemplate.put(player, template);
         }
         player.openInventory(inventory);
     }
 
-    private void openOreUnitMenu(Player player, AggregatedListing listing) {
+    private void openFamilyUnitMenu(Player player, AggregatedListing listing) {
         Inventory inventory = Bukkit.createInventory(null, 9, "Select Unit");
-        selectedOreUnitOptions.remove(player);
+        selectedFamilyUnitOptions.remove(player);
 
-        OreFamilyList.OreFamily family = OreBreakdown.getFamilyForBase(listing.getTemplate());
+        FamilyList.Family family = FamilyBreakdown.getFamilyForBase(listing.getTemplate());
         if (family != null) {
-            populateOreFamilyUnitMenu(inventory, player, listing, family);
+            populateFamilyUnitMenu(inventory, player, listing, family);
         }
 
         selectedMarketItem.put(player, listing);
         selectedEnchantLevel.remove(player);
-        selectedOreUnitSize.remove(player);
-        selectedOreOutputMultiplier.remove(player);
-        selectedOreTemplate.remove(player);
+        selectedFamilyUnitSize.remove(player);
+        selectedFamilyOutputMultiplier.remove(player);
+        selectedFamilyTemplate.remove(player);
         player.openInventory(inventory);
     }
 
     private void populateIngotUnitMenu(Inventory inventory,
                                        Player player,
                                        AggregatedListing listing,
-                                       ItemStack nuggetItem,
-                                       ItemStack ingotItem,
-                                       ItemStack blockItem,
-                                       BigInteger nuggetRatio,
-                                       BigInteger blockRatio,
-                                       String label) {
-        BigInteger availableIngots = listing.getTotalQuantity();
-        ItemStack nuggetInfo = createNuggetInfoItem(player, nuggetItem, nuggetRatio, label);
-        if (nuggetInfo != null) {
-            inventory.setItem(2, nuggetInfo);
+                                       ItemStack smallItem,
+                                       ItemStack baseItem,
+                                       ItemStack largeItem,
+                                       BigInteger smallRatio,
+                                       BigInteger largeRatio,
+                                       String displayName,
+                                       String baseLabel,
+                                       String smallLabel,
+                                       String largeLabel) {
+        BigInteger availableBase = listing.getTotalQuantity();
+        ItemStack smallInfo = createSmallInfoItem(player, smallItem, smallRatio, displayName, baseLabel, smallLabel);
+        if (smallInfo != null) {
+            inventory.setItem(2, smallInfo);
         }
 
-        ItemStack ingotOption = createOreUnitItem(
-                ingotItem,
-                "Buy " + label + " Ingots",
-                availableIngots,
+        String baseName = combineLabel(displayName, baseLabel);
+        ItemStack baseOption = createOreUnitItem(
+                baseItem,
+                "Buy " + baseName,
+                availableBase,
                 listing.getPricePerItem());
-        inventory.setItem(4, ingotOption);
+        inventory.setItem(4, baseOption);
 
-        if (blockItem != null && availableIngots.compareTo(blockRatio) >= 0) {
-            BigInteger availableBlocks = availableIngots.divide(blockRatio);
-            ItemStack blockOption = createOreUnitItem(
-                    blockItem,
-                    "Buy " + label + " Blocks",
-                    availableBlocks,
-                    listing.getPricePerItem() * blockRatio.doubleValue());
-            inventory.setItem(6, blockOption);
+        if (largeItem != null && largeRatio != null && largeRatio.signum() > 0 && availableBase.compareTo(largeRatio) >= 0) {
+            BigInteger availableLarge = availableBase.divide(largeRatio);
+            String largeName = combineLabel(displayName, largeLabel);
+            ItemStack largeOption = createOreUnitItem(
+                    largeItem,
+                    "Buy " + largeName,
+                    availableLarge,
+                    listing.getPricePerItem() * largeRatio.doubleValue());
+            inventory.setItem(6, largeOption);
         }
     }
 
-    private void populateOreFamilyUnitMenu(Inventory inventory,
-                                           Player player,
-                                           AggregatedListing listing,
-                                           OreFamilyList.OreFamily family) {
+    private void populateFamilyUnitMenu(Inventory inventory,
+                                        Player player,
+                                        AggregatedListing listing,
+                                        FamilyList.Family family) {
         ItemStack baseItem = listing.getTemplate();
         baseItem.setAmount(1);
-        ItemStack nuggetItem = OreBreakdown.createItemFromId(family.getNuggetId());
-        ItemStack blockItem = OreBreakdown.createItemFromId(family.getBlockId());
+        ItemStack smallItem = FamilyBreakdown.createItemFromId(family.getSmallId());
+        ItemStack largeItem = FamilyBreakdown.createItemFromId(family.getLargeId());
+        String displayName = resolveLabel(family.getDisplayName(), ItemDisplayNameFormatter.format(baseItem));
+        String baseLabel = resolveLabel(family.getBaseLabel(), "Items");
+        String smallLabel = resolveLabel(family.getSmallLabel(), "Small");
+        String largeLabel = resolveLabel(family.getLargeLabel(), "Large");
 
-        selectedOreUnitOptions.put(player, new OreUnitOptions(nuggetItem, baseItem, blockItem, family.getBlockRatio()));
+        selectedFamilyUnitOptions.put(player, new FamilyUnitOptions(
+                smallItem,
+                baseItem,
+                largeItem,
+                family.getLargeRatio(),
+                displayName,
+                smallLabel));
 
         populateIngotUnitMenu(
                 inventory,
                 player,
                 listing,
-                nuggetItem,
+                smallItem,
                 baseItem,
-                blockItem,
-                family.getNuggetRatio(),
-                family.getBlockRatio(),
-                family.getLabel());
+                largeItem,
+                family.getSmallRatio(),
+                family.getLargeRatio(),
+                displayName,
+                baseLabel,
+                smallLabel,
+                largeLabel);
     }
 
-
-    private ItemStack createNuggetInfoItem(Player player, ItemStack nuggetItem, BigInteger ratio, String label) {
-        if (nuggetItem == null) {
+    private ItemStack createSmallInfoItem(Player player,
+                                          ItemStack smallItem,
+                                          BigInteger ratio,
+                                          String displayName,
+                                          String baseLabel,
+                                          String smallLabel) {
+        if (smallItem == null || ratio == null || ratio.signum() <= 0) {
             return null;
         }
 
-        ItemStack item = nuggetItem.clone();
+        ItemStack item = smallItem.clone();
         item.setAmount(1);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            BigInteger queued = getQueuedNuggets(player, nuggetItem);
+            BigInteger queued = getQueuedNuggets(player, smallItem);
             BigInteger remainder = queued.remainder(ratio);
             BigInteger needed = remainder.signum() == 0 ? BigInteger.ZERO : ratio.subtract(remainder);
-            meta.setDisplayName(ChatColor.YELLOW + "Queued " + label + " Nuggets");
+            meta.setDisplayName(ChatColor.YELLOW + "Queued " + combineLabel(displayName, smallLabel));
             List<String> lore = new ArrayList<>();
             lore.add(ChatColor.GRAY + "Queued: " + QuantityFormatter.format(queued));
             if (queued.signum() == 0) {
-                lore.add(ChatColor.GRAY + "Need: " + ratio + " to convert 1 ingot");
+                lore.add(ChatColor.GRAY + "Need: " + ratio + " to convert 1 " + resolveLabel(baseLabel, "base item"));
             } else if (needed.signum() == 0) {
                 lore.add(ChatColor.GREEN + "Ready to convert on next recalculation");
             } else {
-                lore.add(ChatColor.GRAY + "Need: " + QuantityFormatter.format(needed) + " more to convert 1 ingot");
+                lore.add(ChatColor.GRAY + "Need: " + QuantityFormatter.format(needed) + " more to convert 1 " + resolveLabel(baseLabel, "base item"));
             }
             lore.add(ChatColor.DARK_GRAY + "Not for sale");
             meta.setLore(lore);
@@ -480,10 +531,10 @@ public class GUIManager implements Listener {
         }
         selectedMarketItem.remove(player);
         selectedEnchantLevel.remove(player);
-        selectedOreUnitSize.remove(player);
-        selectedOreOutputMultiplier.remove(player);
-        selectedOreTemplate.remove(player);
-        selectedOreUnitOptions.remove(player);
+        selectedFamilyUnitSize.remove(player);
+        selectedFamilyOutputMultiplier.remove(player);
+        selectedFamilyTemplate.remove(player);
+        selectedFamilyUnitOptions.remove(player);
         String filter = currentFilter.get(player);
         int requestedPage = currentPage.getOrDefault(player, 1);
         DatabaseManager databaseManager = plugin.getDatabaseManager();
@@ -562,11 +613,12 @@ public class GUIManager implements Listener {
             if (listing == null) {
                 continue;
             }
-            OreFamilyList.OreFamily family = OreBreakdown.getFamilyForBlock(listing.getItemStack());
+            FamilyList.Family family = FamilyBreakdown.getFamilyForLarge(listing.getItemStack());
             if (family != null && family.getId().toLowerCase(Locale.ROOT).startsWith("raw_")) {
-                ItemStack baseItem = OreBreakdown.createItemFromId(family.getBaseId());
-                if (baseItem != null) {
-                    normalized.add(convertRawBlockListing(listing, baseItem, family.getBlockRatio()));
+                ItemStack baseItem = FamilyBreakdown.createItemFromId(family.getBaseId());
+                BigInteger ratio = family.getLargeRatio();
+                if (baseItem != null && ratio != null && ratio.signum() > 0) {
+                    normalized.add(convertRawBlockListing(listing, baseItem, ratio));
                     continue;
                 }
             }
@@ -634,7 +686,7 @@ public class GUIManager implements Listener {
     }
 
     private boolean shouldHideFromMarket(MarketItem listing) {
-        return listing != null && (OreBreakdown.isOreFamilyNugget(listing.getItemStack())
+        return listing != null && (FamilyBreakdown.isFamilySmall(listing.getItemStack())
                 || DurabilityQueue.isQueueItem(plugin, listing.getItemStack()));
     }
 
@@ -764,18 +816,19 @@ public class GUIManager implements Listener {
                 if (selected == null) {
                     return;
                 }
-                OreUnitOptions options = selectedOreUnitOptions.get(player);
+                FamilyUnitOptions options = selectedFamilyUnitOptions.get(player);
                 if (options != null) {
-                    if (options.nugget != null && matchesTemplate(clickedItem, options.nugget)) {
-                        player.sendMessage(ChatColor.GRAY + "Nuggets are queued and not for sale.");
+                    if (options.small != null && matchesTemplate(clickedItem, options.small)) {
+                        String label = combineLabel(options.displayName, options.smallLabel);
+                        player.sendMessage(ChatColor.GRAY + label + " are queued and not for sale.");
                         return;
                     }
                     if (options.base != null && matchesTemplate(clickedItem, options.base)) {
                         openQuantityMenu(player, selected, options.base, BigInteger.ONE, 1);
                         return;
                     }
-                    if (options.block != null && options.blockRatio != null && matchesTemplate(clickedItem, options.block)) {
-                        openQuantityMenu(player, selected, options.block, options.blockRatio, 1);
+                    if (options.large != null && options.largeRatio != null && matchesTemplate(clickedItem, options.large)) {
+                        openQuantityMenu(player, selected, options.large, options.largeRatio, 1);
                         return;
                     }
                 }
@@ -794,9 +847,9 @@ public class GUIManager implements Listener {
                     if (enchantLevel != null && isEnchantedBookListing(selected)) {
                         plugin.getMarketManager().buyEnchantedBookLevel(player, selected.getItemData(), selected.getTemplate(), enchantLevel, quantity);
                     } else {
-                        Integer unitSize = selectedOreUnitSize.remove(player);
-                        Integer outputMultiplier = selectedOreOutputMultiplier.remove(player);
-                        ItemStack unitTemplate = selectedOreTemplate.remove(player);
+                        Integer unitSize = selectedFamilyUnitSize.remove(player);
+                        Integer outputMultiplier = selectedFamilyOutputMultiplier.remove(player);
+                        ItemStack unitTemplate = selectedFamilyTemplate.remove(player);
                         if (unitSize != null && outputMultiplier != null && unitTemplate != null) {
                             int baseQuantity = outputMultiplier == 0 ? quantity : quantity / outputMultiplier;
                             if (baseQuantity <= 0) {

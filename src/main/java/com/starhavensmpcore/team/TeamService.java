@@ -4,7 +4,7 @@ import com.starhavensmpcore.core.StarhavenSMPCore;
 import com.starhavensmpcore.market.MarketItem;
 import com.starhavensmpcore.market.db.DatabaseManager;
 import com.starhavensmpcore.market.economy.EconomyManager;
-import com.starhavensmpcore.market.items.OreBreakdown;
+import com.starhavensmpcore.market.items.FamilyBreakdown;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.Server;
 import org.bukkit.entity.Player;
@@ -131,7 +131,7 @@ public class TeamService {
     }
 
     private boolean isHiddenListing(ItemStack stack) {
-        return OreBreakdown.isOreFamilyNugget(stack);
+        return FamilyBreakdown.isFamilySmall(stack);
     }
 
     private void ensureInitialized() {

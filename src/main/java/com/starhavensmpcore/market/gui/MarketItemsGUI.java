@@ -8,6 +8,8 @@ import com.starhavensmpcore.market.db.DatabaseManager;
 import com.starhavensmpcore.market.economy.CurrencyFormatter;
 import com.starhavensmpcore.market.economy.QuantityFormatter;
 import com.starhavensmpcore.market.items.DurabilityQueue;
+import com.starhavensmpcore.market.items.FamilyBreakdown;
+import com.starhavensmpcore.market.items.FamilyList;
 import com.starhavensmpcore.market.items.ItemDisplayNameFormatter;
 import com.starhavensmpcore.market.items.ItemSanitizer;
 import org.bukkit.Bukkit;
@@ -34,6 +36,7 @@ public class MarketItemsGUI implements Listener {
 
     private static final String LIST_TITLE_PREFIX = "Your Market Listings";
     private static final String REMOVE_TITLE = "Remove Amount";
+    private static final String REMOVE_UNIT_TITLE = "Remove Unit";
     private static final String REMOVE_LEVEL_TITLE = "Remove Enchant Level";
 
     private final StarhavenSMPCore plugin;
@@ -41,9 +44,26 @@ public class MarketItemsGUI implements Listener {
     private final DatabaseManager databaseManager;
     private final Map<UUID, MarketItem> selectedItem = new HashMap<>();
     private final Map<UUID, Integer> selectedEnchantLevel = new HashMap<>();
+    private final Map<UUID, BigInteger> selectedRemoveUnitSize = new HashMap<>();
+    private final Map<UUID, ItemStack> selectedRemoveUnitTemplate = new HashMap<>();
+    private final Map<UUID, RemoveUnitOptions> selectedRemoveUnitOptions = new HashMap<>();
     private final Map<UUID, Integer> currentPage = new HashMap<>();
     private final Map<UUID, Map<Integer, MarketItem>> pageItems = new HashMap<>();
     private final Map<UUID, String> currentFilter = new HashMap<>();
+
+    private static final class RemoveUnitOptions {
+        private final ItemStack base;
+        private final ItemStack large;
+        private final BigInteger largeRatio;
+
+        private RemoveUnitOptions(ItemStack base,
+                                  ItemStack large,
+                                  BigInteger largeRatio) {
+            this.base = base;
+            this.large = large;
+            this.largeRatio = largeRatio;
+        }
+    }
 
     public MarketItemsGUI(StarhavenSMPCore plugin, MarketManager marketManager, DatabaseManager databaseManager) {
         this.plugin = plugin;
@@ -68,6 +88,9 @@ public class MarketItemsGUI implements Listener {
     private void openListings(Player player, int requestedPage) {
         selectedItem.remove(player.getUniqueId());
         selectedEnchantLevel.remove(player.getUniqueId());
+        selectedRemoveUnitSize.remove(player.getUniqueId());
+        selectedRemoveUnitTemplate.remove(player.getUniqueId());
+        selectedRemoveUnitOptions.remove(player.getUniqueId());
         UUID playerId = player.getUniqueId();
         String filter = currentFilter.get(playerId);
         databaseManager.runOnDbThread(() -> {
@@ -190,6 +213,11 @@ public class MarketItemsGUI implements Listener {
     }
 
     private void openRemoveAmountMenu(Player player, MarketItem listing) {
+        openRemoveAmountMenu(player, listing, listing.getItemStack(), BigInteger.ONE);
+    }
+
+    private void openRemoveAmountMenu(Player player, MarketItem listing, ItemStack unitTemplate, BigInteger unitSize) {
+        BigInteger safeUnitSize = unitSize == null || unitSize.signum() <= 0 ? BigInteger.ONE : unitSize;
         Inventory inventory = Bukkit.createInventory(null, 9, REMOVE_TITLE);
         List<Integer> amounts = new ArrayList<>();
         amounts.add(1);
@@ -199,8 +227,11 @@ public class MarketItemsGUI implements Listener {
         amounts.add(16);
         amounts.add(32);
         amounts.add(64);
+        amounts.add(128);
+        amounts.add(256);
 
-        amounts.removeIf(amount -> listing.getQuantity().compareTo(BigInteger.valueOf(amount)) < 0);
+        BigInteger availableUnits = listing.getQuantity().divide(safeUnitSize);
+        amounts.removeIf(amount -> availableUnits.compareTo(BigInteger.valueOf(amount)) < 0);
 
         for (int i = 0; i < amounts.size() && i < 9; i++) {
             int quantity = amounts.get(i);
@@ -213,6 +244,41 @@ public class MarketItemsGUI implements Listener {
 
         selectedItem.put(player.getUniqueId(), listing);
         selectedEnchantLevel.remove(player.getUniqueId());
+        selectedRemoveUnitSize.put(player.getUniqueId(), safeUnitSize);
+        selectedRemoveUnitTemplate.put(player.getUniqueId(), unitTemplate == null ? listing.getItemStack() : unitTemplate);
+        player.openInventory(inventory);
+    }
+
+    private void openRemoveUnitMenu(Player player, MarketItem listing, FamilyList.Family family) {
+        if (player == null || listing == null || family == null) {
+            return;
+        }
+
+        Inventory inventory = Bukkit.createInventory(null, 9, REMOVE_UNIT_TITLE);
+        ItemStack baseItem = listing.getItemStack().clone();
+        baseItem.setAmount(1);
+        ItemStack largeItem = FamilyBreakdown.createItemFromId(family.getLargeId());
+        String displayName = resolveLabel(family.getDisplayName(), ItemDisplayNameFormatter.format(baseItem));
+        String baseLabel = resolveLabel(family.getBaseLabel(), "Items");
+        String largeLabel = resolveLabel(family.getLargeLabel(), "Large");
+
+        ItemStack baseOption = createRemoveUnitItem(baseItem, "Remove " + combineLabel(displayName, baseLabel));
+        inventory.setItem(4, baseOption);
+
+        if (family.hasLarge() && largeItem != null && family.getLargeRatio() != null && family.getLargeRatio().signum() > 0
+                && listing.getQuantity().compareTo(family.getLargeRatio()) >= 0) {
+            ItemStack largeOption = createRemoveUnitItem(largeItem, "Remove " + combineLabel(displayName, largeLabel));
+            inventory.setItem(6, largeOption);
+        }
+
+        selectedItem.put(player.getUniqueId(), listing);
+        selectedEnchantLevel.remove(player.getUniqueId());
+        selectedRemoveUnitOptions.put(player.getUniqueId(), new RemoveUnitOptions(
+                baseItem,
+                largeItem,
+                family.getLargeRatio()));
+        selectedRemoveUnitSize.remove(player.getUniqueId());
+        selectedRemoveUnitTemplate.remove(player.getUniqueId());
         player.openInventory(inventory);
     }
 
@@ -262,8 +328,38 @@ public class MarketItemsGUI implements Listener {
                 if (listing.getType() == Material.ENCHANTED_BOOK) {
                     openRemoveEnchantLevelMenu(player, listing);
                 } else {
-                    openRemoveAmountMenu(player, listing);
+                    FamilyList.Family family = FamilyBreakdown.getFamilyForBase(listing.getItemStack());
+                    if (family != null && family.hasLarge() && family.getLargeRatio() != null
+                            && listing.getQuantity().compareTo(family.getLargeRatio()) >= 0) {
+                        openRemoveUnitMenu(player, listing, family);
+                    } else {
+                        openRemoveAmountMenu(player, listing);
+                    }
                 }
+            }
+        } else if (title.equals(REMOVE_UNIT_TITLE)) {
+            event.setCancelled(true);
+            ItemStack clicked = event.getCurrentItem();
+            if (clicked == null || clicked.getType().isAir()) {
+                return;
+            }
+
+            MarketItem listing = selectedItem.get(player.getUniqueId());
+            RemoveUnitOptions options = selectedRemoveUnitOptions.get(player.getUniqueId());
+            if (listing == null || options == null) {
+                player.closeInventory();
+                return;
+            }
+
+            selectedRemoveUnitOptions.remove(player.getUniqueId());
+            if (options.base != null && matchesTemplate(clicked, options.base)) {
+                openRemoveAmountMenu(player, listing, options.base, BigInteger.ONE);
+                return;
+            }
+
+            if (options.large != null && options.largeRatio != null && options.largeRatio.signum() > 0
+                    && matchesTemplate(clicked, options.large)) {
+                openRemoveAmountMenu(player, listing, options.large, options.largeRatio);
             }
         } else if (title.equals(REMOVE_TITLE)) {
             event.setCancelled(true);
@@ -303,7 +399,13 @@ public class MarketItemsGUI implements Listener {
             if (enchantLevel != null && listing.getType() == Material.ENCHANTED_BOOK) {
                 removeEnchantedBookQuantity(player, listing, enchantLevel, quantity);
             } else {
-                removeListingQuantity(player, listing, quantity);
+                BigInteger unitSize = selectedRemoveUnitSize.remove(player.getUniqueId());
+                ItemStack unitTemplate = selectedRemoveUnitTemplate.remove(player.getUniqueId());
+                if (unitSize != null && unitTemplate != null) {
+                    removeListingQuantity(player, listing, quantity, unitTemplate, unitSize);
+                } else {
+                    removeListingQuantity(player, listing, quantity);
+                }
             }
             player.closeInventory();
             Bukkit.getScheduler().runTask(plugin, () -> openListings(player, currentPage.getOrDefault(player.getUniqueId(), 1)));
@@ -378,16 +480,22 @@ public class MarketItemsGUI implements Listener {
     }
 
     private void removeListingQuantity(Player player, MarketItem listing, int quantity) {
+        removeListingQuantity(player, listing, quantity, listing.getItemStack(), BigInteger.ONE);
+    }
+
+    private void removeListingQuantity(Player player, MarketItem listing, int quantity, ItemStack unitTemplate, BigInteger unitSize) {
         if (DurabilityQueue.isQueueItem(plugin, listing.getItemStack())) {
             removeQueuedDurability(player, listing);
             return;
         }
-        if (listing.getQuantity().compareTo(BigInteger.valueOf(quantity)) < 0) {
+        BigInteger safeUnitSize = unitSize == null || unitSize.signum() <= 0 ? BigInteger.ONE : unitSize;
+        BigInteger removeUnits = BigInteger.valueOf(quantity).multiply(safeUnitSize);
+        if (listing.getQuantity().compareTo(removeUnits) < 0) {
             player.sendMessage(ChatColor.RED + "You do not have that many items listed.");
             return;
         }
 
-        listing.setQuantity(listing.getQuantity().subtract(BigInteger.valueOf(quantity)));
+        listing.setQuantity(listing.getQuantity().subtract(removeUnits));
         databaseManager.runOnDbThread(() -> {
             if (listing.getQuantity().signum() <= 0) {
                 databaseManager.removeMarketItem(listing);
@@ -396,12 +504,12 @@ public class MarketItemsGUI implements Listener {
             }
         });
 
-        ItemStack item = listing.getItemStack();
+        ItemStack item = unitTemplate == null ? listing.getItemStack() : unitTemplate.clone();
         item.setAmount(quantity);
         Map<Integer, ItemStack> leftovers = player.getInventory().addItem(item);
         leftovers.values().forEach(leftover -> player.getWorld().dropItemNaturally(player.getLocation(), leftover));
 
-        player.sendMessage(ChatColor.GREEN + "Removed " + quantity + " " + listing.getType().toString() + " from your listings.");
+        player.sendMessage(ChatColor.GREEN + "Removed " + quantity + " " + item.getType().toString() + " from your listings.");
         marketManager.recalculatePrices();
         selectedItem.remove(player.getUniqueId());
     }
@@ -573,6 +681,49 @@ public class MarketItemsGUI implements Listener {
             lore.add(ChatColor.GRAY + "Use the arrows to navigate pages");
             lore.add(ChatColor.GRAY + "Removing does not cost money");
             meta.setLore(lore);
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
+
+    private static String resolveLabel(String value, String fallback) {
+        if (value == null) {
+            return fallback;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? fallback : trimmed;
+    }
+
+    private static String combineLabel(String displayName, String unitLabel) {
+        String name = resolveLabel(displayName, "");
+        String unit = resolveLabel(unitLabel, "");
+        if (!name.isEmpty() && !unit.isEmpty()) {
+            if (unit.toLowerCase(Locale.ROOT).contains(name.toLowerCase(Locale.ROOT))) {
+                return unit;
+            }
+            return name + " " + unit;
+        }
+        return unit.isEmpty() ? name : unit;
+    }
+
+    private boolean matchesTemplate(ItemStack item, ItemStack template) {
+        if (item == null || template == null) {
+            return false;
+        }
+        String itemId = plugin.getCustomItemManager().getCustomItemId(item);
+        String templateId = plugin.getCustomItemManager().getCustomItemId(template);
+        if (itemId != null || templateId != null) {
+            return itemId != null && templateId != null && itemId.equalsIgnoreCase(templateId);
+        }
+        return item.getType() == template.getType();
+    }
+
+    private ItemStack createRemoveUnitItem(ItemStack template, String name) {
+        ItemStack item = template == null ? new ItemStack(Material.PAPER) : template.clone();
+        item.setAmount(1);
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.setDisplayName(ChatColor.GOLD + name);
             item.setItemMeta(meta);
         }
         return item;

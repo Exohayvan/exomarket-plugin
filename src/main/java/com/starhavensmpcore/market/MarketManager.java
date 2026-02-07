@@ -8,8 +8,8 @@ import com.starhavensmpcore.market.items.DurabilityQueue;
 import com.starhavensmpcore.market.items.EnchantedBookSplitter;
 import com.starhavensmpcore.market.items.ItemDisplayNameFormatter;
 import com.starhavensmpcore.market.items.ItemSanitizer;
-import com.starhavensmpcore.market.items.OreBreakdown;
-import com.starhavensmpcore.market.items.OreFamilyList;
+import com.starhavensmpcore.market.items.FamilyBreakdown;
+import com.starhavensmpcore.market.items.FamilyList;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
@@ -112,9 +112,9 @@ public class MarketManager {
 
         boolean listedAny = false;
         for (EnchantedBookSplitter.SplitEntry entry : entries) {
-            List<OreBreakdown.SplitEntry> oreEntries = OreBreakdown.split(entry.getItemStack(), entry.getQuantity());
-            for (OreBreakdown.SplitEntry oreEntry : oreEntries) {
-                BigInteger amount = oreEntry.getQuantity();
+            List<FamilyBreakdown.SplitEntry> familyEntries = FamilyBreakdown.split(entry.getItemStack(), entry.getQuantity());
+            for (FamilyBreakdown.SplitEntry familyEntry : familyEntries) {
+                BigInteger amount = familyEntry.getQuantity();
                 if (amount.signum() <= 0) {
                     continue;
                 }
@@ -123,16 +123,16 @@ public class MarketManager {
                         plugin,
                         databaseManager,
                         player.getUniqueId().toString(),
-                        oreEntry.getItemStack(),
+                        familyEntry.getItemStack(),
                         amount
                 );
                 if (durabilityResult.isQueued()) {
                     listedAny = true;
-                    sendDurabilityQueueMessage(player, oreEntry.getItemStack(), durabilityResult);
+                    sendDurabilityQueueMessage(player, familyEntry.getItemStack(), durabilityResult);
                     continue;
                 }
 
-                ItemStack template = ItemSanitizer.sanitize(oreEntry.getItemStack());
+                ItemStack template = ItemSanitizer.sanitize(familyEntry.getItemStack());
                 MarketItem existingItem = databaseManager.getMarketItem(template, player.getUniqueId().toString());
 
                 if (existingItem == null) {
@@ -463,7 +463,7 @@ public class MarketManager {
         BigInteger total = BigInteger.ZERO;
         List<MarketItem> items = databaseManager.getMarketItems();
         for (MarketItem item : items) {
-            if (OreBreakdown.isOreFamilyNugget(item.getItemStack())
+            if (FamilyBreakdown.isFamilySmall(item.getItemStack())
                     || DurabilityQueue.isQueueItem(plugin, item.getItemStack())) {
                 continue;
             }
@@ -475,17 +475,17 @@ public class MarketManager {
     private boolean hasDirtyListingData() {
         List<MarketItem> items = databaseManager.getMarketItems();
         Map<String, BigInteger> nuggetTotals = new HashMap<>();
-        Map<String, OreFamilyList.OreFamily> nuggetFamilies = new HashMap<>();
+        Map<String, FamilyList.Family> nuggetFamilies = new HashMap<>();
         for (MarketItem listing : items) {
             if (listing.getType() != Material.ENCHANTED_BOOK && !listing.getItemStack().getEnchantments().isEmpty()) {
                 return true;
             }
             if (listing.getType() == Material.DIAMOND_BLOCK
-                    || OreBreakdown.isOreFamilyBlock(listing.getItemStack())) {
+                    || FamilyBreakdown.isFamilyLarge(listing.getItemStack())) {
                 return true;
             }
-            OreFamilyList.OreFamily family = OreBreakdown.getFamilyForNugget(listing.getItemStack());
-            if (family != null) {
+            FamilyList.Family family = FamilyBreakdown.getFamilyForSmall(listing.getItemStack());
+            if (family != null && family.hasSmall()) {
                 String key = listing.getSellerUUID() + "|" + family.getId();
                 nuggetTotals.merge(key, listing.getQuantity().max(BigInteger.ZERO), BigInteger::add);
                 nuggetFamilies.put(key, family);
@@ -497,8 +497,8 @@ public class MarketManager {
             }
         }
         for (Map.Entry<String, BigInteger> entry : nuggetTotals.entrySet()) {
-            OreFamilyList.OreFamily family = nuggetFamilies.get(entry.getKey());
-            if (family != null && entry.getValue().compareTo(family.getNuggetRatio()) >= 0) {
+            FamilyList.Family family = nuggetFamilies.get(entry.getKey());
+            if (family != null && family.hasSmall() && entry.getValue().compareTo(family.getSmallRatio()) >= 0) {
                 return true;
             }
         }
@@ -562,7 +562,7 @@ public class MarketManager {
 
     private RecalculationSnapshot prepareRecalculationSnapshot(RecalculationTiming timing) {
         List<MarketItem> marketItems = databaseManager.getMarketItems();
-        marketItems = normalizeOreListings(marketItems);
+        marketItems = normalizeFamilyListings(marketItems);
         marketItems = normalizeNuggetListings(marketItems);
         marketItems = normalizeEnchantedItemListings(marketItems);
         marketItems = normalizeEnchantedBookListings(marketItems);
@@ -1102,7 +1102,7 @@ public class MarketManager {
         return marketItems;
     }
 
-    private List<MarketItem> normalizeOreListings(List<MarketItem> marketItems) {
+    private List<MarketItem> normalizeFamilyListings(List<MarketItem> marketItems) {
         boolean changed = false;
         for (MarketItem listing : marketItems) {
             if (listing.getType() == Material.DIAMOND_BLOCK) {
@@ -1113,11 +1113,11 @@ public class MarketManager {
                     continue;
                 }
 
-                BigInteger diamonds = quantity.multiply(OreBreakdown.DIAMOND_BLOCK_RATIO);
+                BigInteger diamonds = quantity.multiply(FamilyBreakdown.DIAMOND_BLOCK_RATIO);
                 String sellerUuid = listing.getSellerUUID();
                 ItemStack diamondStack = new ItemStack(Material.DIAMOND);
                 MarketItem existing = databaseManager.getMarketItem(diamondStack, sellerUuid);
-                double pricePerDiamond = listing.getPrice() / OreBreakdown.DIAMOND_BLOCK_RATIO.doubleValue();
+                double pricePerDiamond = listing.getPrice() / FamilyBreakdown.DIAMOND_BLOCK_RATIO.doubleValue();
                 if (existing == null) {
                     MarketItem newItem = new MarketItem(diamondStack, diamonds, pricePerDiamond, sellerUuid);
                     databaseManager.addMarketItem(newItem);
@@ -1130,7 +1130,7 @@ public class MarketManager {
                 continue;
             }
 
-            OreFamilyList.OreFamily familyBlock = OreBreakdown.getFamilyForBlock(listing.getItemStack());
+            FamilyList.Family familyBlock = FamilyBreakdown.getFamilyForLarge(listing.getItemStack());
             if (familyBlock != null) {
                 changed = true;
                 BigInteger quantity = listing.getQuantity();
@@ -1139,15 +1139,20 @@ public class MarketManager {
                     continue;
                 }
 
-                BigInteger ingots = quantity.multiply(familyBlock.getBlockRatio());
+                BigInteger ratio = familyBlock.getLargeRatio();
+                if (ratio == null || ratio.signum() <= 0) {
+                    continue;
+                }
+
+                BigInteger ingots = quantity.multiply(ratio);
                 String sellerUuid = listing.getSellerUUID();
-                ItemStack ingotStack = OreBreakdown.createItemFromId(familyBlock.getBaseId());
+                ItemStack ingotStack = FamilyBreakdown.createItemFromId(familyBlock.getBaseId());
                 if (ingotStack == null) {
                     databaseManager.removeMarketItem(listing);
                     continue;
                 }
                 MarketItem existing = databaseManager.getMarketItem(ingotStack, sellerUuid);
-                double pricePerIngot = listing.getPrice() / familyBlock.getBlockRatio().doubleValue();
+                double pricePerIngot = listing.getPrice() / ratio.doubleValue();
                 if (existing == null) {
                     MarketItem newItem = new MarketItem(ingotStack, ingots, pricePerIngot, sellerUuid);
                     databaseManager.addMarketItem(newItem);
@@ -1168,11 +1173,11 @@ public class MarketManager {
                     continue;
                 }
 
-                BigInteger rawIron = quantity.multiply(OreBreakdown.RAW_IRON_BLOCK_RATIO);
+                BigInteger rawIron = quantity.multiply(FamilyBreakdown.RAW_IRON_BLOCK_RATIO);
                 String sellerUuid = listing.getSellerUUID();
                 ItemStack rawStack = new ItemStack(Material.RAW_IRON);
                 MarketItem existing = databaseManager.getMarketItem(rawStack, sellerUuid);
-                double pricePerRaw = listing.getPrice() / OreBreakdown.RAW_IRON_BLOCK_RATIO.doubleValue();
+                double pricePerRaw = listing.getPrice() / FamilyBreakdown.RAW_IRON_BLOCK_RATIO.doubleValue();
                 if (existing == null) {
                     MarketItem newItem = new MarketItem(rawStack, rawIron, pricePerRaw, sellerUuid);
                     databaseManager.addMarketItem(newItem);
@@ -1193,11 +1198,11 @@ public class MarketManager {
                     continue;
                 }
 
-                BigInteger rawGold = quantity.multiply(OreBreakdown.RAW_GOLD_BLOCK_RATIO);
+                BigInteger rawGold = quantity.multiply(FamilyBreakdown.RAW_GOLD_BLOCK_RATIO);
                 String sellerUuid = listing.getSellerUUID();
                 ItemStack rawStack = new ItemStack(Material.RAW_GOLD);
                 MarketItem existing = databaseManager.getMarketItem(rawStack, sellerUuid);
-                double pricePerRaw = listing.getPrice() / OreBreakdown.RAW_GOLD_BLOCK_RATIO.doubleValue();
+                double pricePerRaw = listing.getPrice() / FamilyBreakdown.RAW_GOLD_BLOCK_RATIO.doubleValue();
                 if (existing == null) {
                     MarketItem newItem = new MarketItem(rawStack, rawGold, pricePerRaw, sellerUuid);
                     databaseManager.addMarketItem(newItem);
@@ -1218,11 +1223,11 @@ public class MarketManager {
                     continue;
                 }
 
-                BigInteger rawCopper = quantity.multiply(OreBreakdown.RAW_COPPER_BLOCK_RATIO);
+                BigInteger rawCopper = quantity.multiply(FamilyBreakdown.RAW_COPPER_BLOCK_RATIO);
                 String sellerUuid = listing.getSellerUUID();
                 ItemStack rawStack = new ItemStack(Material.RAW_COPPER);
                 MarketItem existing = databaseManager.getMarketItem(rawStack, sellerUuid);
-                double pricePerRaw = listing.getPrice() / OreBreakdown.RAW_COPPER_BLOCK_RATIO.doubleValue();
+                double pricePerRaw = listing.getPrice() / FamilyBreakdown.RAW_COPPER_BLOCK_RATIO.doubleValue();
                 if (existing == null) {
                     MarketItem newItem = new MarketItem(rawStack, rawCopper, pricePerRaw, sellerUuid);
                     databaseManager.addMarketItem(newItem);
@@ -1243,7 +1248,10 @@ public class MarketManager {
 
     private List<MarketItem> normalizeNuggetListings(List<MarketItem> marketItems) {
         boolean changed = false;
-        for (OreFamilyList.OreFamily family : OreFamilyList.getFamilies()) {
+        for (FamilyList.Family family : FamilyList.getFamilies()) {
+            if (!family.hasSmall()) {
+                continue;
+            }
             changed |= normalizeNuggetListingsFor(marketItems, family);
         }
 
@@ -1253,10 +1261,13 @@ public class MarketManager {
         return marketItems;
     }
 
-    private boolean normalizeNuggetListingsFor(List<MarketItem> marketItems, OreFamilyList.OreFamily family) {
+    private boolean normalizeNuggetListingsFor(List<MarketItem> marketItems, FamilyList.Family family) {
+        if (family == null || !family.hasSmall()) {
+            return false;
+        }
         Map<String, List<MarketItem>> bySeller = new HashMap<>();
         for (MarketItem listing : marketItems) {
-            OreFamilyList.OreFamily listingFamily = OreBreakdown.getFamilyForNugget(listing.getItemStack());
+            FamilyList.Family listingFamily = FamilyBreakdown.getFamilyForSmall(listing.getItemStack());
             if (listingFamily == null || !listingFamily.getId().equalsIgnoreCase(family.getId())) {
                 continue;
             }
@@ -1276,7 +1287,7 @@ public class MarketManager {
                 totalNuggets = totalNuggets.add(listing.getQuantity().max(BigInteger.ZERO));
             }
 
-            BigInteger ratio = family.getNuggetRatio();
+            BigInteger ratio = family.getSmallRatio();
             BigInteger ingots = totalNuggets.divide(ratio);
             BigInteger remainder = totalNuggets.remainder(ratio);
 
@@ -1290,7 +1301,7 @@ public class MarketManager {
             }
 
             if (remainder.signum() > 0) {
-                ItemStack nuggetStack = OreBreakdown.createItemFromId(family.getNuggetId());
+                ItemStack nuggetStack = FamilyBreakdown.createItemFromId(family.getSmallId());
                 if (nuggetStack != null) {
                     MarketItem remainderItem = new MarketItem(nuggetStack, remainder, 0, sellerUuid);
                     databaseManager.addMarketItem(remainderItem);
@@ -1298,7 +1309,7 @@ public class MarketManager {
             }
 
             if (ingots.signum() > 0) {
-                ItemStack ingotStack = OreBreakdown.createItemFromId(family.getBaseId());
+                ItemStack ingotStack = FamilyBreakdown.createItemFromId(family.getBaseId());
                 if (ingotStack == null) {
                     continue;
                 }
@@ -1319,7 +1330,7 @@ public class MarketManager {
     private List<MarketItem> filterHiddenListings(List<MarketItem> marketItems) {
         List<MarketItem> visible = new ArrayList<>();
         for (MarketItem listing : marketItems) {
-            if (OreBreakdown.isOreFamilyNugget(listing.getItemStack())
+            if (FamilyBreakdown.isFamilySmall(listing.getItemStack())
                     || DurabilityQueue.isQueueItem(plugin, listing.getItemStack())) {
                 continue;
             }

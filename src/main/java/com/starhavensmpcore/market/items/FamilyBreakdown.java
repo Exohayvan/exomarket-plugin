@@ -8,8 +8,9 @@ import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
-public final class OreBreakdown {
+public final class FamilyBreakdown {
     public static final BigInteger DIAMOND_BLOCK_RATIO = BigInteger.valueOf(9);
     public static final BigInteger RAW_IRON_BLOCK_RATIO = BigInteger.valueOf(9);
     public static final BigInteger RAW_GOLD_BLOCK_RATIO = BigInteger.valueOf(9);
@@ -17,7 +18,7 @@ public final class OreBreakdown {
 
     private static CustomItemManager customItemManager;
 
-    private OreBreakdown() {
+    private FamilyBreakdown() {
     }
 
     public static void setCustomItemManager(CustomItemManager manager) {
@@ -35,16 +36,19 @@ public final class OreBreakdown {
             return entries;
         }
 
-        OreFamilyList.OreFamily family = getFamilyForBlock(stack);
+        FamilyList.Family family = getFamilyForLarge(stack);
         if (family != null) {
-            BigInteger ingots = safeAmount.multiply(family.getBlockRatio());
-            if (ingots.signum() > 0) {
-                ItemStack base = createItemFromId(family.getBaseId());
-                if (base != null) {
-                    entries.add(new SplitEntry(base, ingots));
+            BigInteger ratio = family.getLargeRatio();
+            if (ratio != null && ratio.signum() > 0) {
+                BigInteger baseUnits = safeAmount.multiply(ratio);
+                if (baseUnits.signum() > 0) {
+                    ItemStack base = createItemFromId(family.getBaseId());
+                    if (base != null) {
+                        entries.add(new SplitEntry(base, baseUnits));
+                    }
                 }
+                return entries;
             }
-            return entries;
         }
 
         entries.add(new SplitEntry(cloneSingle(stack), safeAmount));
@@ -56,15 +60,15 @@ public final class OreBreakdown {
     }
 
     public static boolean isIronIngotListing(ItemStack stack) {
-        return isBaseOfFamily(stack, "iron");
+        return isBaseOfFamily(stack, "iron_ingot");
     }
 
     public static boolean isCopperIngotListing(ItemStack stack) {
-        return isBaseOfFamily(stack, "copper");
+        return isBaseOfFamily(stack, "copper_ingot");
     }
 
     public static boolean isGoldIngotListing(ItemStack stack) {
-        return isBaseOfFamily(stack, "gold");
+        return isBaseOfFamily(stack, "gold_ingot");
     }
 
     public static boolean isRawIronListing(ItemStack stack) {
@@ -79,29 +83,31 @@ public final class OreBreakdown {
         return stack != null && stack.getType() == Material.RAW_COPPER;
     }
 
-    public static BigInteger getNuggetRatio(ItemStack stack) {
-        OreFamilyList.OreFamily family = getFamilyForNugget(stack);
-        return family == null ? null : family.getNuggetRatio();
+    public static BigInteger getSmallRatio(ItemStack stack) {
+        FamilyList.Family family = getFamilyForSmall(stack);
+        return family == null ? null : family.getSmallRatio();
     }
 
-    public static boolean isOreFamilyNugget(ItemStack stack) {
-        return getFamilyForNugget(stack) != null;
+    public static boolean isFamilySmall(ItemStack stack) {
+        return getFamilyForSmall(stack) != null;
     }
 
-    public static boolean isOreFamilyBlock(ItemStack stack) {
-        return getFamilyForBlock(stack) != null;
+    public static boolean isFamilyLarge(ItemStack stack) {
+        return getFamilyForLarge(stack) != null;
     }
 
-    public static OreFamilyList.OreFamily getFamilyForBase(ItemStack stack) {
-        return getFamilyForRole(stack, OreFamilyRole.BASE);
+    public static FamilyList.Family getFamilyForBase(ItemStack stack) {
+        return getFamilyForRole(stack, FamilyRole.BASE);
     }
 
-    public static OreFamilyList.OreFamily getFamilyForNugget(ItemStack stack) {
-        return getFamilyForRole(stack, OreFamilyRole.NUGGET);
+    public static FamilyList.Family getFamilyForSmall(ItemStack stack) {
+        FamilyList.Family family = getFamilyForRole(stack, FamilyRole.SMALL);
+        return family != null && family.hasSmall() ? family : null;
     }
 
-    public static OreFamilyList.OreFamily getFamilyForBlock(ItemStack stack) {
-        return getFamilyForRole(stack, OreFamilyRole.BLOCK);
+    public static FamilyList.Family getFamilyForLarge(ItemStack stack) {
+        FamilyList.Family family = getFamilyForRole(stack, FamilyRole.LARGE);
+        return family != null && family.hasLarge() ? family : null;
     }
 
     public static ItemStack createItemFromId(String id) {
@@ -125,7 +131,7 @@ public final class OreBreakdown {
     }
 
     public static boolean isBaseOfFamily(ItemStack stack, String familyId) {
-        OreFamilyList.OreFamily family = getFamilyForBase(stack);
+        FamilyList.Family family = getFamilyForBase(stack);
         return family != null && family.getId().equalsIgnoreCase(familyId);
     }
 
@@ -137,13 +143,13 @@ public final class OreBreakdown {
                 || matchesId(a, materialId(b)) || matchesId(b, materialId(a));
     }
 
-    private static OreFamilyList.OreFamily getFamilyForRole(ItemStack stack, OreFamilyRole role) {
+    private static FamilyList.Family getFamilyForRole(ItemStack stack, FamilyRole role) {
         if (stack == null) {
             return null;
         }
-        for (OreFamilyList.OreFamily family : OreFamilyList.getFamilies()) {
-            String id = role == OreFamilyRole.NUGGET ? family.getNuggetId()
-                    : role == OreFamilyRole.BLOCK ? family.getBlockId()
+        for (FamilyList.Family family : FamilyList.getFamilies()) {
+            String id = role == FamilyRole.SMALL ? family.getSmallId()
+                    : role == FamilyRole.LARGE ? family.getLargeId()
                     : family.getBaseId();
             if (id == null || id.isEmpty()) {
                 continue;
@@ -161,7 +167,7 @@ public final class OreBreakdown {
         }
         String customId = getCustomId(stack);
         if (customId != null) {
-            return customId.equalsIgnoreCase(id);
+            return normalizeId(customId).equalsIgnoreCase(normalizeId(id));
         }
         String normalized = normalizeId(id);
         String materialName = stack.getType().name();
@@ -173,10 +179,16 @@ public final class OreBreakdown {
     }
 
     private static String getCustomId(ItemStack stack) {
-        if (customItemManager == null || stack == null) {
+        if (stack == null) {
             return null;
         }
-        return customItemManager.getCustomItemId(stack);
+        if (customItemManager != null) {
+            String id = customItemManager.getCustomItemId(stack);
+            if (id != null && !id.isEmpty()) {
+                return id;
+            }
+        }
+        return getCustomIdFromSerialized(stack);
     }
 
     private static String normalizeId(String id) {
@@ -188,10 +200,50 @@ public final class OreBreakdown {
         return trimmed.toUpperCase(Locale.ROOT);
     }
 
-    private enum OreFamilyRole {
-        NUGGET,
+    private static String getCustomIdFromSerialized(ItemStack stack) {
+        Map<String, Object> serialized = stack.serialize();
+        Object metaObj = serialized.get("meta");
+        if (!(metaObj instanceof Map)) {
+            return null;
+        }
+        @SuppressWarnings("unchecked")
+        Map<String, Object> metaMap = (Map<String, Object>) metaObj;
+        String id = getCustomIdFromContainer(metaMap.get("PublicBukkitValues"));
+        if (id != null) {
+            return id;
+        }
+        id = getCustomIdFromContainer(metaMap.get("PersistentDataContainer"));
+        if (id != null) {
+            return id;
+        }
+        return getCustomIdFromContainer(metaMap.get("persistentDataContainer"));
+    }
+
+    private static String getCustomIdFromContainer(Object containerObj) {
+        if (!(containerObj instanceof Map)) {
+            return null;
+        }
+        @SuppressWarnings("unchecked")
+        Map<String, Object> container = (Map<String, Object>) containerObj;
+        for (Map.Entry<String, Object> entry : container.entrySet()) {
+            String key = entry.getKey();
+            if (key == null) {
+                continue;
+            }
+            if (key.toLowerCase(Locale.ROOT).endsWith(":custom_item")) {
+                Object value = entry.getValue();
+                if (value instanceof String) {
+                    return (String) value;
+                }
+            }
+        }
+        return null;
+    }
+
+    private enum FamilyRole {
+        SMALL,
         BASE,
-        BLOCK
+        LARGE
     }
 
     private static ItemStack cloneSingle(ItemStack stack) {
