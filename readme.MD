@@ -1,6 +1,6 @@
 # StarhavenSMP Core
 ![Files](https://img.shields.io/badge/dynamic/regex.svg?style=for-the-badge&label=Files&url=https%3A%2F%2Fapi.codetabs.com%2Fv1%2Floc%3Fgithub%3DExoHayvan%2FStarhavenSMP-Core&search=%22language%22%5Cs*%3A%5Cs*%22Total%22.*%3F%22files%22%5Cs*%3A%5Cs*(%5Cd%2B)&replace=%241&flags=s&cacheSeconds=300)
-https://img.shields.io/badge/dynamic/regex.svg?style=for-the-badge&label=LINES%20OF%20CODE&url=https%3A%2F%2Fapi.codetabs.com%2Fv1%2Floc%3Fgithub%3DExoHayvan%2FStarhavenSMP-Core&search=%22language%22%5Cs*%3A%5Cs*%22Total%22.*%3F%22linesOfCode%22%5Cs*%3A%5Cs*(%5Cd%2B)&replace=%241&flags=s&cacheSeconds=300
+![Lines of Code](https://img.shields.io/badge/dynamic/regex.svg?style=for-the-badge&label=LINES%20OF%20CODE&url=https%3A%2F%2Fapi.codetabs.com%2Fv1%2Floc%3Fgithub%3DExoHayvan%2FStarhavenSMP-Core&search=%22language%22%5Cs*%3A%5Cs*%22Total%22.*%3F%22linesOfCode%22%5Cs*%3A%5Cs*(%5Cd%2B)&replace=%241&flags=s&cacheSeconds=300)
 ![GitHub repo size](https://img.shields.io/github/repo-size/ExoHayvan/StarhavenSMP-Core?style=for-the-badge)
 ![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/ExoHayvan/StarhavenSMP-Core/total?style=for-the-badge)
 ![Codacy grade](https://img.shields.io/codacy/grade/faa450001a6643fdbe37a4488a4414bc?style=for-the-badge)
