@@ -12,19 +12,25 @@ on:
 permissions:
   contents: write
 
-# Prevent two runs racing and fighting over commits
 concurrency:
   group: badges-main
   cancel-in-progress: false
 
 jobs:
-  reliability_badge:
+  badges:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
 
-      - name: Generate reliability badge JSON
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Ensure .badges folder
+        run: |
+          set -euo pipefail
+          mkdir -p .badges
+
+      - name: SonarCloud - Reliability (reliability_rating)
         run: |
           set -euo pipefail
           project="Exohayvan_StarhavenSMP-Core"
@@ -43,26 +49,10 @@ jobs:
             *) color="lightgrey" ;;
           esac
 
-          mkdir -p .badges
-          printf '{"schemaVersion":1,"label":"RELIABILITY","message":"%s","color":"%s"}\n' "$grade" "$color" > .badges/reliability.json
+          printf '{"schemaVersion":1,"label":"RELIABILITY","message":"%s","color":"%s"}\n' "$grade" "$color" \
+            > .badges/reliability.json
 
-      - name: Commit & push if changed
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add .badges/reliability.json
-          git diff --cached --quiet && exit 0
-          git commit -m "chore: update reliability badge"
-          git push
-
-  maintainability_badge:
-    if: github.actor != 'github-actions[bot]'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Generate maintainability badge JSON
+      - name: SonarCloud - Maintainability (sqale_rating)
         run: |
           set -euo pipefail
           project="Exohayvan_StarhavenSMP-Core"
@@ -81,40 +71,18 @@ jobs:
             *) color="lightgrey" ;;
           esac
 
-          mkdir -p .badges
-          printf '{"schemaVersion":1,"label":"MAINTAINABILITY","message":"%s","color":"%s"}\n' "$grade" "$color" > .badges/maintainability.json
+          printf '{"schemaVersion":1,"label":"MAINTAINABILITY","message":"%s","color":"%s"}\n' "$grade" "$color" \
+            > .badges/maintainability.json
 
-      - name: Commit & push if changed
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add .badges/maintainability.json
-          git diff --cached --quiet && exit 0
-          git commit -m "chore: update maintainability badge"
-          git push
-
-  vulnerabilities_badge:
-    if: github.actor != 'github-actions[bot]'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Generate vulnerabilities badge JSON
+      - name: SonarCloud - Vulnerabilities (vulnerabilities)
         run: |
           set -euo pipefail
           project="Exohayvan_StarhavenSMP-Core"
           url="https://sonarcloud.io/api/project_badges/measure?project=${project}&metric=vulnerabilities"
           svg="$(curl -fsSL "$url")"
 
-          # Prefer: number after label, fallback: first integer <text>
-          count="$(printf '%s' "$svg" | tr '\n' ' ' \
-            | sed -E 's/.*vulnerabilities<\/text>[[:space:]]*<text[^>]*>vulnerabilities<\/text>[[:space:]]*<text[^>]*>[0-9]+<\/text>[[:space:]]*<text[^>]*>([0-9]+)<\/text>.*/\1/' \
-            | grep -E '^[0-9]+$' || true)"
-
-          if [ -z "${count:-}" ]; then
-            count="$(printf '%s' "$svg" | grep -oE '<text[^>]*>[0-9]+</text>' | head -n1 | sed -E 's/.*>([0-9]+)<.*/\1/' || true)"
-          fi
+          # Try to pull the number robustly
+          count="$(printf '%s' "$svg" | grep -oE '<text[^>]*>[0-9]+</text>' | head -n1 | sed -E 's/.*>([0-9]+)<.*/\1/' || true)"
           [ -n "${count:-}" ] || count="?"
 
           if [ "$count" = "?" ]; then
@@ -127,39 +95,17 @@ jobs:
             color="red"
           fi
 
-          mkdir -p .badges
-          printf '{"schemaVersion":1,"label":"VULNERABILITIES","message":"%s","color":"%s"}\n' "$count" "$color" > .badges/vulnerabilities.json
+          printf '{"schemaVersion":1,"label":"VULNERABILITIES","message":"%s","color":"%s"}\n' "$count" "$color" \
+            > .badges/vulnerabilities.json
 
-      - name: Commit & push if changed
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add .badges/vulnerabilities.json
-          git diff --cached --quiet && exit 0
-          git commit -m "chore: update vulnerabilities badge"
-          git push
-
-  duplicated_lines_badge:
-    if: github.actor != 'github-actions[bot]'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Generate duplicated lines badge JSON
+      - name: SonarCloud - Duplicated Lines (duplicated_lines_density)
         run: |
           set -euo pipefail
           project="Exohayvan_StarhavenSMP-Core"
           url="https://sonarcloud.io/api/project_badges/measure?project=${project}&metric=duplicated_lines_density"
           svg="$(curl -fsSL "$url")"
 
-          pct="$(printf '%s' "$svg" | tr '\n' ' ' \
-            | sed -E 's/.*duplicated lines<\/text>[[:space:]]*<text[^>]*>duplicated lines<\/text>[[:space:]]*<text[^>]*>[0-9.]+%<\/text>[[:space:]]*<text[^>]*>([0-9.]+%)<\/text>.*/\1/' \
-            | grep -E '^[0-9]+(\.[0-9]+)?%$' || true)"
-
-          if [ -z "${pct:-}" ]; then
-            pct="$(printf '%s' "$svg" | grep -oE '<text[^>]*>[0-9]+(\.[0-9]+)?%</text>' | head -n1 | sed -E 's/.*>([0-9]+(\.[0-9]+)?%)<.*/\1/' || true)"
-          fi
+          pct="$(printf '%s' "$svg" | grep -oE '<text[^>]*>[0-9]+(\.[0-9]+)?%</text>' | head -n1 | sed -E 's/.*>([0-9]+(\.[0-9]+)?%)<.*/\1/' || true)"
 
           if [ -z "${pct:-}" ]; then
             pct="?"
@@ -176,55 +122,37 @@ jobs:
             esac
           fi
 
-          mkdir -p .badges
-          printf '{"schemaVersion":1,"label":"DUPLICATED LINES","message":"%s","color":"%s"}\n' "$pct" "$color" > .badges/duplicated_lines.json
+          printf '{"schemaVersion":1,"label":"DUPLICATED LINES","message":"%s","color":"%s"}\n' "$pct" "$color" \
+            > .badges/duplicated_lines.json
 
-      - name: Commit & push if changed
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add .badges/duplicated_lines.json
-          git diff --cached --quiet && exit 0
-          git commit -m "chore: update duplicated lines badge"
-          git push
-
-  codetabs_totals_badge:
-    if: github.actor != 'github-actions[bot]'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Generate CodeTabs totals badges JSON (files + LoC)
+      - name: CodeTabs - Totals (Total files + Total linesOfCode)
         run: |
           set -euo pipefail
           api="https://api.codetabs.com/v1/loc/?github=ExoHayvan/StarhavenSMP-Core"
-          json="$(curl -fsSL "$api")"
+          json="$(curl -fsSL "$api" | tr '\n' ' ')"
 
-          # Pull the "Total" object. Avoid jq dependency by using a safe-ish regex.
-          total_block="$(printf '%s' "$json" | tr '\n' ' ' | sed -E 's/.*\{[[:space:]]*"language"[[:space:]]*:[[:space:]]*"Total"[^}]*\}.*/\0/' )"
+          # Grab the Total object chunk, then extract numbers
+          total_chunk="$(printf '%s' "$json" | grep -oE '\{[^}]*"language"[[:space:]]*:[[:space:]]*"Total"[^}]*\}' | head -n1 || true)"
 
-          # Extract totals using regex (works with CodeTabs' stable keys)
-          files="$(printf '%s' "$json" | tr '\n' ' ' | grep -oE '"language"[[:space:]]*:[[:space:]]*"Total"[^}]*' | head -n1 | grep -oE '"files"[[:space:]]*:[[:space:]]*[0-9]+' | head -n1 | grep -oE '[0-9]+' || true)"
-          loc="$(printf '%s' "$json"   | tr '\n' ' ' | grep -oE '"language"[[:space:]]*:[[:space:]]*"Total"[^}]*' | head -n1 | grep -oE '"linesOfCode"[[:space:]]*:[[:space:]]*[0-9]+' | head -n1 | grep -oE '[0-9]+' || true)"
+          files="$(printf '%s' "$total_chunk" | grep -oE '"files"[[:space:]]*:[[:space:]]*[0-9]+' | head -n1 | grep -oE '[0-9]+' || true)"
+          loc="$(printf '%s' "$total_chunk"   | grep -oE '"linesOfCode"[[:space:]]*:[[:space:]]*[0-9]+' | head -n1 | grep -oE '[0-9]+' || true)"
 
           [ -n "${files:-}" ] || files="?"
           [ -n "${loc:-}" ] || loc="?"
 
-          # Simple colors (tweak if you want)
-          files_color="blue"
-          loc_color="blue"
+          printf '{"schemaVersion":1,"label":"FILES","message":"%s","color":"blue"}\n' "$files" \
+            > .badges/files.json
+          printf '{"schemaVersion":1,"label":"LINES OF CODE","message":"%s","color":"blue"}\n' "$loc" \
+            > .badges/lines_of_code.json
 
-          mkdir -p .badges
-          printf '{"schemaVersion":1,"label":"FILES","message":"%s","color":"%s"}\n' "$files" "$files_color" > .badges/files.json
-          printf '{"schemaVersion":1,"label":"LINES OF CODE","message":"%s","color":"%s"}\n' "$loc" "$loc_color" > .badges/lines_of_code.json
-
-      - name: Commit & push if changed
+      - name: Commit & push badges (only if changed)
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add .badges/files.json .badges/lines_of_code.json
+
+          git add .badges/*.json
           git diff --cached --quiet && exit 0
-          git commit -m "chore: update codetabs totals badges"
+
+          git commit -m "chore: update badges"
           git push
