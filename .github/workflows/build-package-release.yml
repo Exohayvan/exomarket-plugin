@@ -92,7 +92,7 @@ jobs:
           else
             last_tag="${{ steps.last_release.outputs.last_tag }}"
             echo "Getting commits since $last_tag"
-            commit_log=$(git log $last_tag..HEAD --pretty=format:"- %s" | grep -Ev '^- (Bump to|Update)')
+            commit_log=$(git log $last_tag..HEAD --pretty=format:"- %s" | grep -Ev '^- (Bump to|Update|chore:)')
             # Handle multi-line output
             echo "commit_log<<EOF" >> $GITHUB_OUTPUT
             echo "$commit_log" >> $GITHUB_OUTPUT
