@@ -5,6 +5,7 @@ import be.seeseemelk.mockbukkit.ServerMock;
 import be.seeseemelk.mockbukkit.entity.PlayerMock;
 import com.starhavensmpcore.market.db.DatabaseManager;
 import com.starhavensmpcore.market.items.ItemSanitizer;
+import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.command.Command;
 import org.bukkit.event.inventory.ClickType;
@@ -15,7 +16,6 @@ import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryView;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.meta.Damageable;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.junit.After;
 import org.junit.Before;
@@ -23,6 +23,7 @@ import org.junit.Test;
 
 import java.io.File;
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
@@ -30,6 +31,7 @@ import java.util.UUID;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
@@ -38,7 +40,7 @@ public class AutoSellManagerTest {
     private ServerMock server;
     private StarhavenSMPCoreTestPlugin plugin;
     private TrackingDatabaseManager trackingDatabaseManager;
-    private AutoSellManager autoSellManager;
+    private TestAutoSellManager autoSellManager;
 
     @Before
     public void setUp() throws Exception {
@@ -71,6 +73,17 @@ public class AutoSellManagerTest {
     }
 
     @Test
+    public void countMatchingItemsIgnoresNullAndNonMatching() {
+        ItemStack[] contents = new ItemStack[] {
+                null,
+                new ItemStack(Material.DIAMOND, 2),
+                new ItemStack(Material.DIRT, 1)
+        };
+
+        assertEquals(2, AutoSellManager.countMatchingItems(contents, new ItemStack(Material.DIAMOND, 1)));
+    }
+
+    @Test
     public void removeMatchingItemsRemovesAcrossStacks() {
         ItemStack diamondTwo = new ItemStack(Material.DIAMOND, 2);
         ItemStack diamondThree = new ItemStack(Material.DIAMOND, 3);
@@ -93,9 +106,23 @@ public class AutoSellManagerTest {
         autoSellManager.onCommand(player, mockCommand(), "autosell", new String[0]);
 
         Inventory top = getInventoryMap().get(player.getUniqueId());
-        assertEquals(Material.BARRIER, top.getItem(48).getType());
-        assertEquals(Material.BARRIER, top.getItem(50).getType());
-        assertEquals(Material.PAPER, top.getItem(49).getType());
+        ItemStack previous = top.getItem(48);
+        ItemStack next = top.getItem(50);
+        ItemStack info = top.getItem(49);
+
+        assertEquals(Material.BARRIER, previous.getType());
+        assertEquals(Material.BARRIER, next.getType());
+        assertEquals(Material.PAPER, info.getType());
+
+        assertNotNull(previous.getItemMeta());
+        assertEquals(ChatColor.RED + "No Previous Page", previous.getItemMeta().getDisplayName());
+        assertNotNull(next.getItemMeta());
+        assertEquals(ChatColor.RED + "No Next Page", next.getItemMeta().getDisplayName());
+
+        assertNotNull(info.getItemMeta());
+        assertEquals(ChatColor.GOLD + "AutoSell Info", info.getItemMeta().getDisplayName());
+        assertNotNull(info.getItemMeta().getLore());
+        assertEquals(2, info.getItemMeta().getLore().size());
     }
 
     @Test
@@ -131,6 +158,29 @@ public class AutoSellManagerTest {
         autoSellManager.onInventoryClick(clickAgain);
 
         items = AutoSellManager.access$0(autoSellManager, player.getUniqueId());
+        assertTrue(items.isEmpty());
+    }
+
+    @Test
+    public void clickDamagedItemDoesNotAdd() throws Exception {
+        PlayerMock player = server.addPlayer();
+        autoSellManager.onCommand(player, mockCommand(), "autosell", new String[0]);
+
+        Inventory top = getInventoryMap().get(player.getUniqueId());
+        ItemStack dirt = new ItemStack(Material.DIRT, 1);
+        top.setItem(0, dirt);
+
+        InventoryView view = new TestInventoryView(player, top, "AutoSell Inventory");
+        InventoryClickEvent click = new InventoryClickEvent(
+                view,
+                InventoryType.SlotType.CONTAINER,
+                0,
+                ClickType.LEFT,
+                InventoryAction.PICKUP_ALL
+        );
+        autoSellManager.onInventoryClick(click);
+
+        List<ItemStack> items = AutoSellManager.access$0(autoSellManager, player.getUniqueId());
         assertTrue(items.isEmpty());
     }
 
@@ -181,6 +231,32 @@ public class AutoSellManagerTest {
     }
 
     @Test
+    public void autoSellTaskUsesDisplayNameWhenRemovingDamaged() throws Exception {
+        PlayerMock player = server.addPlayer();
+        UUID playerId = player.getUniqueId();
+
+        ItemStack damaged = new ItemStack(Material.DIRT, 1);
+        ItemMeta meta = damaged.getItemMeta();
+        meta.setDisplayName(ChatColor.AQUA + "Cracked Dirt");
+        damaged.setItemMeta(meta);
+
+        insertAutoSellRow(playerId, damaged);
+
+        autoSellManager.runAutoSellTick();
+
+        List<ItemStack> items = AutoSellManager.access$0(autoSellManager, playerId);
+        assertTrue(items.isEmpty());
+    }
+
+    @Test
+    public void autoSellTaskSkipsPlayersWithNoEntries() {
+        PlayerMock player = server.addPlayer();
+        autoSellManager.runAutoSellTick();
+        assertTrue(trackingDatabaseManager.sellCalls.isEmpty());
+        assertNotNull(player);
+    }
+
+    @Test
     public void autoSellTaskSellsAndRemovesInventoryItems() throws Exception {
         PlayerMock player = server.addPlayer();
         UUID playerId = player.getUniqueId();
@@ -198,6 +274,149 @@ public class AutoSellManagerTest {
         assertEquals(playerId, call.playerId);
         assertEquals(Material.DIAMOND, call.item.getType());
         assertEquals(5, call.quantity);
+    }
+
+    @Test
+    public void autoSellTaskUsesDisplayNameWhenAutoSelling() throws Exception {
+        PlayerMock player = server.addPlayer();
+        UUID playerId = player.getUniqueId();
+        ItemStack diamond = new ItemStack(Material.DIAMOND, 2);
+        ItemMeta meta = diamond.getItemMeta();
+        meta.setDisplayName(ChatColor.AQUA + "Shiny Diamond");
+        diamond.setItemMeta(meta);
+        player.getInventory().addItem(diamond);
+
+        ItemStack template = new ItemStack(Material.DIAMOND, 1);
+        ItemMeta templateMeta = template.getItemMeta();
+        templateMeta.setDisplayName(ChatColor.AQUA + "Shiny Diamond");
+        template.setItemMeta(templateMeta);
+        insertAutoSellRow(playerId, template);
+
+        autoSellManager.runAutoSellTick();
+
+        assertEquals(0, AutoSellManager.countMatchingItems(player.getInventory().getContents(), template));
+        assertEquals(1, trackingDatabaseManager.sellCalls.size());
+    }
+
+    @Test
+    public void scheduledTaskInvokesRunAutoSellTick() {
+        int before = autoSellManager.getRunCount();
+        server.getScheduler().performTicks(21);
+        assertTrue(autoSellManager.getRunCount() > before);
+    }
+
+    @Test
+    public void updateAutoSellInventorySchedulesRender() throws Exception {
+        PlayerMock player = server.addPlayer();
+        autoSellManager.onCommand(player, mockCommand(), "autosell", new String[0]);
+
+        Method update = AutoSellManager.class.getDeclaredMethod("updateAutoSellInventory", UUID.class);
+        update.setAccessible(true);
+        update.invoke(autoSellManager, player.getUniqueId());
+        server.getScheduler().performOneTick();
+
+        assertTrue(getInventoryMap().containsKey(player.getUniqueId()));
+    }
+
+    @Test
+    public void countMatchingItemsReturnsZeroForInvalidInputs() {
+        ItemStack template = new ItemStack(Material.DIAMOND, 1);
+        assertEquals(0, AutoSellManager.countMatchingItems(null, template, ItemSanitizer::matches));
+        assertEquals(0, AutoSellManager.countMatchingItems(new ItemStack[0], null, ItemSanitizer::matches));
+        assertEquals(0, AutoSellManager.countMatchingItems(new ItemStack[0], template, null));
+    }
+
+    @Test
+    public void removeMatchingItemsNoOpOnInvalidInputs() {
+        ItemStack[] contents = new ItemStack[] { new ItemStack(Material.DIAMOND, 1) };
+        AutoSellManager.removeMatchingItems(null, new ItemStack(Material.DIAMOND, 1), 1, ItemSanitizer::matches);
+        AutoSellManager.removeMatchingItems(contents, null, 1, ItemSanitizer::matches);
+        AutoSellManager.removeMatchingItems(contents, new ItemStack(Material.DIAMOND, 1), 0, ItemSanitizer::matches);
+        AutoSellManager.removeMatchingItems(contents, new ItemStack(Material.DIAMOND, 1), 1, null);
+        assertEquals(1, contents[0].getAmount());
+    }
+
+    @Test
+    public void removeMatchingItemsStopsAfterSatisfyingAmount() {
+        ItemStack[] contents = new ItemStack[] {
+                new ItemStack(Material.DIAMOND, 3),
+                new ItemStack(Material.DIAMOND, 2)
+        };
+
+        AutoSellManager.removeMatchingItems(contents, new ItemStack(Material.DIAMOND, 1), 2);
+
+        assertEquals(1, contents[0].getAmount());
+        assertEquals(2, contents[1].getAmount());
+    }
+
+    @Test
+    public void removeAutoSellItemFallsBackToMatchAndDeletesRow() throws Exception {
+        PlayerMock player = server.addPlayer();
+        UUID playerId = player.getUniqueId();
+
+        ItemStack dirt = new ItemStack(Material.DIRT, 1);
+        String serialized = ItemSanitizer.serializeToString(dirt);
+        String mutated = serialized.replace(",", ", ").replace(":", ": ");
+
+        insertAutoSellRowRaw(playerId, mutated);
+
+        invokeRemoveAutoSellItem(playerId, dirt);
+
+        List<ItemStack> items = AutoSellManager.access$0(autoSellManager, playerId);
+        assertTrue(items.isEmpty());
+    }
+
+    @Test
+    public void removeAutoSellItemByMatchHandlesNull() throws Exception {
+        Method method = AutoSellManager.class.getDeclaredMethod("removeAutoSellItemByMatch", UUID.class, ItemStack.class);
+        method.setAccessible(true);
+        method.invoke(autoSellManager, UUID.randomUUID(), null);
+    }
+
+    @Test
+    public void removeAutoSellItemByMatchHandlesSqlException() throws Exception {
+        closeAutoSellConnection();
+        Method method = AutoSellManager.class.getDeclaredMethod("removeAutoSellItemByMatch", UUID.class, ItemStack.class);
+        method.setAccessible(true);
+        method.invoke(autoSellManager, UUID.randomUUID(), new ItemStack(Material.DIRT, 1));
+    }
+
+    @Test
+    public void inventoryClickHandlesSqlException() throws Exception {
+        PlayerMock player = server.addPlayer();
+        autoSellManager.onCommand(player, mockCommand(), "autosell", new String[0]);
+
+        closeAutoSellConnection();
+        Inventory top = getInventoryMap().get(player.getUniqueId());
+        top.setItem(0, new ItemStack(Material.DIAMOND, 1));
+
+        InventoryView view = new TestInventoryView(player, top, "AutoSell Inventory");
+        InventoryClickEvent click = new InventoryClickEvent(
+                view,
+                InventoryType.SlotType.CONTAINER,
+                0,
+                ClickType.LEFT,
+                InventoryAction.PICKUP_ALL
+        );
+        autoSellManager.onInventoryClick(click);
+    }
+
+    @Test
+    public void getAutoSellItemsHandlesSqlException() throws Exception {
+        PlayerMock player = server.addPlayer();
+        UUID playerId = player.getUniqueId();
+        closeAutoSellConnection();
+
+        List<ItemStack> items = AutoSellManager.access$0(autoSellManager, playerId);
+        assertTrue(items.isEmpty());
+    }
+
+    @Test
+    public void normalizeStoredItemsHandlesSqlException() throws Exception {
+        closeAutoSellConnection();
+        Method method = AutoSellManager.class.getDeclaredMethod("normalizeStoredItems");
+        method.setAccessible(true);
+        method.invoke(autoSellManager);
     }
 
     private void ensureAutoSellDbDir() throws Exception {
@@ -224,15 +443,35 @@ public class AutoSellManagerTest {
 
     private void insertAutoSellRow(UUID playerId, ItemStack item) throws Exception {
         String serialized = ItemSanitizer.serializeToString(item);
-        Field connectionField = AutoSellManager.class.getDeclaredField("connection");
-        connectionField.setAccessible(true);
-        java.sql.Connection connection = (java.sql.Connection) connectionField.get(autoSellManager);
+        java.sql.Connection connection = getConnection();
         try (java.sql.PreparedStatement stmt = connection.prepareStatement(
                 "INSERT INTO autosell_items (uuid, item) VALUES (?, ?)")) {
             stmt.setString(1, playerId.toString());
             stmt.setString(2, serialized);
             stmt.executeUpdate();
         }
+    }
+
+    private void insertAutoSellRowRaw(UUID playerId, String serialized) throws Exception {
+        java.sql.Connection connection = getConnection();
+        try (java.sql.PreparedStatement stmt = connection.prepareStatement(
+                "INSERT INTO autosell_items (uuid, item) VALUES (?, ?)")) {
+            stmt.setString(1, playerId.toString());
+            stmt.setString(2, serialized);
+            stmt.executeUpdate();
+        }
+    }
+
+    private void invokeRemoveAutoSellItem(UUID playerId, ItemStack item) throws Exception {
+        Method method = AutoSellManager.class.getDeclaredMethod("removeAutoSellItem", UUID.class, ItemStack.class);
+        method.setAccessible(true);
+        method.invoke(autoSellManager, playerId, item);
+    }
+
+    private java.sql.Connection getConnection() throws Exception {
+        Field connectionField = AutoSellManager.class.getDeclaredField("connection");
+        connectionField.setAccessible(true);
+        return (java.sql.Connection) connectionField.get(autoSellManager);
     }
 
     @SuppressWarnings("unchecked")
@@ -380,10 +619,21 @@ public class AutoSellManagerTest {
 
     private static final class TestAutoSellManager extends AutoSellManager {
         private final Material forcedDamaged;
+        private int runCount;
 
         private TestAutoSellManager(StarhavenSMPCoreTestPlugin plugin, Material forcedDamaged) {
             super(plugin);
             this.forcedDamaged = forcedDamaged;
+        }
+
+        @Override
+        public void runAutoSellTick() {
+            runCount++;
+            super.runAutoSellTick();
+        }
+
+        private int getRunCount() {
+            return runCount;
         }
 
         @Override
