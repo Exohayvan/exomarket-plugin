@@ -572,6 +572,7 @@ public class AutoSellManagerTest {
         }
 
         @Override
+        @SuppressWarnings("removal")
         public boolean setProperty(Property prop, int value) {
             return false;
         }
